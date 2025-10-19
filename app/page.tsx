@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense, useState, useEffect } from "react"
+import { MainNavigation } from "@/components/main-navigation"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { OverviewCards } from "@/components/overview-cards"
 import { ClinicPerformance } from "@/components/clinic-performance"
@@ -13,12 +14,10 @@ import { DetailedDebriefs } from "@/components/detailed-debriefs"
 import { ClinicGoals } from "@/components/clinic-goals"
 import { StudentPerformance } from "@/components/student-performance"
 import { ExportData } from "@/components/export-data"
-import { InactiveStudents } from "@/components/inactive-students"
-import { ActiveStudents } from "@/components/active-students"
 
 function getWeekEnding(date: Date): string {
   const day = date.getDay()
-  const diff = 6 - day // Days until Saturday (6 = Saturday)
+  const diff = 6 - day
   const weekEnding = new Date(date)
   weekEnding.setDate(date.getDate() + diff)
   return weekEnding.toISOString().split("T")[0]
@@ -64,92 +63,86 @@ export default function DashboardPage() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      <DashboardHeader
-        selectedWeek={selectedWeek}
-        onWeekChange={setSelectedWeek}
-        availableWeeks={availableWeeks}
-        selectedClinic={selectedClinic}
-        onClinicChange={setSelectedClinic}
-      />
+    <div className="min-h-screen bg-background">
+      <MainNavigation />
 
-      <main className="container mx-auto px-4 py-8 space-y-8">
-        {selectedWeek && (
-          <>
-            <Suspense fallback={<div>Loading overview...</div>}>
-              <OverviewCards selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-            </Suspense>
+      <div className="bg-muted/30">
+        <DashboardHeader
+          selectedWeek={selectedWeek}
+          onWeekChange={setSelectedWeek}
+          availableWeeks={availableWeeks}
+          selectedClinic={selectedClinic}
+          onClinicChange={setSelectedClinic}
+        />
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Suspense fallback={<div>Loading active students...</div>}>
-                <ActiveStudents selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
+        <main className="container mx-auto px-4 py-8 space-y-8">
+          {selectedWeek && (
+            <>
+              <Suspense fallback={<div>Loading overview...</div>}>
+                <OverviewCards selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
               </Suspense>
 
-              <Suspense fallback={<div>Loading inactive students...</div>}>
-                <InactiveStudents selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-              </Suspense>
-            </div>
+              <Tabs defaultValue="dashboard" className="w-full">
+                <TabsList className="grid w-full max-w-4xl grid-cols-5">
+                  <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+                  <TabsTrigger value="clients">Clients</TabsTrigger>
+                  <TabsTrigger value="students">Students</TabsTrigger>
+                  <TabsTrigger value="goals">Goals</TabsTrigger>
+                  <TabsTrigger value="export">Export</TabsTrigger>
+                </TabsList>
 
-            <Tabs defaultValue="dashboard" className="w-full">
-              <TabsList className="grid w-full max-w-4xl grid-cols-5">
-                <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-                <TabsTrigger value="clients">Clients</TabsTrigger>
-                <TabsTrigger value="students">Students</TabsTrigger>
-                <TabsTrigger value="goals">Goals</TabsTrigger>
-                <TabsTrigger value="export">Export</TabsTrigger>
-              </TabsList>
+                <TabsContent value="dashboard" className="space-y-8 mt-6">
+                  <div className="grid gap-8 lg:grid-cols-2">
+                    <Suspense fallback={<div>Loading clinic performance...</div>}>
+                      <ClinicPerformance selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
+                    </Suspense>
 
-              <TabsContent value="dashboard" className="space-y-8 mt-6">
-                <div className="grid gap-8 lg:grid-cols-2">
-                  <Suspense fallback={<div>Loading clinic performance...</div>}>
-                    <ClinicPerformance selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
+                    <Suspense fallback={<div>Loading student hours...</div>}>
+                      <StudentHours selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
+                    </Suspense>
+                  </div>
+
+                  <Suspense fallback={<div>Loading recent activity...</div>}>
+                    <RecentActivity selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
+                  </Suspense>
+                </TabsContent>
+
+                <TabsContent value="clients" className="space-y-8 mt-6">
+                  <Suspense fallback={<div>Loading client engagements...</div>}>
+                    <ClientEngagements selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
+                  </Suspense>
+                </TabsContent>
+
+                <TabsContent value="students" className="space-y-8 mt-6">
+                  <Suspense fallback={<div>Loading student questions...</div>}>
+                    <StudentQuestions selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
                   </Suspense>
 
-                  <Suspense fallback={<div>Loading student hours...</div>}>
-                    <StudentHours selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
+                  <Suspense fallback={<div>Loading student performance...</div>}>
+                    <StudentPerformance selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
                   </Suspense>
-                </div>
 
-                <Suspense fallback={<div>Loading recent activity...</div>}>
-                  <RecentActivity selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                </Suspense>
-              </TabsContent>
+                  <Suspense fallback={<div>Loading debrief submissions...</div>}>
+                    <DetailedDebriefs selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
+                  </Suspense>
+                </TabsContent>
 
-              <TabsContent value="clients" className="space-y-8 mt-6">
-                <Suspense fallback={<div>Loading client engagements...</div>}>
-                  <ClientEngagements selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                </Suspense>
-              </TabsContent>
+                <TabsContent value="goals" className="mt-6">
+                  <Suspense fallback={<div>Loading clinic goals...</div>}>
+                    <ClinicGoals selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
+                  </Suspense>
+                </TabsContent>
 
-              <TabsContent value="students" className="space-y-8 mt-6">
-                <Suspense fallback={<div>Loading student questions...</div>}>
-                  <StudentQuestions selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                </Suspense>
-
-                <Suspense fallback={<div>Loading student performance...</div>}>
-                  <StudentPerformance selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                </Suspense>
-
-                <Suspense fallback={<div>Loading debrief submissions...</div>}>
-                  <DetailedDebriefs selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                </Suspense>
-              </TabsContent>
-
-              <TabsContent value="goals" className="mt-6">
-                <Suspense fallback={<div>Loading clinic goals...</div>}>
-                  <ClinicGoals selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                </Suspense>
-              </TabsContent>
-
-              <TabsContent value="export" className="mt-6">
-                <Suspense fallback={<div>Loading export options...</div>}>
-                  <ExportData selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                </Suspense>
-              </TabsContent>
-            </Tabs>
-          </>
-        )}
-      </main>
+                <TabsContent value="export" className="mt-6">
+                  <Suspense fallback={<div>Loading export options...</div>}>
+                    <ExportData selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
+                  </Suspense>
+                </TabsContent>
+              </Tabs>
+            </>
+          )}
+        </main>
+      </div>
     </div>
   )
 }

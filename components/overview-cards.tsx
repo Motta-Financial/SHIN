@@ -1,8 +1,10 @@
 "use client"
 
 import { Card } from "@/components/ui/card"
-import { Users, Briefcase, Clock, TrendingUp } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Users, Briefcase, AlertCircle } from "lucide-react"
 import { useEffect, useState } from "react"
+import { getClinicColor } from "@/lib/clinic-colors"
 
 interface OverviewStats {
   activeStudents: number
@@ -11,9 +13,17 @@ interface OverviewStats {
   weeklyGrowth: number
 }
 
+interface Student {
+  name: string
+  hours: number
+  clinic: string
+  client: string
+  summary: string
+}
+
 interface OverviewCardsProps {
   selectedWeek: string
-  selectedClinic: string // Added selectedClinic prop
+  selectedClinic: string
 }
 
 export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsProps) {
@@ -23,24 +33,28 @@ export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsPro
     totalHours: 0,
     weeklyGrowth: 0,
   })
+  const [activeStudents, setActiveStudents] = useState<Student[]>([])
+  const [inactiveStudents, setInactiveStudents] = useState<{ name: string; clinic: string; role: string }[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [clientsRes, debriefsRes] = await Promise.all([
+        const [clientsRes, debriefsRes, rosterRes] = await Promise.all([
           fetch("/api/airtable/clients"),
           fetch("/api/airtable/debriefs"),
+          fetch("/api/airtable/roster"),
         ])
 
-        if (!clientsRes.ok || !debriefsRes.ok) {
+        if (!clientsRes.ok || !debriefsRes.ok || !rosterRes.ok) {
           throw new Error("Failed to fetch data")
         }
 
         const clientsData = await clientsRes.json()
         const debriefsData = await debriefsRes.json()
+        const rosterData = await rosterRes.json()
 
-        const uniqueStudents = new Set<string>()
+        const activeStudentsMap = new Map<string, Student>()
         const activeClientIds = new Set<string>()
         let totalHours = 0
 
@@ -71,9 +85,21 @@ export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsPro
 
               const hours = Number.parseFloat(fields["Number of Hours Worked"] || "0")
               const clientName = fields["Client"]
+              const summary = fields["Summary of Work"] || ""
 
               if (studentName) {
-                uniqueStudents.add(studentName)
+                const existing = activeStudentsMap.get(studentName)
+                if (existing) {
+                  existing.hours += hours
+                } else {
+                  activeStudentsMap.set(studentName, {
+                    name: studentName,
+                    hours,
+                    clinic: relatedClinic || "",
+                    client: clientName || "",
+                    summary,
+                  })
+                }
               }
 
               if (clientName) {
@@ -85,8 +111,37 @@ export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsPro
           })
         }
 
+        const allStudents = new Set<string>()
+        const inactiveList: { name: string; clinic: string; role: string }[] = []
+
+        if (rosterData.records) {
+          rosterData.records.forEach((record: any) => {
+            const fields = record.fields
+            const name = fields["NAME"]
+            const clinicRole = fields["Clinic| Role"]
+            const relatedClinic = fields["Related Clinic"]
+            const role = fields["ROLE"]
+
+            if (name && clinicRole === "Student") {
+              allStudents.add(name)
+
+              const matchesClinic = selectedClinic === "all" || relatedClinic === selectedClinic
+
+              if (matchesClinic && !activeStudentsMap.has(name)) {
+                inactiveList.push({
+                  name,
+                  clinic: relatedClinic || "",
+                  role: role || "",
+                })
+              }
+            }
+          })
+        }
+
+        setActiveStudents(Array.from(activeStudentsMap.values()))
+        setInactiveStudents(inactiveList)
         setStats({
-          activeStudents: uniqueStudents.size,
+          activeStudents: activeStudentsMap.size,
           activeClients: activeClientIds.size,
           totalHours: Math.round(totalHours),
           weeklyGrowth: 0,
@@ -99,51 +154,129 @@ export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsPro
     }
 
     fetchStats()
-  }, [selectedWeek, selectedClinic]) // Added selectedClinic to dependencies
+  }, [selectedWeek, selectedClinic])
 
   const cards = [
     {
       title: "Active Students",
       value: loading ? "..." : stats.activeStudents,
       icon: Users,
-      description: "This week",
+      description: "Submitted this week",
       bgColor: "bg-[#002855]",
       iconBg: "bg-[#0077B6]",
       iconColor: "text-white",
+      clickable: true,
+      dialogContent: "active",
+    },
+    {
+      title: "Inactive Students",
+      value: loading ? "..." : inactiveStudents.length,
+      icon: AlertCircle,
+      description: "Haven't submitted",
+      bgColor: "bg-amber-600",
+      iconBg: "bg-amber-700",
+      iconColor: "text-white",
+      clickable: true,
+      dialogContent: "inactive",
     },
     {
       title: "Active Clients",
       value: loading ? "..." : stats.activeClients,
       icon: Briefcase,
       description: "This week",
-      bgColor: "bg-[#003d7a]",
-      iconBg: "bg-[#0096C7]",
-      iconColor: "text-white",
-    },
-    {
-      title: "Total Hours",
-      value: loading ? "..." : stats.totalHours,
-      icon: Clock,
-      description: "This week",
       bgColor: "bg-[#0077B6]",
       iconBg: "bg-[#002855]",
       iconColor: "text-white",
-    },
-    {
-      title: "Avg Hours/Student",
-      value: loading ? "..." : stats.activeStudents > 0 ? Math.round(stats.totalHours / stats.activeStudents) : 0,
-      icon: TrendingUp,
-      description: "This week",
-      bgColor: "bg-[#0096C7]",
-      iconBg: "bg-[#002855]",
-      iconColor: "text-white",
+      clickable: false,
     },
   ]
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {cards.map((card) => {
         const Icon = card.icon
+
+        if (card.clickable) {
+          return (
+            <Dialog key={card.title}>
+              <DialogTrigger asChild>
+                <Card
+                  className={`p-6 ${card.bgColor} border-none shadow-lg cursor-pointer hover:opacity-90 transition-opacity`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-white/80">{card.title}</p>
+                      <p className="text-3xl font-bold text-white">{card.value}</p>
+                      <p className="text-xs text-white/70">{card.description}</p>
+                    </div>
+                    <div className={`rounded-lg ${card.iconBg} p-3 shadow-md`}>
+                      <Icon className={`h-5 w-5 ${card.iconColor}`} />
+                    </div>
+                  </div>
+                </Card>
+              </DialogTrigger>
+              <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>
+                    {card.dialogContent === "active"
+                      ? `Active Students (${activeStudents.length})`
+                      : `Inactive Students (${inactiveStudents.length})`}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 mt-4">
+                  {card.dialogContent === "active" ? (
+                    activeStudents.length === 0 ? (
+                      <p className="text-muted-foreground text-center py-8">No active students for this week</p>
+                    ) : (
+                      activeStudents.map((student) => (
+                        <div key={student.name} className="border rounded-lg p-4 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h3 className="font-semibold">{student.name}</h3>
+                            <span className="text-sm font-medium">{student.hours}h</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                              style={{
+                                backgroundColor: getClinicColor(student.clinic).hex + "20",
+                                color: getClinicColor(student.clinic).hex,
+                              }}
+                            >
+                              {student.clinic}
+                            </span>
+                            <span className="text-sm text-muted-foreground">• {student.client}</span>
+                          </div>
+                          {student.summary && <p className="text-sm text-muted-foreground">{student.summary}</p>}
+                        </div>
+                      ))
+                    )
+                  ) : inactiveStudents.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-8">All students have submitted this week!</p>
+                  ) : (
+                    inactiveStudents.map((student) => (
+                      <div key={student.name} className="border rounded-lg p-3 flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">{student.name}</p>
+                          <p className="text-sm text-muted-foreground">{student.role}</p>
+                        </div>
+                        <span
+                          className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                          style={{
+                            backgroundColor: getClinicColor(student.clinic).hex + "20",
+                            color: getClinicColor(student.clinic).hex,
+                          }}
+                        >
+                          {student.clinic}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
+          )
+        }
+
         return (
           <Card key={card.title} className={`p-6 ${card.bgColor} border-none shadow-lg`}>
             <div className="flex items-start justify-between">
