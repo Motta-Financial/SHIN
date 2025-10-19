@@ -60,15 +60,12 @@ export function DashboardHeader({ selectedWeek, onWeekChange, availableWeeks }: 
                 <SelectValue placeholder="Select week" />
               </SelectTrigger>
               <SelectContent>
-                {availableWeeks.length > 0 ? (
+                {availableWeeks.length > 0 &&
                   availableWeeks.map((week) => (
                     <SelectItem key={week} value={week}>
                       {formatWeekDisplay(week)}
                     </SelectItem>
-                  ))
-                ) : (
-                  <SelectItem value={selectedWeek}>{formatWeekDisplay(selectedWeek)}</SelectItem>
-                )}
+                  ))}
               </SelectContent>
             </Select>
 

@@ -41,7 +41,11 @@ export function StudentHours({ selectedWeek }: StudentHoursProps) {
 
         const debriefsData = await debriefsRes.json()
 
+        console.log("[v0] Student Hours - Total debrief records:", debriefsData.records?.length || 0)
+        console.log("[v0] Student Hours - Selected week:", selectedWeek)
+
         const studentMap = new Map<string, StudentSummary>()
+        let filteredRecordsCount = 0
 
         if (debriefsData.records) {
           debriefsData.records.forEach((record: any) => {
@@ -72,6 +76,8 @@ export function StudentHours({ selectedWeek }: StudentHoursProps) {
             if (recordWeek !== selectedWeek) {
               return
             }
+
+            filteredRecordsCount++
 
             const studentName = fields["NAME (from SEED | Students)"]
               ? Array.isArray(fields["NAME (from SEED | Students)"])
@@ -105,9 +111,16 @@ export function StudentHours({ selectedWeek }: StudentHoursProps) {
           })
         }
 
+        console.log("[v0] Student Hours - Filtered records for week:", filteredRecordsCount)
+        console.log("[v0] Student Hours - Unique students:", studentMap.size)
+
         const studentsArray = Array.from(studentMap.values())
         studentsArray.sort((a, b) => b.totalHours - a.totalHours)
 
+        console.log(
+          "[v0] Student Hours - Final data:",
+          studentsArray.map((s) => ({ name: s.name, hours: s.totalHours, clinic: s.clinic })),
+        )
         setData(studentsArray)
       } catch (error) {
         console.error("[v0] Error fetching student hours:", error)
