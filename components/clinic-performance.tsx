@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card"
 import { useEffect, useState } from "react"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from "recharts"
 import { getClinicColor } from "@/lib/clinic-colors"
+import { getClientColor } from "@/lib/client-colors"
 
 interface PerformanceData {
   name: string
@@ -392,7 +393,10 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
             />
             <Bar dataKey="hours" radius={[8, 8, 0, 0]} barSize={80}>
               {data.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={view === "clinic" ? getClinicColor(entry.name).hex : "#0096C7"} />
+                <Cell
+                  key={`cell-${index}`}
+                  fill={view === "clinic" ? getClinicColor(entry.name).hex : getClientColor(entry.name).hex}
+                />
               ))}
             </Bar>
           </BarChart>
@@ -400,7 +404,7 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
 
         <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4 border-t border-gray-200 pt-4">
           {data.map((item) => {
-            const colors = view === "clinic" ? getClinicColor(item.name) : { hex: "#0096C7" }
+            const colors = view === "clinic" ? getClinicColor(item.name) : getClientColor(item.name)
             return (
               <div key={item.name} className="space-y-1">
                 <div className="flex items-center gap-2">
@@ -448,13 +452,14 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
               return Array.from(byClient.entries())
                 .map(([client, { entries, clinic }]) => {
                   const colors = getClinicColor(clinic === "Resource Acquisition" ? "Funding" : clinic)
+                  const clientColors = getClientColor(client)
                   const students = [...new Set(entries.map((e) => e.student))]
                   const aiSummary = clientSummaries.get(client)
 
                   if (!aiSummary) return null
 
                   return (
-                    <div key={client} className="border-l-4 pl-5 py-3" style={{ borderColor: colors.hex }}>
+                    <div key={client} className="border-l-4 pl-5 py-3" style={{ borderColor: clientColors.hex }}>
                       <div className="flex items-start justify-between mb-2">
                         <h4 className="font-bold text-[#002855] text-base">{client}</h4>
                         <span
