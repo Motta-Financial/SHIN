@@ -4,17 +4,22 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar, Download, Filter } from "lucide-react"
-import { useState } from "react"
 
 interface DashboardHeaderProps {
   selectedWeek: string
   onWeekChange: (week: string) => void
   availableWeeks: string[]
+  selectedClinic: string
+  onClinicChange: (clinic: string) => void
 }
 
-export function DashboardHeader({ selectedWeek, onWeekChange, availableWeeks }: DashboardHeaderProps) {
-  const [clinic, setClinic] = useState("all")
-
+export function DashboardHeader({
+  selectedWeek,
+  onWeekChange,
+  availableWeeks,
+  selectedClinic,
+  onClinicChange,
+}: DashboardHeaderProps) {
   const formatWeekDisplay = (weekEnding: string) => {
     const date = new Date(weekEnding)
     return `Week ending ${date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
@@ -40,17 +45,17 @@ export function DashboardHeader({ selectedWeek, onWeekChange, availableWeeks }: 
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Select value={clinic} onValueChange={setClinic}>
+            <Select value={selectedClinic} onValueChange={onClinicChange}>
               <SelectTrigger className="w-[180px] border-primary-foreground/20 bg-primary/50 text-primary-foreground hover:bg-primary/70">
                 <Filter className="mr-2 h-4 w-4" />
                 <SelectValue placeholder="Select clinic" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Clinics</SelectItem>
-                <SelectItem value="consulting">Consulting</SelectItem>
-                <SelectItem value="accounting">Accounting</SelectItem>
-                <SelectItem value="funding">Resource Acquisition</SelectItem>
-                <SelectItem value="marketing">Marketing</SelectItem>
+                <SelectItem value="Consulting">Consulting</SelectItem>
+                <SelectItem value="Accounting">Accounting</SelectItem>
+                <SelectItem value="Funding">Funding</SelectItem>
+                <SelectItem value="Marketing">Marketing</SelectItem>
               </SelectContent>
             </Select>
 

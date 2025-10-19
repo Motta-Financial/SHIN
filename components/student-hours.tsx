@@ -22,9 +22,10 @@ interface StudentSummary {
 
 interface StudentHoursProps {
   selectedWeek: string
+  selectedClinic: string // Added selectedClinic prop
 }
 
-export function StudentHours({ selectedWeek }: StudentHoursProps) {
+export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps) {
   const [data, setData] = useState<StudentSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [groupBy, setGroupBy] = useState<"clinic" | "client">("clinic")
@@ -43,6 +44,7 @@ export function StudentHours({ selectedWeek }: StudentHoursProps) {
 
         console.log("[v0] Student Hours - Total debrief records:", debriefsData.records?.length || 0)
         console.log("[v0] Student Hours - Selected week:", selectedWeek)
+        console.log("[v0] Student Hours - Selected clinic:", selectedClinic) // Added logging
 
         const studentMap = new Map<string, StudentSummary>()
         let filteredRecordsCount = 0
@@ -59,7 +61,6 @@ export function StudentHours({ selectedWeek }: StudentHoursProps) {
 
             const dateSubmitted = fields["Date Submitted"]
 
-            // Determine the week for this record
             let recordWeek = ""
             if (weekEnding) {
               recordWeek = weekEnding
@@ -72,8 +73,10 @@ export function StudentHours({ selectedWeek }: StudentHoursProps) {
               recordWeek = weekEndingDate.toISOString().split("T")[0]
             }
 
-            // Only include records from the selected week
-            if (recordWeek !== selectedWeek) {
+            const relatedClinic = fields["Related Clinic"]
+            const matchesClinic = selectedClinic === "all" || relatedClinic === selectedClinic
+
+            if (recordWeek !== selectedWeek || !matchesClinic) {
               return
             }
 
@@ -130,7 +133,7 @@ export function StudentHours({ selectedWeek }: StudentHoursProps) {
     }
 
     fetchHoursData()
-  }, [selectedWeek])
+  }, [selectedWeek, selectedClinic]) // Added selectedClinic to dependencies
 
   const totalHours = data.reduce((sum, student) => sum + student.totalHours, 0)
 

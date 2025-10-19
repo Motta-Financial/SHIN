@@ -13,9 +13,10 @@ interface OverviewStats {
 
 interface OverviewCardsProps {
   selectedWeek: string
+  selectedClinic: string // Added selectedClinic prop
 }
 
-export function OverviewCards({ selectedWeek }: OverviewCardsProps) {
+export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsProps) {
   const [stats, setStats] = useState<OverviewStats>({
     activeStudents: 0,
     activeClients: 0,
@@ -61,7 +62,10 @@ export function OverviewCards({ selectedWeek }: OverviewCardsProps) {
               recordWeek = weekEndingDate.toISOString().split("T")[0]
             }
 
-            if (recordWeek === selectedWeek) {
+            const relatedClinic = fields["Related Clinic"]
+            const matchesClinic = selectedClinic === "all" || relatedClinic === selectedClinic
+
+            if (recordWeek === selectedWeek && matchesClinic) {
               const studentNameArray = fields["NAME (from SEED | Students)"]
               const studentName = Array.isArray(studentNameArray) ? studentNameArray[0] : studentNameArray
 
@@ -85,7 +89,7 @@ export function OverviewCards({ selectedWeek }: OverviewCardsProps) {
           activeStudents: uniqueStudents.size,
           activeClients: activeClientIds.size,
           totalHours: Math.round(totalHours),
-          weeklyGrowth: 0, // Growth calculation removed for single week view
+          weeklyGrowth: 0,
         })
       } catch (error) {
         console.error("[v0] Error fetching overview stats:", error)
@@ -95,7 +99,7 @@ export function OverviewCards({ selectedWeek }: OverviewCardsProps) {
     }
 
     fetchStats()
-  }, [selectedWeek])
+  }, [selectedWeek, selectedClinic]) // Added selectedClinic to dependencies
 
   const cards = [
     {

@@ -19,9 +19,10 @@ interface Activity {
 
 interface RecentActivityProps {
   selectedWeek: string
+  selectedClinic: string // Added selectedClinic prop
 }
 
-export function RecentActivity({ selectedWeek }: RecentActivityProps) {
+export function RecentActivity({ selectedWeek, selectedClinic }: RecentActivityProps) {
   const [activities, setActivities] = useState<Activity[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -54,7 +55,10 @@ export function RecentActivity({ selectedWeek }: RecentActivityProps) {
               recordWeek = weekEndingDate.toISOString().split("T")[0]
             }
 
-            return recordWeek === selectedWeek
+            const relatedClinic = fields["Related Clinic"]
+            const matchesClinic = selectedClinic === "all" || relatedClinic === selectedClinic
+
+            return recordWeek === selectedWeek && matchesClinic
           })
 
           const sortedRecords = filteredRecords
@@ -96,7 +100,7 @@ export function RecentActivity({ selectedWeek }: RecentActivityProps) {
     }
 
     fetchActivity()
-  }, [selectedWeek])
+  }, [selectedWeek, selectedClinic]) // Added selectedClinic to dependencies
 
   const getInitials = (name: string) => {
     return name

@@ -21,9 +21,10 @@ interface Client {
 
 interface ClientEngagementsProps {
   selectedWeek: string
+  selectedClinic: string // Added selectedClinic prop
 }
 
-export function ClientEngagements({ selectedWeek }: ClientEngagementsProps) {
+export function ClientEngagements({ selectedWeek, selectedClinic }: ClientEngagementsProps) {
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -54,17 +55,21 @@ export function ClientEngagements({ selectedWeek }: ClientEngagementsProps) {
             const clientName = fields["Client Name"] || "Unknown Client"
             const primaryClinic = fields["Primary Clinic Director"] || ""
 
-            clientMap.set(record.id, {
-              id: record.id,
-              name: clientName,
-              clinic: primaryClinic,
-              students: 0,
-              hoursLogged: 0,
-              hoursTarget: 60, // Default target
-              status: "on-track",
-              lastUpdate: "No updates yet",
-              recentWork: [],
-            })
+            const matchesClinic = selectedClinic === "all" || primaryClinic === selectedClinic
+
+            if (matchesClinic) {
+              clientMap.set(record.id, {
+                id: record.id,
+                name: clientName,
+                clinic: primaryClinic,
+                students: 0,
+                hoursLogged: 0,
+                hoursTarget: 60, // Default target
+                status: "on-track",
+                lastUpdate: "No updates yet",
+                recentWork: [],
+              })
+            }
           })
         }
 
@@ -79,7 +84,6 @@ export function ClientEngagements({ selectedWeek }: ClientEngagementsProps) {
             const weekEnding = fields["END DATE (from WEEK (from SEED | Schedule))"]
             const dateSubmitted = fields["Date Submitted"]
 
-            // Determine the week for this record
             let recordWeek = ""
             if (weekEnding) {
               recordWeek = Array.isArray(weekEnding) ? weekEnding[0] : weekEnding
@@ -92,8 +96,10 @@ export function ClientEngagements({ selectedWeek }: ClientEngagementsProps) {
               recordWeek = weekEndingDate.toISOString().split("T")[0]
             }
 
-            // Only include records from the selected week
-            if (recordWeek === selectedWeek) {
+            const relatedClinic = fields["Related Clinic"]
+            const matchesClinic = selectedClinic === "all" || relatedClinic === selectedClinic
+
+            if (recordWeek === selectedWeek && matchesClinic) {
               const clientLinks = fields["Client"]
               const studentName = fields["Student Name"]
               const hours = Number.parseFloat(fields["Number of Hours Worked"] || "0")
@@ -176,7 +182,7 @@ export function ClientEngagements({ selectedWeek }: ClientEngagementsProps) {
     }
 
     fetchData()
-  }, [selectedWeek])
+  }, [selectedWeek, selectedClinic]) // Added selectedClinic to dependencies
 
   const getStatusColor = (status: Client["status"]) => {
     switch (status) {

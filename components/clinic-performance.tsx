@@ -23,9 +23,10 @@ interface WorkEntry {
 
 interface ClinicPerformanceProps {
   selectedWeek: string
+  selectedClinic: string // Added selectedClinic prop
 }
 
-export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
+export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerformanceProps) {
   const [data, setData] = useState<PerformanceData[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<"clinic" | "client">("clinic")
@@ -50,6 +51,7 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
 
         console.log("[v0] Clinic Performance - Total debrief records:", debriefsData.records?.length || 0)
         console.log("[v0] Clinic Performance - Selected week:", selectedWeek)
+        console.log("[v0] Clinic Performance - Selected clinic:", selectedClinic) // Added logging
 
         const workSummaries: string[] = []
         const entries: WorkEntry[] = []
@@ -59,12 +61,14 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
           const clinicNames = ["Consulting", "Accounting", "Funding", "Marketing"]
 
           clinicNames.forEach((name) => {
-            clinicMap.set(name, {
-              name: name,
-              hours: 0,
-              students: 0,
-              clients: 0,
-            })
+            if (selectedClinic === "all" || selectedClinic === name) {
+              clinicMap.set(name, {
+                name: name,
+                hours: 0,
+                students: 0,
+                clients: 0,
+              })
+            }
           })
 
           const studentsByClinic = new Map<string, Set<string>>()
@@ -89,10 +93,14 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
                 recordWeek = weekEndingDate.toISOString().split("T")[0]
               }
 
-              if (recordWeek === selectedWeek) {
+              const clinicField = fields["Related Clinic"]
+              const relatedClinic = Array.isArray(clinicField) ? clinicField[0] : clinicField
+
+              const matchesClinic = selectedClinic === "all" || relatedClinic === selectedClinic
+
+              if (recordWeek === selectedWeek && matchesClinic) {
                 filteredRecordsCount++
 
-                const clinicField = fields["Related Clinic"]
                 const studentNameField = fields["NAME (from SEED | Students)"]
                 const studentName = Array.isArray(studentNameField) ? studentNameField[0] : studentNameField
                 const hours = Number.parseFloat(fields["Number of Hours Worked"] || "0")
@@ -103,18 +111,16 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
                 if (workSummary && studentName) {
                   entries.push({
                     student: studentName,
-                    clinic: clinicField || "Unknown Clinic",
+                    clinic: relatedClinic || "Unknown Clinic",
                     client: clientName,
                     summary: workSummary,
                     hours: hours,
                   })
                 }
 
-                if (clinicField) {
-                  const clinicValue = Array.isArray(clinicField) ? clinicField[0] : clinicField
-
+                if (relatedClinic) {
                   clinicNames.forEach((name) => {
-                    if (clinicValue.includes(name)) {
+                    if (relatedClinic.includes(name) && clinicMap.has(name)) {
                       const clinic = clinicMap.get(name)
                       if (clinic) {
                         clinic.hours += hours
@@ -178,19 +184,23 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
                 recordWeek = weekEndingDate.toISOString().split("T")[0]
               }
 
-              if (recordWeek === selectedWeek) {
+              const clinicField = fields["Related Clinic"]
+              const relatedClinic = Array.isArray(clinicField) ? clinicField[0] : clinicField
+
+              const matchesClinic = selectedClinic === "all" || relatedClinic === selectedClinic
+
+              if (recordWeek === selectedWeek && matchesClinic) {
                 const clientField = fields["Client"]
                 const clientName = Array.isArray(clientField) ? clientField[0] : clientField || "No Client"
                 const studentNameField = fields["NAME (from SEED | Students)"]
                 const studentName = Array.isArray(studentNameField) ? studentNameField[0] : studentNameField
                 const hours = Number.parseFloat(fields["Number of Hours Worked"] || "0")
                 const workSummary = fields["Summary of Work"]
-                const clinicField = fields["Related Clinic"]
 
                 if (workSummary && studentName) {
                   entries.push({
                     student: studentName,
-                    clinic: clinicField || "Unknown Clinic",
+                    clinic: relatedClinic || "Unknown Clinic",
                     client: clientName,
                     summary: workSummary,
                     hours: hours,
@@ -236,7 +246,7 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
     }
 
     fetchClinicData()
-  }, [selectedWeek, view])
+  }, [selectedWeek, view, selectedClinic]) // Added selectedClinic to dependencies
 
   useEffect(() => {
     async function generateSummaries() {
