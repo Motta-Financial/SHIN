@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { useEffect, useState } from "react"
 import { Building2, Users, Clock, AlertCircle, FileText } from "lucide-react"
+import { getClinicColor } from "@/lib/clinic-colors"
 
 interface Client {
   id: string
@@ -257,20 +258,36 @@ export function ClientEngagements({ selectedWeek }: ClientEngagementsProps) {
       <div className="space-y-4">
         {clients.map((client) => {
           const progress = (client.hoursLogged / client.hoursTarget) * 100
+          const colors = getClinicColor(client.clinic)
 
           return (
             <div
               key={client.id}
-              className="rounded-lg border-2 border-[#002855]/20 bg-gradient-to-r from-white to-[#0096C7]/5 p-4 transition-all hover:border-[#0096C7] hover:shadow-md"
+              className="rounded-lg border-2 bg-gradient-to-r from-white p-4 transition-all hover:shadow-md"
+              style={{
+                borderColor: `${colors.hex}40`,
+                backgroundImage: `linear-gradient(to right, white, ${colors.hex}08)`,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = colors.hex
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = `${colors.hex}40`
+              }}
             >
               <div className="mb-3 flex items-start justify-between">
                 <div className="flex items-start gap-3">
-                  <div className="rounded-lg bg-[#0077B6] p-2">
+                  <div className={`rounded-lg ${colors.bg} p-2`}>
                     <Building2 className="h-5 w-5 text-white" />
                   </div>
                   <div>
                     <h3 className="font-semibold text-[#002855]">{client.name}</h3>
-                    <p className="text-sm text-[#002855]/70">{client.clinic} Clinic</p>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${colors.bg}`} />
+                      <p className="text-sm" style={{ color: colors.hex }}>
+                        {client.clinic} Clinic
+                      </p>
+                    </div>
                   </div>
                 </div>
                 <Badge className={getStatusColor(client.status)}>{getStatusLabel(client.status)}</Badge>

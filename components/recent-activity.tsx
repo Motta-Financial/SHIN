@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useEffect, useState } from "react"
 import { FileText, Clock } from "lucide-react"
+import { getClinicColor } from "@/lib/clinic-colors"
 
 interface Activity {
   id: string
@@ -105,21 +106,6 @@ export function RecentActivity({ selectedWeek }: RecentActivityProps) {
       .toUpperCase()
   }
 
-  const getClinicColor = (clinic?: string) => {
-    if (!clinic) return "bg-gray-200 text-gray-700"
-
-    if (clinic.includes("Marketing")) {
-      return "bg-purple-500 text-white"
-    } else if (clinic.includes("Consulting")) {
-      return "bg-[#0096C7] text-white"
-    } else if (clinic.includes("Accounting")) {
-      return "bg-yellow-500 text-white"
-    } else if (clinic.includes("Resource") || clinic.includes("Funding")) {
-      return "bg-orange-500 text-white"
-    }
-    return "bg-gray-200 text-gray-700"
-  }
-
   if (loading) {
     return (
       <Card className="p-6 bg-white border-[#002855]/20 shadow-lg">
@@ -147,6 +133,7 @@ export function RecentActivity({ selectedWeek }: RecentActivityProps) {
         ) : (
           activities.map((activity) => {
             const Icon = activity.type === "debrief" ? FileText : Clock
+            const colors = getClinicColor(activity.clinic)
 
             return (
               <div
@@ -163,9 +150,7 @@ export function RecentActivity({ selectedWeek }: RecentActivityProps) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-medium text-[#002855]">{activity.student}</p>
                     {activity.clinic && (
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${getClinicColor(activity.clinic)}`}
-                      >
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${colors.bg} ${colors.text}`}>
                         {activity.clinic}
                       </span>
                     )}

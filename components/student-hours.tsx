@@ -3,6 +3,7 @@
 import { Card } from "@/components/ui/card"
 import { useEffect, useState } from "react"
 import { ChevronRight, X } from "lucide-react"
+import { getClinicColor } from "@/lib/clinic-colors"
 
 interface DebriefRecord {
   weekEnding: string
@@ -19,7 +20,11 @@ interface StudentSummary {
   records: DebriefRecord[]
 }
 
-export function StudentHours() {
+interface StudentHoursProps {
+  selectedWeek: string
+}
+
+export function StudentHours({ selectedWeek }: StudentHoursProps) {
   const [data, setData] = useState<StudentSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [groupBy, setGroupBy] = useState<"clinic" | "client">("clinic")
@@ -41,6 +46,33 @@ export function StudentHours() {
         if (debriefsData.records) {
           debriefsData.records.forEach((record: any) => {
             const fields = record.fields
+
+            const weekEnding = fields["END DATE (from WEEK (from SEED | Schedule))"]
+              ? Array.isArray(fields["END DATE (from WEEK (from SEED | Schedule))"])
+                ? fields["END DATE (from WEEK (from SEED | Schedule))"][0]
+                : fields["END DATE (from WEEK (from SEED | Schedule))"]
+              : null
+
+            const dateSubmitted = fields["Date Submitted"]
+
+            // Determine the week for this record
+            let recordWeek = ""
+            if (weekEnding) {
+              recordWeek = weekEnding
+            } else if (dateSubmitted) {
+              const date = new Date(dateSubmitted)
+              const day = date.getDay()
+              const diff = 6 - day
+              const weekEndingDate = new Date(date)
+              weekEndingDate.setDate(date.getDate() + diff)
+              recordWeek = weekEndingDate.toISOString().split("T")[0]
+            }
+
+            // Only include records from the selected week
+            if (recordWeek !== selectedWeek) {
+              return
+            }
+
             const studentName = fields["NAME (from SEED | Students)"]
               ? Array.isArray(fields["NAME (from SEED | Students)"])
                 ? fields["NAME (from SEED | Students)"][0]
@@ -50,11 +82,6 @@ export function StudentHours() {
             const client = fields["Client"] || "No Client"
             const clinic = fields["Related Clinic"] || "No Clinic"
             const hours = Number.parseFloat(fields["Number of Hours Worked"] || "0")
-            const weekEnding = fields["END DATE (from WEEK (from SEED | Schedule))"]
-              ? Array.isArray(fields["END DATE (from WEEK (from SEED | Schedule))"])
-                ? fields["END DATE (from WEEK (from SEED | Schedule))"][0]
-                : fields["END DATE (from WEEK (from SEED | Schedule))"]
-              : fields["Date Submitted"] || "No Date"
             const workSummary = fields["Summary of Work"] || "No summary provided"
 
             if (!studentMap.has(studentName)) {
@@ -70,7 +97,7 @@ export function StudentHours() {
             const student = studentMap.get(studentName)!
             student.totalHours += hours
             student.records.push({
-              weekEnding,
+              weekEnding: recordWeek,
               hours,
               workSummary,
               client,
@@ -90,7 +117,7 @@ export function StudentHours() {
     }
 
     fetchHoursData()
-  }, [])
+  }, [selectedWeek])
 
   const totalHours = data.reduce((sum, student) => sum + student.totalHours, 0)
 
@@ -164,21 +191,37 @@ export function StudentHours() {
           <div className="space-y-6">
             {Object.entries(groupedData).map(([groupName, students]) => {
               const groupTotal = students.reduce((sum, s) => sum + s.totalHours, 0)
+              const colors = groupBy === "clinic" ? getClinicColor(groupName) : { hex: "#0077B6", bg: "bg-[#0077B6]" }
+
               return (
-                <div key={groupName} className="border-2 border-[#002855]/20 rounded-lg p-4">
+                <div key={groupName} className={`border-2 rounded-lg p-4`} style={{ borderColor: colors.hex }}>
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-bold text-[#002855]">{groupName}</h3>
-                    <span className="text-sm font-medium text-[#0077B6]">{groupTotal.toFixed(1)} hours total</span>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3 h-3 rounded-full ${colors.bg}`} />
+                      <h3 className="text-lg font-bold text-[#002855]">{groupName}</h3>
+                    </div>
+                    <span className="text-sm font-medium" style={{ color: colors.hex }}>
+                      {groupTotal.toFixed(1)} hours total
+                    </span>
                   </div>
                   <div className="space-y-2">
                     {students.map((student) => (
                       <button
                         key={student.name}
                         onClick={() => setSelectedStudent(student)}
-                        className="w-full flex items-center justify-between p-3 rounded-lg bg-white border-2 border-[#0077B6]/30 hover:border-[#0077B6] hover:bg-[#0077B6]/5 transition-all group"
+                        className="w-full flex items-center justify-between p-3 rounded-lg bg-white border-2 hover:shadow-md transition-all group"
+                        style={{ borderColor: `${colors.hex}30` }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = colors.hex
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = `${colors.hex}30`
+                        }}
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-[#0077B6] flex items-center justify-center text-white font-bold">
+                          <div
+                            className={`w-10 h-10 rounded-full ${colors.bg} flex items-center justify-center text-white font-bold`}
+                          >
                             {student.name.charAt(0)}
                           </div>
                           <div className="text-left">
@@ -189,8 +232,13 @@ export function StudentHours() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-lg font-bold text-[#0077B6]">{student.totalHours.toFixed(1)}h</span>
-                          <ChevronRight className="w-5 h-5 text-[#0077B6] group-hover:translate-x-1 transition-transform" />
+                          <span className="text-lg font-bold" style={{ color: colors.hex }}>
+                            {student.totalHours.toFixed(1)}h
+                          </span>
+                          <ChevronRight
+                            className="w-5 h-5 group-hover:translate-x-1 transition-transform"
+                            style={{ color: colors.hex }}
+                          />
                         </div>
                       </button>
                     ))}
