@@ -66,23 +66,8 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
             })
           })
 
-          if (clientsData.records) {
-            clientsData.records.forEach((record: any) => {
-              const fields = record.fields
-              const primaryClinic = fields["Primary Clinic Director"] || ""
-
-              clinicNames.forEach((clinicName) => {
-                if (primaryClinic.includes(clinicName)) {
-                  const clinic = clinicMap.get(clinicName)
-                  if (clinic) {
-                    clinic.clients++
-                  }
-                }
-              })
-            })
-          }
-
           const studentsByClinic = new Map<string, Set<string>>()
+          const clientsByClinic = new Map<string, Set<string>>()
           let filteredRecordsCount = 0
 
           if (debriefsData.records) {
@@ -139,6 +124,13 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
                         if (studentName) {
                           studentsByClinic.get(name)!.add(studentName)
                         }
+
+                        if (!clientsByClinic.has(name)) {
+                          clientsByClinic.set(name, new Set())
+                        }
+                        if (clientName && clientName !== "No Client") {
+                          clientsByClinic.get(name)!.add(clientName)
+                        }
                       }
                     }
                   })
@@ -151,6 +143,13 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
             const clinic = clinicMap.get(clinicName)
             if (clinic) {
               clinic.students = students.size
+            }
+          })
+
+          clientsByClinic.forEach((clients, clinicName) => {
+            const clinic = clinicMap.get(clinicName)
+            if (clinic) {
+              clinic.clients = clients.size
             }
           })
 

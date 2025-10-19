@@ -7,6 +7,7 @@ import { ClinicPerformance } from "@/components/clinic-performance"
 import { ClientEngagements } from "@/components/client-engagements"
 import { RecentActivity } from "@/components/recent-activity"
 import { StudentHours } from "@/components/student-hours"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 function getWeekEnding(date: Date): string {
   const day = date.getDay()
@@ -65,23 +66,34 @@ export default function DashboardPage() {
               <OverviewCards selectedWeek={selectedWeek} />
             </Suspense>
 
-            <div className="grid gap-8 lg:grid-cols-2">
-              <Suspense fallback={<div>Loading clinic performance...</div>}>
-                <ClinicPerformance selectedWeek={selectedWeek} />
-              </Suspense>
+            <Tabs defaultValue="dashboard" className="w-full">
+              <TabsList className="grid w-full max-w-md grid-cols-2">
+                <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+                <TabsTrigger value="clients">Client Engagements</TabsTrigger>
+              </TabsList>
 
-              <Suspense fallback={<div>Loading student hours...</div>}>
-                <StudentHours selectedWeek={selectedWeek} />
-              </Suspense>
-            </div>
+              <TabsContent value="dashboard" className="space-y-8 mt-6">
+                <div className="grid gap-8 lg:grid-cols-2">
+                  <Suspense fallback={<div>Loading clinic performance...</div>}>
+                    <ClinicPerformance selectedWeek={selectedWeek} />
+                  </Suspense>
 
-            <Suspense fallback={<div>Loading client engagements...</div>}>
-              <ClientEngagements selectedWeek={selectedWeek} />
-            </Suspense>
+                  <Suspense fallback={<div>Loading student hours...</div>}>
+                    <StudentHours selectedWeek={selectedWeek} />
+                  </Suspense>
+                </div>
 
-            <Suspense fallback={<div>Loading recent activity...</div>}>
-              <RecentActivity selectedWeek={selectedWeek} />
-            </Suspense>
+                <Suspense fallback={<div>Loading recent activity...</div>}>
+                  <RecentActivity selectedWeek={selectedWeek} />
+                </Suspense>
+              </TabsContent>
+
+              <TabsContent value="clients" className="mt-6">
+                <Suspense fallback={<div>Loading client engagements...</div>}>
+                  <ClientEngagements selectedWeek={selectedWeek} />
+                </Suspense>
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </main>

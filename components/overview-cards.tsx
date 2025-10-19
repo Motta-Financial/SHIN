@@ -62,16 +62,18 @@ export function OverviewCards({ selectedWeek }: OverviewCardsProps) {
             }
 
             if (recordWeek === selectedWeek) {
-              const studentName = fields["Student Name"]
+              const studentNameArray = fields["NAME (from SEED | Students)"]
+              const studentName = Array.isArray(studentNameArray) ? studentNameArray[0] : studentNameArray
+
               const hours = Number.parseFloat(fields["Number of Hours Worked"] || "0")
-              const clientLinks = fields["Client"]
+              const clientName = fields["Client"]
 
               if (studentName) {
                 uniqueStudents.add(studentName)
               }
 
-              if (clientLinks && Array.isArray(clientLinks)) {
-                clientLinks.forEach((clientId: string) => activeClientIds.add(clientId))
+              if (clientName) {
+                activeClientIds.add(clientName)
               }
 
               totalHours += hours
