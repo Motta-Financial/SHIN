@@ -2,8 +2,9 @@
 
 import { Card } from "@/components/ui/card"
 import { useEffect, useState } from "react"
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Legend } from "recharts"
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from "recharts"
 import { getClinicColor } from "@/lib/clinic-colors"
+import { generateWeeklySummary } from "@/app/actions/generate-summary"
 
 interface PerformanceData {
   name: string
@@ -20,6 +21,8 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
   const [data, setData] = useState<PerformanceData[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<"clinic" | "client">("clinic")
+  const [weeklySummary, setWeeklySummary] = useState<string>("")
+  const [summaryLoading, setSummaryLoading] = useState(false)
 
   useEffect(() => {
     async function fetchClinicData() {
@@ -35,6 +38,8 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
 
         const clientsData = await clientsRes.json()
         const debriefsData = await debriefsRes.json()
+
+        const workSummaries: string[] = []
 
         if (view === "clinic") {
           const clinicMap = new Map<string, PerformanceData>()
@@ -89,6 +94,10 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
                 const clinicField = fields["Related Clinic"]
                 const studentName = fields["Student Name"]
                 const hours = Number.parseFloat(fields["Number of Hours Worked"] || "0")
+                const workSummary = fields["Summary of Work"]
+                if (workSummary) {
+                  workSummaries.push(`${studentName || "Student"} (${clinicField || "Unknown Clinic"}): ${workSummary}`)
+                }
 
                 if (clinicField) {
                   const clinicValue = Array.isArray(clinicField) ? clinicField[0] : clinicField
@@ -146,6 +155,10 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
                 const clientName = fields["Client"] || "No Client"
                 const studentName = fields["Student Name"]
                 const hours = Number.parseFloat(fields["Number of Hours Worked"] || "0")
+                const workSummary = fields["Summary of Work"]
+                if (workSummary) {
+                  workSummaries.push(`${studentName || "Student"} (${clientName}): ${workSummary}`)
+                }
 
                 if (!clientMap.has(clientName)) {
                   clientMap.set(clientName, {
@@ -175,6 +188,21 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
           const clientsArray = Array.from(clientMap.values())
           clientsArray.sort((a, b) => b.hours - a.hours)
           setData(clientsArray.slice(0, 10))
+        }
+
+        if (workSummaries.length > 0) {
+          setSummaryLoading(true)
+          try {
+            const summary = await generateWeeklySummary(workSummaries)
+            setWeeklySummary(summary)
+          } catch (error) {
+            console.error("[v0] Error generating summary:", error)
+            setWeeklySummary("Unable to generate weekly summary at this time.")
+          } finally {
+            setSummaryLoading(false)
+          }
+        } else {
+          setWeeklySummary("No activity recorded for this week.")
         }
       } catch (error) {
         console.error("[v0] Error fetching clinic performance:", error)
@@ -233,49 +261,75 @@ export function ClinicPerformance({ selectedWeek }: ClinicPerformanceProps) {
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data}>
-          <XAxis dataKey="name" stroke="#ffffff" fontSize={12} tickLine={false} axisLine={false} />
-          <YAxis stroke="#ffffff" fontSize={12} tickLine={false} axisLine={false} />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: "#002855",
-              border: "1px solid #0096C7",
-              borderRadius: "8px",
-              color: "#ffffff",
-            }}
-          />
-          <Legend wrapperStyle={{ color: "#ffffff" }} />
-          {view === "clinic" ? (
-            data.map((entry, index) => (
-              <Bar
-                key={entry.name}
-                dataKey="hours"
-                fill={getClinicColor(entry.name).hex}
-                radius={[8, 8, 0, 0]}
-                name="Hours"
-                data={[entry]}
-              />
-            ))
-          ) : (
-            <Bar dataKey="hours" fill="#0096C7" radius={[8, 8, 0, 0]} name="Hours" />
-          )}
-        </BarChart>
-      </ResponsiveContainer>
+      <div className="bg-white rounded-lg p-4">
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={data}>
+            <XAxis dataKey="name" stroke="#002855" fontSize={12} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+            <YAxis
+              stroke="#002855"
+              fontSize={12}
+              tickLine={false}
+              axisLine={{ stroke: "#e5e7eb" }}
+              label={{ value: "Hours", angle: -90, position: "insideLeft", style: { fill: "#002855" } }}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "#ffffff",
+                border: "1px solid #e5e7eb",
+                borderRadius: "8px",
+                color: "#002855",
+              }}
+              formatter={(value: number) => [`${value.toFixed(1)} hours`, "Hours"]}
+            />
+            <Bar dataKey="hours" radius={[8, 8, 0, 0]} barSize={80}>
+              {data.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={view === "clinic" ? getClinicColor(entry.name).hex : "#0096C7"} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
 
-      <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4 border-t border-white/20 pt-4">
-        {data.map((item) => {
-          const colors = view === "clinic" ? getClinicColor(item.name) : { hex: "#0096C7" }
-          return (
-            <div key={item.name} className="space-y-1">
-              <p className="text-xs font-medium" style={{ color: colors.hex }}>
-                {item.name}
-              </p>
-              <p className="text-sm font-bold text-white">{item.students} students</p>
-              <p className="text-xs text-white/70">{item.hours.toFixed(1)} hours</p>
-            </div>
-          )
-        })}
+        <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4 border-t border-gray-200 pt-4">
+          {data.map((item) => {
+            const colors = view === "clinic" ? getClinicColor(item.name) : { hex: "#0096C7" }
+            return (
+              <div key={item.name} className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: colors.hex }}></div>
+                  <p className="text-xs font-medium text-gray-900">{item.name}</p>
+                </div>
+                <p className="text-sm font-bold text-gray-900 ml-5">{item.students} students</p>
+                <p className="text-xs text-gray-600 ml-5">{item.hours.toFixed(1)} hours</p>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="mt-4 bg-white rounded-lg p-4">
+        <h3 className="text-lg font-bold text-[#002855] mb-3 flex items-center gap-2">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+            />
+          </svg>
+          Weekly Program Summary
+        </h3>
+        {summaryLoading ? (
+          <div className="flex items-center gap-2 text-gray-600">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#0096C7]"></div>
+            <span className="text-sm">Generating summary...</span>
+          </div>
+        ) : (
+          <div className="text-sm text-gray-700 leading-relaxed space-y-3">
+            {weeklySummary.split("\n\n").map((paragraph, index) => (
+              <p key={index}>{paragraph}</p>
+            ))}
+          </div>
+        )}
       </div>
     </Card>
   )
