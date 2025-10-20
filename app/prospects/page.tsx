@@ -414,92 +414,96 @@ export default function ProspectsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/20 to-blue-50/30">
       <MainNavigation />
 
       <div className="container mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between bg-slate-800 text-white rounded-lg p-6 shadow-sm border border-slate-700/20">
-          <div>
-            <h1 className="text-3xl font-bold">Prospect Interview Dashboard</h1>
-            <p className="mt-1 opacity-90">Track and manage prospect interviews for PRESEED program</p>
+        <div className="bg-[#1A2332] text-white rounded-lg p-6 shadow-sm border border-slate-700/20">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-3xl font-bold">Prospect Interview Dashboard</h1>
+              <p className="mt-1 opacity-90">Track and manage prospect interviews for PRESEED program</p>
+            </div>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <Button
-              size="lg"
-              onClick={() => window.open("https://airtable.com/appv3eSA0Ab2lJLe0/pagr17MqbIGB0UuAl/form", "_blank")}
-              className="bg-teal-600 text-white hover:bg-teal-700 shadow-sm"
-            >
-              <FileText className="h-4 w-4 mr-2" />
-              Fill Out Interview Form
-            </Button>
-            <p className="text-xs opacity-90">
-              Password: <span className="font-mono font-semibold bg-white/20 px-2 py-1 rounded">SEED2025</span>
-            </p>
+          <div className="flex items-center justify-end gap-4">
+            <div className="flex flex-col items-end gap-2">
+              <Button
+                size="lg"
+                onClick={() => window.open("https://airtable.com/appv3eSA0Ab2lJLe0/pagr17MqbIGB0UuAl/form", "_blank")}
+                className="bg-[#5B7C99] text-white hover:bg-[#4A6FA5] shadow-sm"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Fill Out Interview Form
+              </Button>
+              <p className="text-xs opacity-90">
+                Password: <span className="font-mono font-semibold bg-white/20 px-2 py-1 rounded">SEED2025</span>
+              </p>
+            </div>
           </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-4">
-          <Card className="border border-slate-200/60 shadow-sm bg-white">
+          <Card className="border border-slate-200/60 shadow-sm bg-white/95 backdrop-blur-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-slate-700">Total Prospects</CardTitle>
-              <Users className="h-5 w-5 text-slate-400" />
+              <Users className="h-5 w-5 text-[#5B7C99]" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-slate-900">{totalProspects}</div>
+              <div className="text-3xl font-bold text-[#1A2332]">{totalProspects}</div>
               <p className="text-xs text-slate-500 mt-1">All prospect candidates</p>
             </CardContent>
           </Card>
 
-          <Card className="border border-blue-200/60 shadow-sm bg-blue-50/30">
+          <Card className="border border-[#4A6FA5]/30 shadow-sm bg-white/95 backdrop-blur-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-blue-800">Scheduled Interviews</CardTitle>
-              <Calendar className="h-5 w-5 text-blue-500" />
+              <CardTitle className="text-sm font-medium text-[#4A6FA5]">Scheduled Interviews</CardTitle>
+              <Calendar className="h-5 w-5 text-[#4A6FA5]" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-blue-900">{scheduledInterviews}</div>
-              <p className="text-xs text-blue-600 mt-1">Upcoming interviews</p>
+              <div className="text-3xl font-bold text-[#1A2332]">{scheduledInterviews}</div>
+              <p className="text-xs text-[#5B7C99] mt-1">Upcoming interviews</p>
             </CardContent>
           </Card>
 
-          <Card className="border border-amber-200/60 shadow-sm bg-amber-50/30">
+          <Card className="border border-[#8B7B8B]/30 shadow-sm bg-white/95 backdrop-blur-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-amber-800">Forms Needed</CardTitle>
-              <AlertCircle className="h-5 w-5 text-amber-500" />
+              <CardTitle className="text-sm font-medium text-[#8B7B8B]">Forms Needed</CardTitle>
+              <AlertCircle className="h-5 w-5 text-[#8B7B8B]" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-amber-900">{completedInterviewsWithoutForm.length}</div>
-              <p className="text-xs text-amber-600 mt-1">Interviews missing forms</p>
+              <div className="text-3xl font-bold text-[#1A2332]">{completedInterviewsWithoutForm.length}</div>
+              <p className="text-xs text-[#8B7B8B] mt-1">Interviews missing forms</p>
             </CardContent>
           </Card>
 
-          <Card className="border border-teal-200/60 shadow-sm bg-teal-50/30">
+          <Card className="border border-[#5B7C99]/30 shadow-sm bg-white/95 backdrop-blur-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-teal-800">Forms Completed</CardTitle>
-              <CheckCircle className="h-5 w-5 text-teal-500" />
+              <CardTitle className="text-sm font-medium text-[#5B7C99]">Forms Completed</CardTitle>
+              <CheckCircle className="h-5 w-5 text-[#5B7C99]" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-teal-900">{completedInterviewsWithForm.length}</div>
-              <p className="text-xs text-teal-600 mt-1">Fully documented</p>
+              <div className="text-3xl font-bold text-[#1A2332]">{completedInterviewsWithForm.length}</div>
+              <p className="text-xs text-[#5B7C99] mt-1">Fully documented</p>
             </CardContent>
           </Card>
         </div>
 
         {completedInterviewsWithoutForm.length > 0 && (
           <Collapsible open={isFormsNeededOpen} onOpenChange={setIsFormsNeededOpen}>
-            <Card className="border border-amber-200/60 shadow-sm bg-white">
-              <CardHeader className="bg-amber-50/50 border-b border-amber-200/60">
+            <Card className="border border-[#C4B5C4]/40 shadow-sm bg-white/95 backdrop-blur-sm">
+              <CardHeader className="bg-[#C4B5C4]/20 border-b border-[#C4B5C4]/30">
                 <CollapsibleTrigger asChild>
                   <div className="flex items-center justify-between cursor-pointer hover:opacity-80 transition-opacity">
                     <div className="flex items-center gap-3">
-                      <AlertCircle className="h-5 w-5 text-amber-500" />
+                      <AlertCircle className="h-5 w-5 text-[#8B7B8B]" />
                       <div>
-                        <CardTitle className="text-slate-900">Completed Interviews - Form Needed</CardTitle>
+                        <CardTitle className="text-[#1A2332]">Completed Interviews - Form Needed</CardTitle>
                         <CardDescription className="text-slate-600">
                           These interviews have passed their scheduled date but the interview form has not been
                           submitted yet
                         </CardDescription>
                       </div>
-                      <Badge variant="secondary" className="ml-2 bg-amber-100 text-amber-800 text-sm px-2 py-1">
+                      <Badge variant="secondary" className="ml-2 bg-[#C4B5C4]/30 text-[#8B7B8B] text-sm px-2 py-1">
                         {completedInterviewsWithoutForm.length}
                       </Badge>
                     </div>
@@ -510,7 +514,7 @@ export default function ProspectsPage() {
                 </CollapsibleTrigger>
               </CardHeader>
               <CollapsibleContent>
-                <CardContent>
+                <CardContent className="bg-white pt-6">
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
@@ -536,7 +540,7 @@ export default function ProspectsPage() {
                             <TableCell>
                               <Button
                                 size="sm"
-                                className="bg-amber-500 hover:bg-amber-600 text-white"
+                                className="bg-[#8B7B8B] hover:bg-[#8B7B8B]/80 text-white"
                                 onClick={() =>
                                   window.open("https://airtable.com/appv3eSA0Ab2lJLe0/pagr17MqbIGB0UuAl/form", "_blank")
                                 }
@@ -557,17 +561,17 @@ export default function ProspectsPage() {
         )}
 
         {completedInterviewsWithForm.length > 0 && (
-          <Card className="border border-teal-200/60 shadow-sm bg-white">
-            <CardHeader className="bg-teal-50/50 border-b border-teal-200/60">
+          <Card className="border border-[#5B7C99]/30 shadow-sm bg-white/95 backdrop-blur-sm">
+            <CardHeader className="bg-[#5B7C99]/10 border-b border-[#5B7C99]/20">
               <div className="flex items-center gap-3">
-                <CheckCircle className="h-5 w-5 text-teal-500" />
+                <CheckCircle className="h-5 w-5 text-[#5B7C99]" />
                 <div>
-                  <CardTitle className="text-slate-900">Completed Interview Forms</CardTitle>
+                  <CardTitle className="text-[#1A2332]">Completed Interview Forms</CardTitle>
                   <CardDescription className="text-slate-600">Interviews with completed documentation</CardDescription>
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="bg-white pt-6">
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -599,34 +603,34 @@ export default function ProspectsPage() {
         )}
 
         <div className="grid gap-6 md:grid-cols-2">
-          <Card className="border border-blue-200/60 shadow-sm bg-white">
-            <CardHeader className="bg-blue-50/50 border-b border-blue-200/60">
+          <Card className="border border-[#4A6FA5]/30 shadow-sm bg-white/95 backdrop-blur-sm">
+            <CardHeader className="bg-[#4A6FA5]/10 border-b border-[#4A6FA5]/20">
               <div className="flex items-center gap-3">
-                <Clock className="h-5 w-5 text-blue-500" />
+                <Clock className="h-5 w-5 text-[#4A6FA5]" />
                 <div>
-                  <CardTitle className="text-slate-900">Scheduled Interviews</CardTitle>
+                  <CardTitle className="text-[#1A2332]">Scheduled Interviews</CardTitle>
                   <CardDescription className="text-slate-600">Upcoming prospect interviews</CardDescription>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="pt-6">
+            <CardContent className="pt-6 bg-white">
               {scheduledList.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
+                <div className="flex flex-col items-center justify-center h-[500px] text-muted-foreground">
                   <Calendar className="h-12 w-12 mb-2 opacity-20" />
                   <p>No scheduled interviews</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
                   {scheduledList.map((prospect) => (
                     <div
                       key={prospect.id}
-                      className="flex items-center justify-between border-l-4 border-blue-300 bg-blue-50/50 p-4 rounded-r-lg hover:bg-blue-50 transition-colors"
+                      className="flex items-center justify-between border-l-4 border-[#4A6FA5] bg-[#4A6FA5]/5 p-4 rounded-r-lg hover:bg-[#4A6FA5]/10 transition-colors"
                     >
                       <div className="flex-1">
-                        <p className="font-semibold text-lg text-slate-900">{getProspectName(prospect.fields)}</p>
+                        <p className="font-semibold text-lg text-[#1A2332]">{getProspectName(prospect.fields)}</p>
                         <div className="flex items-center gap-2 mt-1">
-                          <Clock className="h-4 w-4 text-blue-500" />
-                          <p className="text-sm text-blue-800 font-medium">
+                          <Clock className="h-4 w-4 text-[#4A6FA5]" />
+                          <p className="text-sm text-[#5B7C99] font-medium">
                             {getInterviewDateTime(prospect.fields) || "Date/Time TBD"}
                           </p>
                         </div>
@@ -639,7 +643,7 @@ export default function ProspectsPage() {
                             href={getInterviewLink(prospect.fields)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 mt-2"
+                            className="text-xs text-[#4A6FA5] hover:text-[#5B7C99] font-medium flex items-center gap-1 mt-2"
                           >
                             <ExternalLink className="h-3 w-3" />
                             Join Interview
@@ -657,26 +661,26 @@ export default function ProspectsPage() {
             </CardContent>
           </Card>
 
-          <Card className="border border-slate-200/60 shadow-sm bg-white">
-            <CardHeader className="bg-slate-50/50 border-b border-slate-200/60">
+          <Card className="border border-[#C4B5C4]/40 shadow-sm bg-white/95 backdrop-blur-sm">
+            <CardHeader className="bg-[#C4B5C4]/10 border-b border-[#C4B5C4]/20">
               <div className="flex items-center gap-3">
-                <CheckCircle className="h-5 w-5 text-slate-500" />
+                <CheckCircle className="h-5 w-5 text-[#8B7B8B]" />
                 <div>
-                  <CardTitle className="text-slate-900">All Completed Interviews</CardTitle>
+                  <CardTitle className="text-[#1A2332]">All Completed Interviews</CardTitle>
                   <CardDescription className="text-slate-600">
                     Interviews with past scheduled dates ({completedInterviews} total)
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="pt-6">
+            <CardContent className="pt-6 bg-white">
               {completedInterviews === 0 ? (
-                <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
+                <div className="flex flex-col items-center justify-center h-[500px] text-muted-foreground">
                   <CheckCircle className="h-12 w-12 mb-2 opacity-20" />
                   <p>No completed interviews</p>
                 </div>
               ) : (
-                <div className="space-y-4 max-h-96 overflow-y-auto">
+                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
                   {prospects
                     .filter((p) => isInterviewCompleted(p.fields))
                     .map((prospect) => {
@@ -685,11 +689,11 @@ export default function ProspectsPage() {
                         <div
                           key={prospect.id}
                           className={`flex items-center justify-between border-l-4 ${
-                            formCompleted ? "border-teal-300 bg-teal-50/50" : "border-amber-300 bg-amber-50/50"
+                            formCompleted ? "border-[#5B7C99] bg-[#5B7C99]/5" : "border-[#8B7B8B] bg-[#C4B5C4]/10"
                           } p-4 rounded-r-lg hover:opacity-80 transition-opacity`}
                         >
                           <div className="flex-1">
-                            <p className="font-semibold text-slate-900">{getProspectName(prospect.fields)}</p>
+                            <p className="font-semibold text-[#1A2332]">{getProspectName(prospect.fields)}</p>
                             <div className="flex items-center gap-2 mt-1">
                               <UserCheck className="h-3 w-3 text-slate-400" />
                               <p className="text-xs text-slate-600">
@@ -704,19 +708,19 @@ export default function ProspectsPage() {
                             </div>
                             {!formCompleted && (
                               <div className="flex items-center gap-1 mt-2">
-                                <AlertCircle className="h-3 w-3 text-amber-500" />
-                                <p className="text-xs text-amber-600 font-medium">Form needed</p>
+                                <AlertCircle className="h-3 w-3 text-[#8B7B8B]" />
+                                <p className="text-xs text-[#8B7B8B] font-medium">Form needed</p>
                               </div>
                             )}
                           </div>
                           <div className="flex flex-col gap-2 items-end">
                             {formCompleted ? (
-                              <Badge className="bg-teal-500 text-white">
+                              <Badge className="bg-[#5B7C99] text-white">
                                 <CheckCircle className="h-3 w-3 mr-1" />
                                 Form Complete
                               </Badge>
                             ) : (
-                              <Badge className="bg-amber-500 text-white">
+                              <Badge className="bg-[#8B7B8B] text-white">
                                 <AlertCircle className="h-3 w-3 mr-1" />
                                 Form Pending
                               </Badge>
@@ -732,9 +736,9 @@ export default function ProspectsPage() {
           </Card>
         </div>
 
-        <Card className="border border-slate-200/60 shadow-sm bg-white">
-          <CardHeader className="bg-slate-800 text-white border-b border-slate-700/20">
-            <div className="flex items-center justify-between">
+        <Card className="border border-slate-200/60 shadow-sm bg-white/95 backdrop-blur-sm">
+          <CardHeader className="bg-[#1A2332] text-white border-b border-slate-700/20">
+            <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <Users className="h-5 w-5" />
                 <div>
@@ -744,49 +748,53 @@ export default function ProspectsPage() {
                   </CardDescription>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-white" />
-                <Select value={filterBy} onValueChange={(value: any) => setFilterBy(value)}>
-                  <SelectTrigger className="w-[180px] bg-white text-slate-900">
-                    <SelectValue placeholder="Filter by..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Prospects</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="upcoming">Upcoming</SelectItem>
-                  </SelectContent>
-                </Select>
-                <ArrowUpDown className="h-4 w-4 text-white ml-2" />
-                <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
-                  <SelectTrigger className="w-[180px] bg-white text-slate-900">
-                    <SelectValue placeholder="Sort by..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="name">Name</SelectItem>
-                    <SelectItem value="date">Interview Date</SelectItem>
-                    <SelectItem value="status">Status</SelectItem>
-                    <SelectItem value="interviewer">Interviewer</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-                  className="text-white hover:bg-white/10"
-                >
-                  {sortOrder === "asc" ? "↑" : "↓"}
-                </Button>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-white" />
+                  <Select value={filterBy} onValueChange={(value: any) => setFilterBy(value)}>
+                    <SelectTrigger className="w-[180px] bg-white text-slate-900">
+                      <SelectValue placeholder="Filter by..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Prospects</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="upcoming">Upcoming</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <ArrowUpDown className="h-4 w-4 text-white" />
+                  <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+                    <SelectTrigger className="w-[180px] bg-white text-slate-900">
+                      <SelectValue placeholder="Sort by..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name">Name</SelectItem>
+                      <SelectItem value="date">Interview Date</SelectItem>
+                      <SelectItem value="status">Status</SelectItem>
+                      <SelectItem value="interviewer">Interviewer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                    className="text-white hover:bg-white/10"
+                  >
+                    {sortOrder === "asc" ? "↑" : "↓"}
+                  </Button>
+                </div>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="pt-6">
+          <CardContent className="pt-6 bg-white">
             {getFilteredProspects().length === 0 ? (
               <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
                 <Users className="h-12 w-12 mb-2 opacity-20" />
                 <p>No prospects found for this filter</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="max-h-[500px] overflow-y-auto overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50/50">
@@ -816,7 +824,7 @@ export default function ProspectsPage() {
                               href={getInterviewLink(prospect.fields)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                              className="text-[#4A6FA5] hover:text-[#5B7C99] font-medium flex items-center gap-1"
                             >
                               <ExternalLink className="h-3 w-3" />
                               Join
