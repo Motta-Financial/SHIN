@@ -1,6 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
+import { ClerkProvider } from "@clerk/nextjs"
 import "./globals.css"
 
 const geistSans = Geist({
@@ -13,8 +14,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "v0 App",
-  description: "Created with v0",
+  title: "SHIN Dashboard",
+  description: "SEED SHIN Dashboard for tracking student hours and client engagements",
   generator: "v0.app",
 }
 
@@ -24,8 +25,13 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body className={`font-sans antialiased`}>{children}</body>
-    </html>
+    <ClerkProvider
+      domain={process.env.NEXT_PUBLIC_CLERK_DOMAIN}
+      publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+    >
+      <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+        <body className={`font-sans antialiased`}>{children}</body>
+      </html>
+    </ClerkProvider>
   )
 }

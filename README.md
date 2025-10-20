@@ -10,6 +10,8 @@ A comprehensive dashboard for SEED clinic directors to monitor student progress,
 - **Client Engagements**: Monitor progress on each client project with status indicators
 - **Recent Activity Feed**: Stay updated with latest student submissions and milestones
 - **Filtering**: Filter by clinic and time range for focused insights
+- **Prospect Interview Dashboard**: Track interview schedules, completion status, and form submissions
+- **Authentication**: Secure access with Clerk authentication
 
 ## Setup
 
@@ -19,42 +21,72 @@ A comprehensive dashboard for SEED clinic directors to monitor student progress,
    - Get your API key from: https://airtable.com/account
    - Find your Base ID in the Airtable URL
 
-2. **Install Dependencies**:
+2. **Configure Clerk Authentication**:
+   - Sign up for a free account at https://clerk.com
+   - Create a new application in the Clerk Dashboard
+   - Copy your Publishable Key and Secret Key
+   - Add them to your `.env.local` file:
+     \`\`\`
+     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+     CLERK_SECRET_KEY=sk_test_...
+     \`\`\`
+
+3. **Install Dependencies**:
    \`\`\`bash
    npm install
    \`\`\`
 
-3. **Run Development Server**:
+4. **Run Development Server**:
    \`\`\`bash
    npm run dev
    \`\`\`
+
+5. **Access the Dashboard**:
+   - Navigate to http://localhost:3000
+   - Sign up or sign in with Clerk
+   - Access the Clinic Dashboard and Prospect Interviews
 
 ## Airtable Integration
 
 The dashboard connects to your Airtable base to pull real-time data from:
 - Student Debrief Forms
 - Weekly Attendance Forms
-- Pre-SEED Interview Forms
+- Pre-SEED Interview Forms (PRESEED| Prospects table)
 - Client Information
 - Clinic Assignments
+- Student Roster (SEED | Roster table)
 
 ### API Endpoints
 
-- `GET /api/airtable?table=TableName` - Fetch data from specific Airtable table
+- `GET /api/airtable/debriefs` - Fetch student debrief data
+- `GET /api/airtable/roster` - Fetch student roster
+- `GET /api/airtable/prospects` - Fetch prospect interview data
+- `GET /api/airtable/clients` - Fetch client information
+- `GET /api/airtable/tables` - List all available tables
+
+## Authentication
+
+The dashboard uses Clerk for authentication, providing:
+- Secure sign-in/sign-up flows
+- User profile management
+- Session management
+- Protected routes (all pages require authentication)
 
 ## Customization
 
-The dashboard uses the SHIN brand colors:
-- Navy Blue (#0A2240) - Primary
-- Teal (#00B4D8) - Secondary
-- Bright Green (#00F5A0) - Accent
+The dashboard uses an elegant color palette:
+- Navy Blue (#1A2332) - Primary headers
+- Medium Blue (#4A6FA5) - Accents
+- Slate Blue (#5B7C99) - Secondary elements
+- Muted Purple (#8B7B8B) - Subtle accents
+- Light Lavender (#C4B5C4) - Soft backgrounds
 
 Update `app/globals.css` to customize the color scheme.
 
 ## Next Steps
 
-1. Replace mock data in components with actual Airtable API calls
-2. Add authentication for clinic directors
-3. Implement data export functionality
-4. Add email notifications for at-risk clients
-5. Create detailed student and client profile pages
+1. ~~Add authentication for clinic directors~~ ✓ Completed with Clerk
+2. Implement data export functionality
+3. Add email notifications for at-risk clients
+4. Create detailed student and client profile pages
+5. Add role-based access control for different user types
