@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { ClerkUserButton } from "./user-button"
+// import { ClerkUserButton } from "./user-button"
 
 export function MainNavigation() {
   const pathname = usePathname()
@@ -30,7 +30,7 @@ export function MainNavigation() {
           Prospect Interviews
         </Link>
       </div>
-      <ClerkUserButton />
+      {/* <ClerkUserButton /> */}
     </nav>
   )
 }
