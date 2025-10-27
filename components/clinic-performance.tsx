@@ -49,10 +49,6 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
         const clientsData = await clientsRes.json()
         const debriefsData = await debriefsRes.json()
 
-        console.log("[v0] Clinic Performance - Total debrief records:", debriefsData.records?.length || 0)
-        console.log("[v0] Clinic Performance - Selected week:", selectedWeek)
-        console.log("[v0] Clinic Performance - Selected clinic:", selectedClinic) // Added logging
-
         const workSummaries: string[] = []
         const entries: WorkEntry[] = []
 
@@ -161,7 +157,6 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
           })
 
           const finalData = Array.from(clinicMap.values())
-          console.log("[v0] Clinic Performance - Final data:", finalData)
           setData(finalData)
         } else {
           const clientMap = new Map<string, PerformanceData>()
@@ -246,7 +241,7 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
     }
 
     fetchClinicData()
-  }, [selectedWeek, view, selectedClinic]) // Added selectedClinic to dependencies
+  }, [selectedWeek, view, selectedClinic])
 
   useEffect(() => {
     async function generateSummaries() {

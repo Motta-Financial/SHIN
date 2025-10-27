@@ -11,7 +11,6 @@ export async function GET() {
 
   try {
     const recordsUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${DEBRIEFS_TABLE_ID}?maxRecords=1000`
-    console.log("[v0] Fetching debriefs from:", recordsUrl)
 
     const response = await fetch(recordsUrl, {
       headers: {
@@ -26,11 +25,6 @@ export async function GET() {
     }
 
     const data = await response.json()
-    console.log("[v0] Debriefs response - record count:", data.records?.length || 0)
-    if (data.records && data.records.length > 0) {
-      console.log("[v0] First debrief record fields:", Object.keys(data.records[0].fields))
-      console.log("[v0] Sample record data:", JSON.stringify(data.records[0].fields, null, 2))
-    }
     return NextResponse.json(data)
   } catch (error) {
     console.error("[v0] Airtable API error:", error)
