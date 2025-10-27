@@ -25,7 +25,6 @@ function getWeekEnding(date: Date): string {
 
 async function getAvailableWeeks(): Promise<string[]> {
   try {
-    console.log("[v0] Fetching available weeks...")
     const response = await fetch("/api/airtable/debriefs")
     const data = await response.json()
 
@@ -40,7 +39,6 @@ async function getAvailableWeeks(): Promise<string[]> {
     })
 
     const sortedWeeks = Array.from(weeks).sort((a, b) => b.localeCompare(a))
-    console.log("[v0] Available weeks:", sortedWeeks)
     return sortedWeeks
   } catch (error) {
     console.error("[v0] Error fetching available weeks:", error)

@@ -26,12 +26,6 @@ export async function GET() {
     }
 
     const data = await response.json()
-    console.log("[v0] Roster response - record count:", data.records?.length || 0)
-
-    if (data.records && data.records.length > 0) {
-      console.log("[v0] First roster record fields:", Object.keys(data.records[0].fields))
-      console.log("[v0] Sample roster record:", data.records[0].fields)
-    }
 
     return NextResponse.json(data)
   } catch (error) {
