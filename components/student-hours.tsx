@@ -31,16 +31,38 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
   const [groupBy, setGroupBy] = useState<"clinic" | "client">("clinic")
   const [selectedStudent, setSelectedStudent] = useState<StudentSummary | null>(null)
 
+  const directorToClinicMap = new Map<string, string>([
+    ["Mark Dwyer", "Accounting"],
+    ["Nick Vadala", "Consulting"],
+    ["Ken Mooney", "Funding"],
+    ["Christopher Hill", "Marketing"],
+    ["Chris Hill", "Marketing"],
+    ["Beth DiRusso", "Funding"],
+  ])
+
+  const roleToClinicMap = new Map<string, string>([
+    ["ACCTING CLINIC", "Accounting"],
+    ["ACCOUNTING CLINIC", "Accounting"],
+    ["CONSULTING CLINIC", "Consulting"],
+    ["RESOURCE CLINIC", "Funding"],
+    ["RESOURCE ACQUISITION", "Funding"],
+    ["MARKETING CLINIC", "Marketing"],
+  ])
+
   useEffect(() => {
     async function fetchHoursData() {
       try {
         const debriefsRes = await fetch("/api/airtable/debriefs")
 
         if (!debriefsRes.ok) {
-          throw new Error("Failed to fetch debriefs")
+          throw new Error("Failed to fetch data")
         }
 
         const debriefsData = await debriefsRes.json()
+
+        console.log("[v0] Student Hours - Total debrief records:", debriefsData.records?.length || 0)
+        console.log("[v0] Student Hours - Selected week:", selectedWeek)
+        console.log("[v0] Student Hours - Selected clinic:", selectedClinic)
 
         const studentMap = new Map<string, StudentSummary>()
         let filteredRecordsCount = 0
@@ -69,8 +91,12 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
               recordWeek = weekEndingDate.toISOString().split("T")[0]
             }
 
-            const relatedClinic = fields["Related Clinic"]
-            const matchesClinic = selectedClinic === "all" || relatedClinic === selectedClinic
+            const roleField = fields["ROLE (from SEED | Students)"]
+            const studentRole = Array.isArray(roleField) ? roleField[0] : roleField
+            const studentClinic =
+              roleToClinicMap.get(studentRole?.toUpperCase()) || fields["Related Clinic"] || "Unknown"
+
+            const matchesClinic = selectedClinic === "all" || studentClinic === directorToClinicMap.get(selectedClinic)
 
             if (recordWeek !== selectedWeek || !matchesClinic) {
               return
@@ -84,8 +110,10 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
                 : fields["NAME (from SEED | Students)"]
               : fields["Student Name"] || "Unknown Student"
 
-            const client = fields["Client"] || "No Client"
-            const clinic = fields["Related Clinic"] || "No Clinic"
+            const clientField = fields["Client"]
+            const clientName = Array.isArray(clientField) ? clientField[0] : clientField
+            const client = clientName?.trim() || "No Client"
+            const clinic = studentClinic
             const hours = Number.parseFloat(fields["Number of Hours Worked"] || "0")
             const workSummary = fields["Summary of Work"] || "No summary provided"
 
@@ -110,9 +138,16 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
           })
         }
 
+        console.log("[v0] Student Hours - Filtered records for week:", filteredRecordsCount)
+        console.log("[v0] Student Hours - Unique students:", studentMap.size)
+
         const studentsArray = Array.from(studentMap.values())
         studentsArray.sort((a, b) => b.totalHours - a.totalHours)
 
+        console.log(
+          "[v0] Student Hours - Final data:",
+          studentsArray.map((s) => ({ name: s.name, hours: s.totalHours, clinic: s.clinic })),
+        )
         setData(studentsArray)
       } catch (error) {
         console.error("[v0] Error fetching student hours:", error)
@@ -142,7 +177,7 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
     return (
       <Card className="p-6 bg-white border-[#002855]/20 shadow-lg">
         <div className="mb-6">
-          <h2 className="text-xl font-bold text-[#002855]">Student Hours Summary</h2>
+          <h2 className="text-2xl font-bold text-[#002855]">Student Hours Summary</h2>
           <p className="text-sm text-[#002855]/70">Hours breakdown by student</p>
         </div>
         <div className="flex items-center justify-center h-[300px]">
@@ -154,16 +189,16 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
 
   return (
     <>
-      <Card className="p-6 bg-white border-[#002855]/20 shadow-lg">
+      <Card className="p-6 bg-gradient-to-br from-blue-500/10 via-blue-400/5 to-blue-600/10 border-2 border-blue-200/50 shadow-lg backdrop-blur-sm">
         <div className="mb-6">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h2 className="text-xl font-bold text-[#002855]">Student Hours Summary</h2>
+              <h2 className="text-2xl font-bold text-[#002855]">Student Hours Summary</h2>
               <p className="text-sm text-[#002855]/70">Click on a student to view detailed records</p>
             </div>
-            <div className="bg-[#002855] rounded-lg p-3 shadow-md text-center">
-              <p className="text-2xl font-bold text-white">{totalHours.toFixed(1)}</p>
-              <p className="text-xs text-white/80">Total Hours</p>
+            <div className="bg-blue-500/20 backdrop-blur-sm rounded-lg p-3 shadow-md text-center border-2 border-blue-300/50">
+              <p className="text-2xl font-bold text-blue-700">{totalHours.toFixed(1)}</p>
+              <p className="text-xs text-blue-600">Total Hours</p>
             </div>
           </div>
 
@@ -173,8 +208,8 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
               onClick={() => setGroupBy("clinic")}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 groupBy === "clinic"
-                  ? "bg-[#0077B6] text-white"
-                  : "bg-white text-[#002855] border-2 border-[#0077B6] hover:bg-[#0077B6]/10"
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : "bg-blue-100/50 text-blue-700 border-2 border-blue-200 hover:bg-blue-200/50"
               }`}
             >
               Clinic
@@ -183,8 +218,8 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
               onClick={() => setGroupBy("client")}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 groupBy === "client"
-                  ? "bg-[#0077B6] text-white"
-                  : "bg-white text-[#002855] border-2 border-[#0077B6] hover:bg-[#0077B6]/10"
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : "bg-blue-100/50 text-blue-700 border-2 border-blue-200 hover:bg-blue-200/50"
               }`}
             >
               Client
@@ -199,7 +234,11 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
               const colors = groupBy === "clinic" ? getClinicColor(groupName) : { hex: "#0077B6", bg: "bg-[#0077B6]" }
 
               return (
-                <div key={groupName} className={`border-2 rounded-lg p-4`} style={{ borderColor: colors.hex }}>
+                <div
+                  key={groupName}
+                  className="bg-white/90 backdrop-blur-sm rounded-lg p-4 shadow-lg border-2"
+                  style={{ borderColor: colors.hex }}
+                >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <div className={`w-3 h-3 rounded-full ${colors.bg}`} />
@@ -254,7 +293,7 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
           </div>
         ) : (
           <div className="flex items-center justify-center h-[300px]">
-            <p className="text-[#002855]/70">No hours data available</p>
+            <p className="text-[#002855]/50">No hours data available</p>
           </div>
         )}
       </Card>

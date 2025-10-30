@@ -32,7 +32,27 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
   const [view, setView] = useState<"clinic" | "client">("clinic")
   const [workEntries, setWorkEntries] = useState<WorkEntry[]>([])
   const [clientSummaries, setClientSummaries] = useState<Map<string, string>>(new Map())
-  const [generatingSummaries, setGeneratingSummaries] = useState(false)
+  const [clientToDirectorMap, setClientToDirectorMap] = useState<Map<string, string>>(new Map())
+  const [clientTeamMembers, setClientTeamMembers] = useState<Map<string, string[]>>(new Map())
+  const [generatingSummaries, setGeneratingSummaries] = useState(false) // Declared generatingSummaries
+
+  const directorToClinicMap = new Map<string, string>([
+    ["Mark Dwyer", "Accounting"],
+    ["Nick Vadala", "Consulting"],
+    ["Ken Mooney", "Funding"],
+    ["Christopher Hill", "Marketing"],
+    ["Chris Hill", "Marketing"],
+    ["Beth DiRusso", "Funding"],
+  ])
+
+  const roleToClinicMap = new Map<string, string>([
+    ["ACCTING CLINIC", "Accounting"],
+    ["ACCOUNTING CLINIC", "Accounting"],
+    ["CONSULTING CLINIC", "Consulting"],
+    ["RESOURCE CLINIC", "Funding"],
+    ["RESOURCE ACQUISITION", "Funding"],
+    ["MARKETING CLINIC", "Marketing"],
+  ])
 
   useEffect(() => {
     async function fetchClinicData() {
@@ -49,6 +69,57 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
         const clientsData = await clientsRes.json()
         const debriefsData = await debriefsRes.json()
 
+        const clientToClinicMap = new Map<string, string>()
+        const directorToClientsMap = new Map<string, Set<string>>()
+        const teamMembersMap = new Map<string, string[]>()
+
+        if (clientsData.records) {
+          clientsData.records.forEach((record: any) => {
+            const fields = record.fields
+            const clientName = fields["Client Name"]?.trim()
+            const primaryDirector = fields["Primary Clinic Director"]
+            if (clientName && primaryDirector) {
+              clientToClinicMap.set(clientName, primaryDirector)
+
+              if (!directorToClientsMap.has(primaryDirector)) {
+                directorToClientsMap.set(primaryDirector, new Set())
+              }
+              directorToClientsMap.get(primaryDirector)!.add(clientName)
+
+              const teamMembers: string[] = []
+
+              if (fields["Consulting (Team Leader)"]) {
+                const leaders = fields["Consulting (Team Leader)"].split(",").map((n: string) => n.trim())
+                teamMembers.push(...leaders.filter((n: string) => n))
+              }
+
+              if (fields["Accounting"]) {
+                const accountants = fields["Accounting"].split(",").map((n: string) => n.trim())
+                teamMembers.push(...accountants.filter((n: string) => n))
+              }
+
+              if (fields["Resource Acquisition"]) {
+                const resourceTeam = fields["Resource Acquisition"].split(",").map((n: string) => n.trim())
+                teamMembers.push(...resourceTeam.filter((n: string) => n))
+              }
+
+              if (fields["Marketing"]) {
+                const marketers = fields["Marketing"].split(",").map((n: string) => n.trim())
+                teamMembers.push(...marketers.filter((n: string) => n))
+              }
+
+              teamMembersMap.set(clientName, teamMembers)
+            }
+          })
+        }
+
+        setClientToDirectorMap(clientToClinicMap)
+        setClientTeamMembers(teamMembersMap)
+
+        console.log("[v0] Clinic Performance - Total debrief records:", debriefsData.records?.length || 0)
+        console.log("[v0] Clinic Performance - Selected week:", selectedWeek)
+        console.log("[v0] Clinic Performance - Selected clinic:", selectedClinic)
+
         const workSummaries: string[] = []
         const entries: WorkEntry[] = []
 
@@ -57,19 +128,18 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
           const clinicNames = ["Consulting", "Accounting", "Funding", "Marketing"]
 
           clinicNames.forEach((name) => {
-            if (selectedClinic === "all" || selectedClinic === name) {
-              clinicMap.set(name, {
-                name: name,
-                hours: 0,
-                students: 0,
-                clients: 0,
-              })
-            }
+            clinicMap.set(name, {
+              name: name,
+              hours: 0,
+              students: 0,
+              clients: 0,
+            })
           })
 
           const studentsByClinic = new Map<string, Set<string>>()
           const clientsByClinic = new Map<string, Set<string>>()
-          let filteredRecordsCount = 0
+
+          const selectedClinicName = selectedClinic !== "all" ? directorToClinicMap.get(selectedClinic) : null
 
           if (debriefsData.records) {
             debriefsData.records.forEach((record: any) => {
@@ -89,54 +159,53 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
                 recordWeek = weekEndingDate.toISOString().split("T")[0]
               }
 
-              const clinicField = fields["Related Clinic"]
-              const relatedClinic = Array.isArray(clinicField) ? clinicField[0] : clinicField
+              const roleField = fields["ROLE (from SEED | Students)"]
+              const studentRole = Array.isArray(roleField) ? roleField[0] : roleField
+              const studentClinic =
+                roleToClinicMap.get(studentRole?.toUpperCase()) || fields["Related Clinic"] || "Unknown"
 
-              const matchesClinic = selectedClinic === "all" || relatedClinic === selectedClinic
+              const clientField = fields["Client"]
+              const clientName = Array.isArray(clientField) ? clientField[0] : clientField
+              const trimmedClientName = clientName?.trim()
+
+              const matchesClinic =
+                selectedClinic === "all" || (selectedClinicName && studentClinic === selectedClinicName)
 
               if (recordWeek === selectedWeek && matchesClinic) {
-                filteredRecordsCount++
-
                 const studentNameField = fields["NAME (from SEED | Students)"]
                 const studentName = Array.isArray(studentNameField) ? studentNameField[0] : studentNameField
                 const hours = Number.parseFloat(fields["Number of Hours Worked"] || "0")
                 const workSummary = fields["Summary of Work"]
-                const clientField = fields["Client"]
-                const clientName = Array.isArray(clientField) ? clientField[0] : clientField || "No Client"
 
                 if (workSummary && studentName) {
                   entries.push({
                     student: studentName,
-                    clinic: relatedClinic || "Unknown Clinic",
-                    client: clientName,
+                    clinic: studentClinic,
+                    client: trimmedClientName || "No Client",
                     summary: workSummary,
                     hours: hours,
                   })
                 }
 
-                if (relatedClinic) {
-                  clinicNames.forEach((name) => {
-                    if (relatedClinic.includes(name) && clinicMap.has(name)) {
-                      const clinic = clinicMap.get(name)
-                      if (clinic) {
-                        clinic.hours += hours
+                if (clinicMap.has(studentClinic)) {
+                  const clinic = clinicMap.get(studentClinic)
+                  if (clinic) {
+                    clinic.hours += hours
 
-                        if (!studentsByClinic.has(name)) {
-                          studentsByClinic.set(name, new Set())
-                        }
-                        if (studentName) {
-                          studentsByClinic.get(name)!.add(studentName)
-                        }
-
-                        if (!clientsByClinic.has(name)) {
-                          clientsByClinic.set(name, new Set())
-                        }
-                        if (clientName && clientName !== "No Client") {
-                          clientsByClinic.get(name)!.add(clientName)
-                        }
-                      }
+                    if (!studentsByClinic.has(studentClinic)) {
+                      studentsByClinic.set(studentClinic, new Set())
                     }
-                  })
+                    if (studentName) {
+                      studentsByClinic.get(studentClinic)!.add(studentName)
+                    }
+
+                    if (!clientsByClinic.has(studentClinic)) {
+                      clientsByClinic.set(studentClinic, new Set())
+                    }
+                    if (trimmedClientName && trimmedClientName !== "No Client") {
+                      clientsByClinic.get(studentClinic)!.add(trimmedClientName)
+                    }
+                  }
                 }
               }
             })
@@ -156,10 +225,14 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
             }
           })
 
-          const finalData = Array.from(clinicMap.values())
+          const finalData = Array.from(clinicMap.values()).filter(
+            (clinic) => selectedClinic === "all" || clinic.hours > 0,
+          )
+          console.log("[v0] Clinic Performance - Final data:", finalData)
           setData(finalData)
         } else {
           const clientMap = new Map<string, PerformanceData>()
+          const directorClients = selectedClinic !== "all" ? directorToClientsMap.get(selectedClinic) : null
 
           if (debriefsData.records) {
             debriefsData.records.forEach((record: any) => {
@@ -179,14 +252,20 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
                 recordWeek = weekEndingDate.toISOString().split("T")[0]
               }
 
-              const clinicField = fields["Related Clinic"]
-              const relatedClinic = Array.isArray(clinicField) ? clinicField[0] : clinicField
+              const roleField = fields["ROLE (from SEED | Students)"]
+              const studentRole = Array.isArray(roleField) ? roleField[0] : roleField
+              const studentClinic =
+                roleToClinicMap.get(studentRole?.toUpperCase()) || fields["Related Clinic"] || "Unknown"
 
-              const matchesClinic = selectedClinic === "all" || relatedClinic === selectedClinic
+              const clientField = fields["Client"]
+              const clientName = Array.isArray(clientField) ? clientField[0] : clientField
+              const trimmedClientName = clientName?.trim()
+
+              const matchesClinic =
+                selectedClinic === "all" ||
+                (directorClients && trimmedClientName && directorClients.has(trimmedClientName))
 
               if (recordWeek === selectedWeek && matchesClinic) {
-                const clientField = fields["Client"]
-                const clientName = Array.isArray(clientField) ? clientField[0] : clientField || "No Client"
                 const studentNameField = fields["NAME (from SEED | Students)"]
                 const studentName = Array.isArray(studentNameField) ? studentNameField[0] : studentNameField
                 const hours = Number.parseFloat(fields["Number of Hours Worked"] || "0")
@@ -195,29 +274,29 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
                 if (workSummary && studentName) {
                   entries.push({
                     student: studentName,
-                    clinic: relatedClinic || "Unknown Clinic",
-                    client: clientName,
+                    clinic: studentClinic,
+                    client: trimmedClientName || "No Client",
                     summary: workSummary,
                     hours: hours,
                   })
                 }
 
-                if (!clientMap.has(clientName)) {
-                  clientMap.set(clientName, {
-                    name: clientName,
+                if (!clientMap.has(trimmedClientName || "No Client")) {
+                  clientMap.set(trimmedClientName || "No Client", {
+                    name: trimmedClientName || "No Client",
                     hours: 0,
                     students: 0,
                     clients: 1,
                   })
                 }
 
-                const client = clientMap.get(clientName)!
+                const client = clientMap.get(trimmedClientName || "No Client")!
                 client.hours += hours
 
                 if (studentName) {
                   const studentSet = new Set<string>()
                   clientMap.forEach((c) => {
-                    if (c.name === clientName) {
+                    if (c.name === (trimmedClientName || "No Client")) {
                       studentSet.add(studentName)
                     }
                   })
@@ -250,15 +329,37 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
       setGeneratingSummaries(true)
       const summariesMap = new Map<string, string>()
 
-      const byClient = new Map<string, WorkEntry[]>()
+      try {
+        const response = await fetch(`/api/weekly-summaries?week_ending=${selectedWeek}`)
+        if (response.ok) {
+          const { summaries: cachedSummaries } = await response.json()
+          console.log("[v0] Loaded cached summaries:", Object.keys(cachedSummaries).length)
+
+          // Use cached summaries
+          Object.entries(cachedSummaries).forEach(([clientName, data]: [string, any]) => {
+            summariesMap.set(clientName, data.summary)
+          })
+        }
+      } catch (error) {
+        console.error("[v0] Error fetching cached summaries:", error)
+      }
+
+      const byClient = new Map<string, { entries: WorkEntry[]; clinic: string }>()
       workEntries.forEach((entry) => {
         if (!byClient.has(entry.client)) {
-          byClient.set(entry.client, [])
+          byClient.set(entry.client, { entries: [], clinic: entry.clinic })
         }
-        byClient.get(entry.client)!.push(entry)
+        byClient.get(entry.client)!.entries.push(entry)
       })
 
-      for (const [client, entries] of byClient.entries()) {
+      for (const [client, data] of byClient.entries()) {
+        // Skip if we already have a cached summary
+        if (summariesMap.has(client)) {
+          console.log("[v0] Using cached summary for:", client)
+          continue
+        }
+
+        const { entries, clinic } = data
         const students = [...new Set(entries.map((e) => e.student).filter((s) => s && typeof s === "string"))]
         const workSummaries = entries
           .map((e) => e.summary)
@@ -266,13 +367,28 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
 
         if (workSummaries.length > 0 && students.length > 0) {
           try {
-            // Try AI generation first
+            console.log("[v0] Generating NEW summary for:", client)
             const { generateClientSummary } = await import("@/app/actions/generate-client-summary")
             const aiSummary = await generateClientSummary(client, workSummaries, students)
             summariesMap.set(client, aiSummary)
+
+            const totalHours = entries.reduce((sum, e) => sum + e.hours, 0)
+            await fetch("/api/weekly-summaries", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                client_name: client,
+                week_ending: selectedWeek,
+                clinic: clinic,
+                summary: aiSummary,
+                student_count: students.length,
+                total_hours: totalHours,
+                activity_count: entries.length,
+              }),
+            })
+            console.log("[v0] Cached summary for:", client)
           } catch (error) {
             console.error(`[v0] AI generation failed for ${client}, using fallback:`, error)
-            // Use fallback if AI fails
             const fallbackSummary = createFallbackSummary(workSummaries, students)
             summariesMap.set(client, fallbackSummary)
           }
@@ -284,21 +400,20 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
     }
 
     generateSummaries()
-  }, [workEntries])
+  }, [workEntries, selectedWeek])
 
   const createFallbackSummary = (workSummaries: string[], students: string[]): string => {
-    // Clean summaries: remove hours, numbers, and poorly formatted text
     const cleanedSummaries = workSummaries
-      .filter((s) => s && typeof s === "string") // Filter out null/undefined first
+      .filter((s) => s && typeof s === "string")
       .map((s) => {
         return s
-          .replace(/\b\d+(\.\d+)?\s*(hours?|hrs?)\b/gi, "") // Remove hour mentions
-          .replace(/^\d+(\.\d+)?$/, "") // Remove standalone numbers
-          .replace(/\s+/g, " ") // Normalize whitespace
+          .replace(/\b\d+(\.\d+)?\s*(hours?|hrs?)\b/gi, "")
+          .replace(/^\d+(\.\d+)?$/, "")
+          .replace(/\s+/g, " ")
           .trim()
       })
-      .filter((s) => s && s.length > 10) // Filter out very short entries and empty strings
-      .filter((s, idx, arr) => arr.indexOf(s) === idx) // Remove duplicates
+      .filter((s) => s && s.length > 10)
+      .filter((s, idx, arr) => arr.indexOf(s) === idx)
 
     if (cleanedSummaries.length === 0) {
       return "Team members worked on various client activities this week."
@@ -322,7 +437,7 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
     } else {
       const mainActivities = cleanedSummaries
         .slice(0, 3)
-        .filter((s) => s && typeof s === "string") // Extra safety check
+        .filter((s) => s && typeof s === "string")
         .map((s) => s.toLowerCase())
         .join(", ")
       return `${studentList} completed multiple activities including ${mainActivities}.`
@@ -333,7 +448,7 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
     return (
       <Card className="p-6 bg-[#002855] border-none shadow-lg">
         <div className="mb-6">
-          <h2 className="text-xl font-bold text-white">{view === "clinic" ? "Clinic" : "Client"} Performance</h2>
+          <h2 className="text-2xl font-bold text-white">{view === "clinic" ? "Clinic" : "Client"} Performance</h2>
           <p className="text-sm text-white/70">Hours logged by {view}</p>
         </div>
         <div className="flex items-center justify-center h-[300px]">
@@ -348,7 +463,7 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
       <div className="mb-6">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-xl font-bold text-white">{view === "clinic" ? "Clinic" : "Client"} Performance</h2>
+            <h2 className="text-2xl font-bold text-white">{view === "clinic" ? "Clinic" : "Client"} Performance</h2>
             <p className="text-sm text-white/70">Hours logged by {view}</p>
           </div>
           <div className="flex items-center gap-2">
@@ -424,27 +539,63 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
         </div>
       </div>
 
-      <div className="mt-4 bg-white rounded-lg p-6">
-        <h3 className="text-lg font-bold text-[#002855] mb-4 flex items-center gap-2">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-            />
-          </svg>
-          Weekly Program Summary
-        </h3>
+      <div className="mt-6 bg-gradient-to-br from-white to-gray-50 rounded-xl p-6 shadow-md border border-gray-200">
+        <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-[#0096C7]">
+          <div className="flex items-center gap-3">
+            <div className="bg-[#0096C7] p-2 rounded-lg">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-[#002855]">Weekly Program Summary</h3>
+              <p className="text-sm text-gray-600">Client activity and progress updates</p>
+            </div>
+          </div>
+          {workEntries.length > 0 && (
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-2xl font-bold text-[#0096C7]">{workEntries.length}</p>
+                <p className="text-xs text-gray-600">Activities</p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-bold text-[#0096C7]">
+                  {[...new Set(workEntries.map((e) => e.client))].length}
+                </p>
+                <p className="text-xs text-gray-600">Clients</p>
+              </div>
+            </div>
+          )}
+        </div>
+
         {workEntries.length === 0 ? (
-          <p className="text-sm text-gray-600 italic">No activity recorded for this week.</p>
+          <div className="text-center py-12">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
+              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 00-.707.293h-3.172a1 1 0 00-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+                />
+              </svg>
+            </div>
+            <p className="text-gray-600 font-medium">No activity recorded for this week</p>
+            <p className="text-sm text-gray-500 mt-1">Check back later for updates</p>
+          </div>
         ) : generatingSummaries ? (
-          <div className="flex items-center gap-3 text-sm text-gray-600">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#002855]"></div>
-            <span>Generating summaries...</span>
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#0096C7] border-t-transparent mb-4"></div>
+            <p className="text-gray-700 font-medium">Generating AI summaries...</p>
+            <p className="text-sm text-gray-500 mt-1">This may take a moment</p>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {(() => {
               const byClient = new Map<string, { entries: WorkEntry[]; clinic: string }>()
               workEntries.forEach((entry) => {
@@ -459,34 +610,185 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
                   const colors = getClinicColor(clinic === "Resource Acquisition" ? "Funding" : clinic)
                   const clientColors = getClientColor(client)
                   const students = [...new Set(entries.map((e) => e.student))]
+                  const totalHours = entries.reduce((sum, e) => sum + e.hours, 0)
                   const aiSummary = clientSummaries.get(client)
+
+                  const trimmedClient = client.trim()
+                  const actualDirector = clientToDirectorMap.get(trimmedClient)
+                  const displayDirector = actualDirector || "Director TBD"
+
+                  const fullTeamList = clientTeamMembers.get(trimmedClient) || []
+                  const activeStudents = new Set(students)
+                  const inactiveStudents = fullTeamList.filter((member) => !activeStudents.has(member))
 
                   if (!aiSummary) return null
 
                   return (
-                    <div key={client} className="border-l-4 pl-5 py-3" style={{ borderColor: clientColors.hex }}>
-                      <div className="flex items-start justify-between mb-2">
-                        <h4 className="font-bold text-[#002855] text-base">{client}</h4>
-                        <span
-                          className="text-xs font-medium px-2 py-1 rounded-full"
-                          style={{ backgroundColor: `${colors.hex}20`, color: colors.hex }}
-                        >
-                          {clinic}
-                        </span>
+                    <div
+                      key={client}
+                      className="bg-white rounded-xl shadow-sm border-2 hover:shadow-md transition-all duration-200"
+                      style={{ borderColor: clientColors.hex }}
+                    >
+                      <div
+                        className="p-5 border-b border-gray-100"
+                        style={{ backgroundColor: `${clientColors.hex}08` }}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-12 h-12 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-sm"
+                              style={{ backgroundColor: clientColors.hex }}
+                            >
+                              {client.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-[#002855] text-lg">{client}</h4>
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-gradient-to-r from-[#0096C7] to-[#0077B6] shadow-sm">
+                                  <svg
+                                    className="w-4 h-4 text-white"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                                    />
+                                  </svg>
+                                  <span className="text-sm font-bold text-white">{displayDirector}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <span
+                            className="px-3 py-1.5 rounded-full text-xs font-semibold shadow-sm"
+                            style={{ backgroundColor: colors.hex, color: "white" }}
+                          >
+                            {clinic}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-6 mt-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                              <svg
+                                className="w-4 h-4 text-blue-600"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                              </svg>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">Team Size</p>
+                              <p className="text-sm font-bold text-gray-900">{students.length} students</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
+                              <svg
+                                className="w-4 h-4 text-green-600"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                              </svg>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">Hours Logged</p>
+                              <p className="text-sm font-bold text-gray-900">{totalHours.toFixed(1)} hrs</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center">
+                              <svg
+                                className="w-4 h-4 text-purple-600"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                                />
+                              </svg>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-600">Activities</p>
+                              <p className="text-sm font-bold text-gray-900">{entries.length}</p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="mb-3">
-                        <p className="text-sm text-gray-600">
-                          <span className="font-medium text-gray-700">Team:</span>{" "}
+
+                      <div className="px-5 py-3 bg-gray-50 border-b border-gray-100">
+                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Team Members</p>
+                        <div className="flex flex-wrap gap-2">
                           {students.map((student, idx) => (
-                            <span key={idx}>
+                            <span
+                              key={`active-${idx}`}
+                              className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-white border border-gray-200 text-gray-700 shadow-sm"
+                            >
+                              <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
                               {student}
-                              {idx < students.length - 1 && ", "}
                             </span>
                           ))}
-                        </p>
+                          {inactiveStudents.map((student, idx) => (
+                            <span
+                              key={`inactive-${idx}`}
+                              className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-white border border-gray-200 text-gray-500 shadow-sm opacity-75"
+                            >
+                              <span className="w-2 h-2 rounded-full bg-red-500 mr-2"></span>
+                              {student}
+                            </span>
+                          ))}
+                        </div>
+                        {fullTeamList.length > 0 && (
+                          <div className="mt-2 flex items-center gap-4 text-xs text-gray-600">
+                            <div className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                              <span>Active ({students.length})</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                              <span>Inactive ({inactiveStudents.length})</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                        <p className="text-sm text-gray-700 leading-relaxed">{aiSummary}</p>
+
+                      <div className="p-5">
+                        <div className="flex items-center gap-2 mb-3">
+                          <svg className="w-5 h-5 text-[#0096C7]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                            />
+                          </svg>
+                          <h5 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Weekly Summary</h5>
+                        </div>
+                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-100">
+                          <p className="text-sm text-gray-800 leading-relaxed">{aiSummary}</p>
+                        </div>
                       </div>
                     </div>
                   )
