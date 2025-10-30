@@ -29,6 +29,15 @@ export function MainNavigation() {
         >
           Prospect Interviews
         </Link>
+        <Link
+          href="/students"
+          className={cn(
+            "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
+            pathname === "/students" ? "border-primary text-foreground" : "border-transparent text-muted-foreground",
+          )}
+        >
+          Student Dashboard
+        </Link>
       </div>
       {/* <ClerkUserButton /> */}
     </nav>

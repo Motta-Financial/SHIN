@@ -11,6 +11,8 @@ export async function generateClientSummary(
       throw new Error("OpenAI API key not configured. Please add OPENAI_API_KEY to environment variables.")
     }
 
+    console.log(`[v0] Generating summary for client: ${clientName}`)
+
     const validClientName = clientName && typeof clientName === "string" ? clientName : "Unknown Client"
 
     const validWorkSummaries = Array.isArray(workSummaries)
@@ -79,6 +81,7 @@ Create a summary that combines all student work into a cohesive narrative about 
       throw new Error("No summary generated")
     }
 
+    console.log(`[v0] Successfully generated summary for ${validClientName}`)
     return text
   } catch (error: any) {
     console.error("[v0] Error generating client summary:", error.message || error)

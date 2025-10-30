@@ -71,7 +71,7 @@ export function ClinicGoals({ selectedWeek, selectedClinic }: ClinicGoalsProps) 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-2xl">
           <Target className="h-5 w-5" />
           Clinic Goals & Metrics
         </CardTitle>
