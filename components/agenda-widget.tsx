@@ -6,21 +6,30 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Calendar, Plus } from "lucide-react"
+import { Calendar, Plus, User } from "lucide-react"
 
-const CLIENT_ORDER = [
-  "Serene Cycle",
-  "Intriguing Hair",
-  "The Downtown Paw",
-  "REWRITE",
-  "Marabou Café",
-  "SEED",
-  "Crown Legends",
-  "Sawyer Parks",
-  "City of Malden",
-  "Future Masters of Chess Academy",
-  "Muffy White",
+const CLIENT_AGENDA = [
+  { name: "Serene Cycle", director: "Beth DiRusso" },
+  { name: "Intriguing Hair", director: "Beth DiRusso & Nick Vadala" },
+  { name: "The Downtown Paw", director: "Chris Hill" },
+  { name: "REWRITE", director: "Chris Hill" },
+  { name: "Marabou Café", director: "Ken Mooney" },
+  { name: "SEED", director: "Ken Mooney" },
+  { name: "Crown Legends", director: "Mark Dwyer" },
+  { name: "Sawyer Parks", director: "Nick Vadala" },
+  { name: "City of Malden", director: "Nick Vadala" },
+  { name: "Future Masters of Chess Academy", director: "Beth DiRusso & Nick Vadala" },
+  { name: "Muffy White", director: "Mark Dwyer" },
 ]
+
+const DIRECTOR_COLORS: Record<string, string> = {
+  "Beth DiRusso": "bg-blue-100 text-blue-700 border-blue-200",
+  "Beth DiRusso & Nick Vadala": "bg-purple-100 text-purple-700 border-purple-200",
+  "Chris Hill": "bg-green-100 text-green-700 border-green-200",
+  "Ken Mooney": "bg-orange-100 text-orange-700 border-orange-200",
+  "Mark Dwyer": "bg-pink-100 text-pink-700 border-pink-200",
+  "Nick Vadala": "bg-cyan-100 text-cyan-700 border-cyan-200",
+}
 
 interface ClientAgendaItem {
   id: string
@@ -153,7 +162,7 @@ export function AgendaWidget({ selectedClinic, selectedWeek }: AgendaWidgetProps
     setEditNotes("")
   }
 
-  console.log("[v0] AgendaWidget - Rendering with CLIENT_ORDER:", CLIENT_ORDER.length, "clients")
+  console.log("[v0] AgendaWidget - Rendering with CLIENT_AGENDA:", CLIENT_AGENDA.length, "clients")
 
   return (
     <Card className="shadow-sm border-gray-200">
@@ -201,11 +210,26 @@ export function AgendaWidget({ selectedClinic, selectedWeek }: AgendaWidgetProps
         </div>
       </CardHeader>
       <CardContent className="space-y-1 pb-3">
-        <div className="space-y-1.5">
-          {CLIENT_ORDER.map((client, index) => (
-            <div key={client} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 transition-colors">
-              <span className="text-xs font-semibold text-gray-500 w-6">{index + 1}.</span>
-              <span className="text-sm font-medium text-gray-900">{client}</span>
+        <div className="space-y-2">
+          {CLIENT_AGENDA.map((client, index) => (
+            <div
+              key={client.name}
+              className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 hover:border-[#0077B6] hover:shadow-sm transition-all bg-white"
+            >
+              <span className="text-sm font-bold text-[#0077B6] w-6 flex-shrink-0 mt-0.5">{index + 1}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-gray-900 mb-1.5">{client.name}</div>
+                <div className="flex items-center gap-1.5">
+                  <User className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                  <span
+                    className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                      DIRECTOR_COLORS[client.director] || "bg-gray-100 text-gray-700 border-gray-200"
+                    }`}
+                  >
+                    {client.director}
+                  </span>
+                </div>
+              </div>
             </div>
           ))}
         </div>
