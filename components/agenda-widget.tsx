@@ -6,7 +6,21 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Calendar, Plus, Edit2, Trash2, ChevronUp, ChevronDown, Save, X } from "lucide-react"
+import { Calendar, Plus } from "lucide-react"
+
+const CLIENT_ORDER = [
+  "Serene Cycle",
+  "Intriguing Hair",
+  "The Downtown Paw",
+  "REWRITE",
+  "Marabou Café",
+  "SEED",
+  "Crown Legends",
+  "Sawyer Parks",
+  "City of Malden",
+  "Future Masters of Chess Academy",
+  "Muffy White",
+]
 
 interface ClientAgendaItem {
   id: string
@@ -184,82 +198,20 @@ export function AgendaWidget({ selectedClinic, selectedWeek }: AgendaWidgetProps
           </Dialog>
         </div>
       </CardHeader>
-      <CardContent className="space-y-1.5 pb-3">
+      <CardContent className="space-y-1 pb-3">
         {loading ? (
           <p className="text-xs text-gray-500 text-center py-2">Loading...</p>
         ) : items.length === 0 ? (
           <p className="text-xs text-gray-500 text-center py-2">No clients in agenda for this week</p>
         ) : (
-          items.map((item, index) => (
-            <div key={item.id} className="p-2 rounded-lg border bg-white hover:shadow-sm transition-all">
-              <div className="flex items-start gap-2">
-                <div className="flex flex-col gap-0.5 mt-0.5">
-                  <button
-                    onClick={() => moveClient(index, "up")}
-                    disabled={index === 0}
-                    className="text-gray-400 hover:text-[#0077B6] disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <ChevronUp className="h-3 w-3" />
-                  </button>
-                  <button
-                    onClick={() => moveClient(index, "down")}
-                    disabled={index === items.length - 1}
-                    className="text-gray-400 hover:text-[#0077B6] disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <ChevronDown className="h-3 w-3" />
-                  </button>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-semibold text-gray-900">{item.client_name}</p>
-                    <div className="flex items-center gap-1">
-                      {editingId === item.id ? (
-                        <>
-                          <button
-                            onClick={() => updateNotes(item)}
-                            className="text-green-600 hover:text-green-700 transition-colors"
-                          >
-                            <Save className="h-3.5 w-3.5" />
-                          </button>
-                          <button onClick={cancelEdit} className="text-gray-400 hover:text-gray-600 transition-colors">
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => startEdit(item)}
-                            className="text-gray-400 hover:text-[#0077B6] transition-colors"
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            onClick={() => deleteClient(item.id)}
-                            className="text-gray-400 hover:text-red-600 transition-colors"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  {editingId === item.id ? (
-                    <Textarea
-                      value={editNotes}
-                      onChange={(e) => setEditNotes(e.target.value)}
-                      placeholder="Add notes or comments..."
-                      rows={2}
-                      className="mt-1.5 text-xs"
-                    />
-                  ) : item.notes ? (
-                    <p className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{item.notes}</p>
-                  ) : (
-                    <p className="text-xs text-gray-400 italic mt-1">No notes added</p>
-                  )}
-                </div>
+          <div className="space-y-1.5">
+            {CLIENT_ORDER.map((client, index) => (
+              <div key={client} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 transition-colors">
+                <span className="text-xs font-semibold text-gray-500 w-6">{index + 1}.</span>
+                <span className="text-sm font-medium text-gray-900">{client}</span>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </CardContent>
     </Card>

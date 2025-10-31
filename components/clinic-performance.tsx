@@ -6,6 +6,20 @@ import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from 
 import { getClinicColor } from "@/lib/clinic-colors"
 import { getClientColor } from "@/lib/client-colors"
 
+const CLIENT_ORDER = [
+  "Serene Cycle",
+  "Intriguing Hair",
+  "The Downtown Paw",
+  "REWRITE",
+  "Marabou Café",
+  "SEED",
+  "Crown Legends",
+  "Sawyer Parks",
+  "City of Malden",
+  "Future Masters of Chess Academy",
+  "Muffy White",
+]
+
 interface PerformanceData {
   name: string
   hours: number
@@ -606,6 +620,21 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
               })
 
               return Array.from(byClient.entries())
+                .sort(([clientA], [clientB]) => {
+                  const indexA = CLIENT_ORDER.indexOf(clientA)
+                  const indexB = CLIENT_ORDER.indexOf(clientB)
+
+                  // If both clients are in the order list, sort by their position
+                  if (indexA !== -1 && indexB !== -1) {
+                    return indexA - indexB
+                  }
+                  // If only clientA is in the list, it comes first
+                  if (indexA !== -1) return -1
+                  // If only clientB is in the list, it comes first
+                  if (indexB !== -1) return 1
+                  // If neither is in the list, sort alphabetically
+                  return clientA.localeCompare(clientB)
+                })
                 .map(([client, { entries, clinic }]) => {
                   const colors = getClinicColor(clinic === "Resource Acquisition" ? "Funding" : clinic)
                   const clientColors = getClientColor(client)
@@ -655,7 +684,7 @@ export function ClinicPerformance({ selectedWeek, selectedClinic }: ClinicPerfor
                                       strokeLinecap="round"
                                       strokeLinejoin="round"
                                       strokeWidth={2}
-                                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                                     />
                                   </svg>
                                   <span className="text-sm font-bold text-white">{displayDirector}</span>
