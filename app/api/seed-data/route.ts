@@ -7,23 +7,47 @@ export async function GET() {
 
     console.log("[v0] Fetching SEED data from Supabase...")
 
-    // Fetch all SEED data
-    const [studentsRes, directorsRes, clientsRes, assignmentsRes] = await Promise.all([
-      supabase.from("students").select("*").order("last_name"),
-      supabase.from("directors").select("*").order("full_name"),
-      supabase
-        .from("clients")
-        .select(`
+    const studentsRes = await supabase
+      .from("students")
+      .select("*")
+      .order("last_name")
+      .then(
+        (res) => res,
+        (err) => ({ data: null, error: err }),
+      )
+
+    const directorsRes = await supabase
+      .from("directors")
+      .select("*")
+      .order("full_name")
+      .then(
+        (res) => res,
+        (err) => ({ data: null, error: err }),
+      )
+
+    const clientsRes = await supabase
+      .from("clients")
+      .select(`
         *,
         primary_director:directors(full_name, email, clinic)
       `)
-        .order("name"),
-      supabase.from("client_assignments").select(`
+      .order("name")
+      .then(
+        (res) => res,
+        (err) => ({ data: null, error: err }),
+      )
+
+    const assignmentsRes = await supabase
+      .from("client_assignments")
+      .select(`
         *,
         student:students(full_name, email, clinic),
         client:clients(name)
-      `),
-    ])
+      `)
+      .then(
+        (res) => res,
+        (err) => ({ data: null, error: err }),
+      )
 
     const tablesNotFound =
       studentsRes.error?.code === "PGRST205" ||
@@ -74,6 +98,11 @@ export async function GET() {
       {
         error: "Failed to fetch SEED data",
         message: error instanceof Error ? error.message : "Unknown error",
+        students: [],
+        directors: [],
+        clients: [],
+        assignments: [],
+        setupRequired: true,
       },
       { status: 500 },
     )
