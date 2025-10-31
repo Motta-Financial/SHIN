@@ -71,7 +71,11 @@ export function RecentActivity({ selectedWeek, selectedClinic }: RecentActivityP
 
           const activityList: Activity[] = sortedRecords.map((record: any) => {
             const fields = record.fields
-            const studentName = fields["Student Name"] || "Unknown Student"
+            const studentName = fields["NAME (from SEED | Students)"]
+              ? Array.isArray(fields["NAME (from SEED | Students)"])
+                ? fields["NAME (from SEED | Students)"][0]
+                : fields["NAME (from SEED | Students)"]
+              : fields["Student Name"] || "Unknown Student"
             const hours = Number.parseFloat(fields["Number of Hours Worked"] || "0")
             const workDescription = fields["Summary of Work"] || ""
             const clinic = fields["Related Clinic"] || ""
@@ -114,7 +118,7 @@ export function RecentActivity({ selectedWeek, selectedClinic }: RecentActivityP
     return (
       <Card className="p-6 bg-white border-[#002855]/20 shadow-lg">
         <div className="mb-6">
-          <h2 className="text-xl font-bold text-[#002855]">Recent Activity</h2>
+          <h2 className="text-2xl font-bold text-[#002855]">Recent Activity</h2>
           <p className="text-sm text-[#002855]/70">Latest updates from students</p>
         </div>
         <div className="flex items-center justify-center py-12">
@@ -125,15 +129,15 @@ export function RecentActivity({ selectedWeek, selectedClinic }: RecentActivityP
   }
 
   return (
-    <Card className="p-6 bg-white border-[#002855]/20 shadow-lg">
+    <Card className="p-6 bg-gradient-to-br from-blue-500/10 via-blue-400/5 to-blue-600/10 border-2 border-blue-200/50 shadow-lg backdrop-blur-sm">
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-[#002855]">Recent Activity</h2>
+        <h2 className="text-2xl font-bold text-[#002855]">Recent Activity</h2>
         <p className="text-sm text-[#002855]/70">Latest updates from students</p>
       </div>
 
       <div className="space-y-4">
         {activities.length === 0 ? (
-          <p className="text-center text-[#002855]/70 py-8">No recent activity</p>
+          <p className="text-center text-[#002855]/50 py-8">No recent activity</p>
         ) : (
           activities.map((activity) => {
             const Icon = activity.type === "debrief" ? FileText : Clock
@@ -142,10 +146,10 @@ export function RecentActivity({ selectedWeek, selectedClinic }: RecentActivityP
             return (
               <div
                 key={activity.id}
-                className="flex items-start gap-4 rounded-lg border-2 border-[#002855]/10 bg-gradient-to-r from-white to-[#0096C7]/5 p-4 transition-all hover:border-[#0096C7] hover:shadow-md"
+                className="flex items-start gap-4 rounded-lg border-2 border-blue-200/50 bg-white/80 backdrop-blur-sm p-4 transition-all hover:border-blue-400 hover:shadow-xl hover:scale-[1.02] hover:bg-white"
               >
-                <Avatar className="h-10 w-10 border-2 border-[#0096C7]">
-                  <AvatarFallback className="bg-[#0096C7] text-white font-semibold text-xs">
+                <Avatar className="h-10 w-10 border-2 border-blue-500">
+                  <AvatarFallback className="bg-blue-600 text-white font-semibold text-xs">
                     {getInitials(activity.student)}
                   </AvatarFallback>
                 </Avatar>
@@ -166,8 +170,8 @@ export function RecentActivity({ selectedWeek, selectedClinic }: RecentActivityP
                   <p className="text-xs text-[#002855]/50">{activity.timestamp}</p>
                 </div>
 
-                <div className="rounded-lg bg-[#002855] p-2">
-                  <Icon className="h-4 w-4 text-[#0096C7]" />
+                <div className="rounded-lg bg-blue-500/20 p-2 border border-blue-300">
+                  <Icon className="h-4 w-4 text-blue-700" />
                 </div>
               </div>
             )

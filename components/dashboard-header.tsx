@@ -3,7 +3,7 @@
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Download, Filter } from "lucide-react"
+import { Calendar, Download, User } from "lucide-react"
 
 interface DashboardHeaderProps {
   selectedWeek: string
@@ -46,16 +46,18 @@ export function DashboardHeader({
 
           <div className="flex flex-wrap items-center gap-3">
             <Select value={selectedClinic} onValueChange={onClinicChange}>
-              <SelectTrigger className="w-[180px] border-primary-foreground/20 bg-primary/50 text-primary-foreground hover:bg-primary/70">
-                <Filter className="mr-2 h-4 w-4" />
-                <SelectValue placeholder="Select clinic" />
+              <SelectTrigger className="w-[240px] border-primary-foreground/20 bg-primary/50 text-primary-foreground hover:bg-primary/70">
+                <User className="mr-2 h-4 w-4" />
+                <SelectValue placeholder="Select director" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Clinics</SelectItem>
-                <SelectItem value="Consulting">Consulting</SelectItem>
-                <SelectItem value="Accounting">Accounting</SelectItem>
-                <SelectItem value="Funding">Funding</SelectItem>
-                <SelectItem value="Marketing">Marketing</SelectItem>
+                <SelectItem value="all">All Directors</SelectItem>
+                <SelectItem value="Mark Dwyer">Mark Dwyer</SelectItem>
+                <SelectItem value="Ken Mooney">Ken Mooney</SelectItem>
+                <SelectItem value="Nick Vadala">Nick Vadala</SelectItem>
+                <SelectItem value="Christopher Hill">Christopher Hill</SelectItem>
+                <SelectItem value="Chris Hill">Chris Hill</SelectItem>
+                <SelectItem value="Beth DiRusso">Beth DiRusso</SelectItem>
               </SelectContent>
             </Select>
 

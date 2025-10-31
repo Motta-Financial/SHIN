@@ -40,6 +40,8 @@ export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsPro
   useEffect(() => {
     async function fetchStats() {
       try {
+        console.log("[v0] Overview Cards - Selected clinic:", selectedClinic)
+
         const [clientsRes, debriefsRes, rosterRes] = await Promise.all([
           fetch("/api/airtable/clients"),
           fetch("/api/airtable/debriefs"),
@@ -53,6 +55,26 @@ export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsPro
         const clientsData = await clientsRes.json()
         const debriefsData = await debriefsRes.json()
         const rosterData = await rosterRes.json()
+
+        const directorToClinicMap = new Map([
+          ["Mark Dwyer", "Accounting"],
+          ["Ken Mooney", "Consulting"],
+          ["Nick Vadala", "Funding"],
+          ["Christopher Hill", "Marketing"],
+          ["Chris Hill", "Marketing"],
+          ["Beth DiRusso", "Funding"],
+        ])
+
+        const roleToClinicMap = new Map([
+          ["ACCTING CLINIC", "Accounting"],
+          ["CONSULTING CLINIC", "Consulting"],
+          ["RESOURCE CLINIC", "Funding"],
+          ["MARKETING CLINIC", "Marketing"],
+        ])
+
+        const filterClinic =
+          selectedClinic === "all" ? "all" : directorToClinicMap.get(selectedClinic) || selectedClinic
+        console.log("[v0] Overview Cards - Filter clinic:", filterClinic)
 
         const activeStudentsMap = new Map<string, Student>()
         const activeClientIds = new Set<string>()
@@ -76,8 +98,11 @@ export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsPro
               recordWeek = weekEndingDate.toISOString().split("T")[0]
             }
 
-            const relatedClinic = fields["Related Clinic"]
-            const matchesClinic = selectedClinic === "all" || relatedClinic === selectedClinic
+            const studentRoleArray = fields["ROLE (from SEED | Students)"]
+            const studentRole = Array.isArray(studentRoleArray) ? studentRoleArray[0] : studentRoleArray
+            const studentClinic = roleToClinicMap.get(studentRole) || fields["Related Clinic"] || ""
+
+            const matchesClinic = filterClinic === "all" || studentClinic === filterClinic
 
             if (recordWeek === selectedWeek && matchesClinic) {
               const studentNameArray = fields["NAME (from SEED | Students)"]
@@ -95,7 +120,7 @@ export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsPro
                   activeStudentsMap.set(studentName, {
                     name: studentName,
                     hours,
-                    clinic: relatedClinic || "",
+                    clinic: studentClinic,
                     client: clientName || "",
                     summary,
                   })
@@ -111,6 +136,10 @@ export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsPro
           })
         }
 
+        console.log("[v0] Overview Cards - Active students:", activeStudentsMap.size)
+        console.log("[v0] Overview Cards - Active clients:", activeClientIds.size)
+        console.log("[v0] Overview Cards - Total hours:", totalHours)
+
         const allStudents = new Set<string>()
         const inactiveList: { name: string; clinic: string; role: string }[] = []
 
@@ -119,24 +148,27 @@ export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsPro
             const fields = record.fields
             const name = fields["NAME"]
             const clinicRole = fields["Clinic| Role"]
-            const relatedClinic = fields["Related Clinic"]
             const role = fields["ROLE"]
+
+            const studentClinic = roleToClinicMap.get(role) || fields["Related Clinic"] || ""
 
             if (name && clinicRole === "Student") {
               allStudents.add(name)
 
-              const matchesClinic = selectedClinic === "all" || relatedClinic === selectedClinic
+              const matchesClinic = filterClinic === "all" || studentClinic === filterClinic
 
               if (matchesClinic && !activeStudentsMap.has(name)) {
                 inactiveList.push({
                   name,
-                  clinic: relatedClinic || "",
+                  clinic: studentClinic,
                   role: role || "",
                 })
               }
             }
           })
         }
+
+        console.log("[v0] Overview Cards - Inactive students:", inactiveList.length)
 
         setActiveStudents(Array.from(activeStudentsMap.values()))
         setInactiveStudents(inactiveList)

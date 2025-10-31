@@ -35,12 +35,12 @@
   --input: oklch(0.88 0.01 240);
   --ring: oklch(0.65 0.15 195);
 
-  /* Chart colors - Navy blue palette with teal/green accents */
-  --chart-1: oklch(0.65 0.15 195);
-  --chart-2: oklch(0.7 0.18 165);
-  --chart-3: oklch(0.35 0.08 240);
-  --chart-4: oklch(0.75 0.15 180);
-  --chart-5: oklch(0.45 0.08 240);
+  /* Enhanced chart colors with more vibrant palette */
+  --chart-1: oklch(0.65 0.2 195); /* Bright teal */
+  --chart-2: oklch(0.7 0.22 165); /* Vibrant green */
+  --chart-3: oklch(0.6 0.18 280); /* Purple */
+  --chart-4: oklch(0.75 0.2 180); /* Cyan */
+  --chart-5: oklch(0.65 0.2 30); /* Orange */
 
   --radius: 0.625rem;
   --sidebar: oklch(0.28 0.08 240);
