@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Calendar, Plus, User } from "lucide-react"
+import { Calendar, Plus } from "lucide-react"
 
 const CLIENT_AGENDA = [
   { name: "Serene Cycle", director: "Beth DiRusso" },
@@ -210,26 +210,21 @@ export function AgendaWidget({ selectedClinic, selectedWeek }: AgendaWidgetProps
         </div>
       </CardHeader>
       <CardContent className="space-y-1 pb-3">
-        <div className="space-y-2">
+        <div className="space-y-1">
           {CLIENT_AGENDA.map((client, index) => (
             <div
               key={client.name}
-              className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 hover:border-[#0077B6] hover:shadow-sm transition-all bg-white"
+              className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-gray-50 transition-colors"
             >
-              <span className="text-sm font-bold text-[#0077B6] w-6 flex-shrink-0 mt-0.5">{index + 1}</span>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-semibold text-gray-900 mb-1.5">{client.name}</div>
-                <div className="flex items-center gap-1.5">
-                  <User className="h-3 w-3 text-gray-400 flex-shrink-0" />
-                  <span
-                    className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                      DIRECTOR_COLORS[client.director] || "bg-gray-100 text-gray-700 border-gray-200"
-                    }`}
-                  >
-                    {client.director}
-                  </span>
-                </div>
-              </div>
+              <span className="text-xs font-bold text-[#0077B6] w-5 flex-shrink-0">{index + 1}.</span>
+              <span className="text-sm font-medium text-gray-900 flex-1 min-w-0 truncate">{client.name}</span>
+              <span
+                className={`text-xs font-medium px-2 py-0.5 rounded-full border flex-shrink-0 ${
+                  DIRECTOR_COLORS[client.director] || "bg-gray-100 text-gray-700 border-gray-200"
+                }`}
+              >
+                {client.director}
+              </span>
             </div>
           ))}
         </div>
