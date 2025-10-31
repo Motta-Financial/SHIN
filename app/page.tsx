@@ -14,6 +14,9 @@ import { DetailedDebriefs } from "@/components/detailed-debriefs"
 import { ClinicGoals } from "@/components/clinic-goals"
 import { StudentPerformance } from "@/components/student-performance"
 import { ExportData } from "@/components/export-data"
+import { UploadSOWButton } from "@/components/upload-sow-button"
+import { DirectorReminders } from "@/components/director-reminders"
+import { AgendaWidget } from "@/components/agenda-widget"
 
 function getWeekEnding(date: Date): string {
   const day = date.getDay()
@@ -25,6 +28,7 @@ function getWeekEnding(date: Date): string {
 
 async function getAvailableWeeks(): Promise<string[]> {
   try {
+    console.log("[v0] Fetching available weeks...")
     const response = await fetch("/api/airtable/debriefs")
     const data = await response.json()
 
@@ -39,6 +43,7 @@ async function getAvailableWeeks(): Promise<string[]> {
     })
 
     const sortedWeeks = Array.from(weeks).sort((a, b) => b.localeCompare(a))
+    console.log("[v0] Available weeks:", sortedWeeks)
     return sortedWeeks
   } catch (error) {
     console.error("[v0] Error fetching available weeks:", error)
@@ -64,7 +69,7 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-background">
       <MainNavigation />
 
-      <div className="bg-muted/30">
+      <div className="bg-gradient-to-br from-blue-50/40 via-background to-blue-100/30">
         <DashboardHeader
           selectedWeek={selectedWeek}
           onWeekChange={setSelectedWeek}
@@ -90,22 +95,38 @@ export default function DashboardPage() {
                 </TabsList>
 
                 <TabsContent value="dashboard" className="space-y-8 mt-6">
-                  <div className="grid gap-8 lg:grid-cols-2">
-                    <Suspense fallback={<div>Loading clinic performance...</div>}>
-                      <ClinicPerformance selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                    </Suspense>
+                  <div className="space-y-8">
+                    <div className="grid gap-8 lg:grid-cols-2">
+                      <Suspense fallback={<div>Loading clinic performance...</div>}>
+                        <ClinicPerformance selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
+                      </Suspense>
 
-                    <Suspense fallback={<div>Loading student hours...</div>}>
-                      <StudentHours selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
+                      <div className="space-y-4">
+                        <Suspense fallback={<div>Loading agenda...</div>}>
+                          <AgendaWidget selectedClinic={selectedClinic} selectedWeek={selectedWeek} />
+                        </Suspense>
+
+                        <Suspense fallback={<div>Loading student hours...</div>}>
+                          <StudentHours selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
+                        </Suspense>
+                      </div>
+                    </div>
+
+                    <Suspense fallback={<div>Loading recent activity...</div>}>
+                      <RecentActivity selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
                     </Suspense>
                   </div>
-
-                  <Suspense fallback={<div>Loading recent activity...</div>}>
-                    <RecentActivity selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                  </Suspense>
                 </TabsContent>
 
                 <TabsContent value="clients" className="space-y-8 mt-6">
+                  <Suspense fallback={null}>
+                    <DirectorReminders selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
+                  </Suspense>
+
+                  <div className="flex justify-end">
+                    <UploadSOWButton />
+                  </div>
+
                   <Suspense fallback={<div>Loading client engagements...</div>}>
                     <ClientEngagements selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
                   </Suspense>

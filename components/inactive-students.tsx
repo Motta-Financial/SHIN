@@ -42,6 +42,9 @@ export function InactiveStudents({ selectedWeek, selectedClinic }: InactiveStude
           return
         }
 
+        console.log("[v0] Roster records:", rosterData.records.length)
+        console.log("[v0] Debrief records:", debriefsData.records.length)
+
         const allStudents = rosterData.records
           .map((record: any) => {
             const fields = record.fields
@@ -54,6 +57,8 @@ export function InactiveStudents({ selectedWeek, selectedClinic }: InactiveStude
           })
           .filter((student: any) => student.name && student.clinic && student.clinicRole === "Student")
           .map((student: any) => ({ name: student.name, clinic: student.clinic, role: student.role }))
+
+        console.log("[v0] All students from roster:", allStudents.length)
 
         // Get students who submitted debriefs for the selected week
         const activeStudentNames = new Set<string>()
@@ -81,6 +86,8 @@ export function InactiveStudents({ selectedWeek, selectedClinic }: InactiveStude
           }
         })
 
+        console.log("[v0] Active students for week:", activeStudentNames.size)
+
         // Find inactive students (in roster but didn't submit)
         let inactive = allStudents.filter((student: Student) => {
           const isActive = activeStudentNames.has(student.name) || activeStudentNames.has(student.name.trim())
@@ -96,6 +103,7 @@ export function InactiveStudents({ selectedWeek, selectedClinic }: InactiveStude
           })
         }
 
+        console.log("[v0] Inactive students:", inactive.length)
         setInactiveStudents(inactive)
       } catch (error) {
         console.error("[v0] Error fetching inactive students:", error)

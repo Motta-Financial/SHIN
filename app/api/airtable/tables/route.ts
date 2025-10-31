@@ -23,6 +23,7 @@ export async function GET() {
     }
 
     const data = await response.json()
+    console.log("[v0] Available tables:", JSON.stringify(data, null, 2))
     return NextResponse.json(data)
   } catch (error) {
     console.error("[v0] Error fetching tables:", error)
