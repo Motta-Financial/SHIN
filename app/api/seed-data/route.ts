@@ -25,6 +25,31 @@ export async function GET() {
       `),
     ])
 
+    const tablesNotFound =
+      studentsRes.error?.code === "PGRST205" ||
+      directorsRes.error?.code === "PGRST205" ||
+      clientsRes.error?.code === "PGRST205" ||
+      assignmentsRes.error?.code === "PGRST205"
+
+    if (tablesNotFound) {
+      console.log("[v0] SEED tables not found in Supabase. Please run the SQL scripts to create them.")
+      return NextResponse.json({
+        students: [],
+        directors: [],
+        clients: [],
+        assignments: [],
+        stats: {
+          totalStudents: 0,
+          totalDirectors: 0,
+          totalClients: 0,
+          totalAssignments: 0,
+        },
+        setupRequired: true,
+        message:
+          "SEED tables not found. Please run the SQL scripts (01-create-seed-tables.sql through 05-seed-client-assignments.sql) in your Supabase SQL editor to set up the database.",
+      })
+    }
+
     if (studentsRes.error) throw studentsRes.error
     if (directorsRes.error) throw directorsRes.error
     if (clientsRes.error) throw clientsRes.error
@@ -41,10 +66,17 @@ export async function GET() {
         totalClients: clientsRes.data?.length || 0,
         totalAssignments: assignmentsRes.data?.length || 0,
       },
+      setupRequired: false,
     })
   } catch (error) {
     console.error("[v0] Error fetching SEED data:", error)
-    return NextResponse.json({ error: "Failed to fetch SEED data" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Failed to fetch SEED data",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }
 
