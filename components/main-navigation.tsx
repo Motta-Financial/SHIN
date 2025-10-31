@@ -50,6 +50,28 @@ export function MainNavigation() {
           Submit Debrief
         </Link>
         <Link
+          href="/submit-attendance"
+          className={cn(
+            "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
+            pathname === "/submit-attendance"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground",
+          )}
+        >
+          Submit Attendance
+        </Link>
+        <Link
+          href="/submit-client"
+          className={cn(
+            "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
+            pathname === "/submit-client"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground",
+          )}
+        >
+          Submit Client
+        </Link>
+        <Link
           href="/submit-evaluation"
           className={cn(
             "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
