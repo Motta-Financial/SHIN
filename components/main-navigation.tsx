@@ -82,6 +82,15 @@ export function MainNavigation() {
         >
           Submit Evaluation
         </Link>
+        <Link
+          href="/admin/setup"
+          className={cn(
+            "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
+            pathname === "/admin/setup" ? "border-primary text-foreground" : "border-transparent text-muted-foreground",
+          )}
+        >
+          Database Setup
+        </Link>
       </div>
       {/* <ClerkUserButton /> */}
     </nav>

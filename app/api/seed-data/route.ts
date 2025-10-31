@@ -3,6 +3,28 @@ import { NextResponse } from "next/server"
 
 export async function GET() {
   try {
+    // This prevents fetch errors from being logged when tables don't exist
+    const tablesReady = process.env.SUPABASE_TABLES_READY === "true"
+
+    if (!tablesReady) {
+      console.log("[v0] Supabase tables not yet configured. Using Airtable as data source.")
+      return NextResponse.json({
+        students: [],
+        directors: [],
+        clients: [],
+        assignments: [],
+        stats: {
+          totalStudents: 0,
+          totalDirectors: 0,
+          totalClients: 0,
+          totalAssignments: 0,
+        },
+        setupRequired: true,
+        message:
+          "Supabase tables not configured. Visit /admin/setup to create tables, or set SUPABASE_TABLES_READY=true in environment variables after running SQL scripts.",
+      })
+    }
+
     const supabase = await createClient()
 
     console.log("[v0] Fetching SEED data from Supabase...")
@@ -48,31 +70,6 @@ export async function GET() {
         (res) => res,
         (err) => ({ data: null, error: err }),
       )
-
-    const tablesNotFound =
-      studentsRes.error?.code === "PGRST205" ||
-      directorsRes.error?.code === "PGRST205" ||
-      clientsRes.error?.code === "PGRST205" ||
-      assignmentsRes.error?.code === "PGRST205"
-
-    if (tablesNotFound) {
-      console.log("[v0] SEED tables not found in Supabase. Please run the SQL scripts to create them.")
-      return NextResponse.json({
-        students: [],
-        directors: [],
-        clients: [],
-        assignments: [],
-        stats: {
-          totalStudents: 0,
-          totalDirectors: 0,
-          totalClients: 0,
-          totalAssignments: 0,
-        },
-        setupRequired: true,
-        message:
-          "SEED tables not found. Please run the SQL scripts (01-create-seed-tables.sql through 05-seed-client-assignments.sql) in your Supabase SQL editor to set up the database.",
-      })
-    }
 
     if (studentsRes.error) throw studentsRes.error
     if (directorsRes.error) throw directorsRes.error
