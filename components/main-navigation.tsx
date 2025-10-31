@@ -38,6 +38,17 @@ export function MainNavigation() {
         >
           Student Dashboard
         </Link>
+        <Link
+          href="/submit-debrief"
+          className={cn(
+            "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
+            pathname === "/submit-debrief"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground",
+          )}
+        >
+          Submit Debrief
+        </Link>
       </div>
       {/* <ClerkUserButton /> */}
     </nav>
