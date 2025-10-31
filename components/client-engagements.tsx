@@ -85,6 +85,7 @@ interface Evaluation {
   additional_comments: string
   created_at: string
   updated_at: string
+  source?: string // Add source field
 }
 
 interface ClientEngagementsProps {
@@ -333,10 +334,37 @@ export function ClientEngagements({ selectedWeek, selectedClinic }: ClientEngage
                     doc.file_name.toLowerCase().includes("midterm")
 
                   if (isMidtermPPT) {
-                    // Fetch evaluations for midterm PPTs
-                    const evalRes = await fetch(`/api/evaluations?documentId=${doc.id}`)
-                    const evalData = await evalRes.json()
-                    evalsData[doc.id] = evalData.evaluations || []
+                    const [supabaseEvalRes, airtableEvalRes] = await Promise.all([
+                      fetch(`/api/evaluations?documentId=${doc.id}`),
+                      fetch(`/api/airtable/evaluations?client=${encodeURIComponent(client.name)}&documentId=${doc.id}`),
+                    ])
+
+                    const supabaseEvalData = await supabaseEvalRes.json()
+                    const airtableEvalData = await airtableEvalRes.json()
+
+                    const supabaseEvals = supabaseEvalData.evaluations || []
+                    const airtableEvals = airtableEvalData.evaluations || []
+
+                    // Create a map of director names to evaluations from Supabase
+                    const evalsByDirector = new Map(supabaseEvals.map((e: Evaluation) => [e.director_name, e]))
+
+                    // Add Airtable evaluations for directors who haven't evaluated in Supabase
+                    airtableEvals.forEach((airtableEval: Evaluation) => {
+                      if (!evalsByDirector.has(airtableEval.director_name)) {
+                        evalsByDirector.set(airtableEval.director_name, {
+                          ...airtableEval,
+                          source: "airtable", // Mark as from Airtable
+                        })
+                      }
+                    })
+
+                    evalsData[doc.id] = Array.from(evalsByDirector.values())
+
+                    console.log(`[v0] Merged evaluations for ${doc.file_name}:`, {
+                      supabase: supabaseEvals.length,
+                      airtable: airtableEvals.length,
+                      total: evalsData[doc.id].length,
+                    })
                   } else {
                     // Fetch simple reviews for SOW documents
                     const reviewRes = await fetch(`/api/documents/reviews?documentId=${doc.id}`)
