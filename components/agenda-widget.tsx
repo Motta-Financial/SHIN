@@ -153,6 +153,8 @@ export function AgendaWidget({ selectedClinic, selectedWeek }: AgendaWidgetProps
     setEditNotes("")
   }
 
+  console.log("[v0] AgendaWidget - Rendering with CLIENT_ORDER:", CLIENT_ORDER.length, "clients")
+
   return (
     <Card className="shadow-sm border-gray-200">
       <CardHeader className="pb-2 pt-3">
@@ -199,20 +201,14 @@ export function AgendaWidget({ selectedClinic, selectedWeek }: AgendaWidgetProps
         </div>
       </CardHeader>
       <CardContent className="space-y-1 pb-3">
-        {loading ? (
-          <p className="text-xs text-gray-500 text-center py-2">Loading...</p>
-        ) : items.length === 0 ? (
-          <p className="text-xs text-gray-500 text-center py-2">No clients in agenda for this week</p>
-        ) : (
-          <div className="space-y-1.5">
-            {CLIENT_ORDER.map((client, index) => (
-              <div key={client} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 transition-colors">
-                <span className="text-xs font-semibold text-gray-500 w-6">{index + 1}.</span>
-                <span className="text-sm font-medium text-gray-900">{client}</span>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="space-y-1.5">
+          {CLIENT_ORDER.map((client, index) => (
+            <div key={client} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 transition-colors">
+              <span className="text-xs font-semibold text-gray-500 w-6">{index + 1}.</span>
+              <span className="text-sm font-medium text-gray-900">{client}</span>
+            </div>
+          ))}
+        </div>
       </CardContent>
     </Card>
   )
