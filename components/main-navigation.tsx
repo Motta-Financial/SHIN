@@ -49,6 +49,17 @@ export function MainNavigation() {
         >
           Submit Debrief
         </Link>
+        <Link
+          href="/submit-evaluation"
+          className={cn(
+            "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
+            pathname === "/submit-evaluation"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground",
+          )}
+        >
+          Submit Evaluation
+        </Link>
       </div>
       {/* <ClerkUserButton /> */}
     </nav>
