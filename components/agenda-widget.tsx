@@ -23,12 +23,12 @@ const CLIENT_AGENDA = [
 ]
 
 const DIRECTOR_COLORS: Record<string, string> = {
-  "Beth DiRusso": "bg-blue-100 text-blue-700 border-blue-200",
-  "Beth DiRusso & Nick Vadala": "bg-purple-100 text-purple-700 border-purple-200",
-  "Chris Hill": "bg-green-100 text-green-700 border-green-200",
-  "Ken Mooney": "bg-orange-100 text-orange-700 border-orange-200",
-  "Mark Dwyer": "bg-pink-100 text-pink-700 border-pink-200",
-  "Nick Vadala": "bg-cyan-100 text-cyan-700 border-cyan-200",
+  "Beth DiRusso": "bg-primary/10 text-primary border-primary/20",
+  "Beth DiRusso & Nick Vadala": "bg-accent/10 text-accent-foreground border-accent/20",
+  "Chris Hill": "bg-secondary/10 text-secondary-foreground border-secondary/20",
+  "Ken Mooney": "bg-chart-5/10 text-foreground border-chart-5/20",
+  "Mark Dwyer": "bg-chart-3/10 text-foreground border-chart-3/20",
+  "Nick Vadala": "bg-chart-4/10 text-foreground border-chart-4/20",
 }
 
 interface ClientAgendaItem {
@@ -165,16 +165,16 @@ export function AgendaWidget({ selectedClinic, selectedWeek }: AgendaWidgetProps
   console.log("[v0] AgendaWidget - Rendering with CLIENT_AGENDA:", CLIENT_AGENDA.length, "clients")
 
   return (
-    <Card className="shadow-sm border-gray-200">
+    <Card className="shadow-sm border-border">
       <CardHeader className="pb-2 pt-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-[#0077B6]" />
+            <Calendar className="h-4 w-4 text-primary" />
             Weekly Client Agenda
           </CardTitle>
           <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
             <DialogTrigger asChild>
-              <Button size="sm" className="h-6 text-xs bg-[#0077B6] hover:bg-[#005a8c]">
+              <Button size="sm" className="h-6 text-xs bg-primary hover:bg-primary/90 text-primary-foreground">
                 <Plus className="h-3 w-3 mr-1" />
                 Add Client
               </Button>
@@ -201,7 +201,7 @@ export function AgendaWidget({ selectedClinic, selectedWeek }: AgendaWidgetProps
                     rows={3}
                   />
                 </div>
-                <Button onClick={addClient} className="w-full bg-[#0077B6] hover:bg-[#005a8c]">
+                <Button onClick={addClient} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
                   Add to Agenda
                 </Button>
               </div>
@@ -214,13 +214,13 @@ export function AgendaWidget({ selectedClinic, selectedWeek }: AgendaWidgetProps
           {CLIENT_AGENDA.map((client, index) => (
             <div
               key={client.name}
-              className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted transition-colors"
             >
-              <span className="text-xs font-bold text-[#0077B6] w-5 flex-shrink-0">{index + 1}.</span>
-              <span className="text-sm font-medium text-gray-900 flex-1 min-w-0 truncate">{client.name}</span>
+              <span className="text-xs font-bold text-primary w-5 flex-shrink-0">{index + 1}.</span>
+              <span className="text-sm font-medium text-foreground flex-1 min-w-0 truncate">{client.name}</span>
               <span
                 className={`text-xs font-medium px-2 py-0.5 rounded-full border flex-shrink-0 ${
-                  DIRECTOR_COLORS[client.director] || "bg-gray-100 text-gray-700 border-gray-200"
+                  DIRECTOR_COLORS[client.director] || "bg-muted text-muted-foreground border-border"
                 }`}
               >
                 {client.director}
