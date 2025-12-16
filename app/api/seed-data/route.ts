@@ -1,11 +1,9 @@
 import { createClient } from "@/utils/supabase/server"
-import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 
 export async function GET() {
   try {
-    const cookieStore = await cookies()
-    const supabase = createClient(cookieStore)
+    const supabase = await createClient()
 
     // Fetch all SEED data
     const [studentsRes, directorsRes, clientsRes, assignmentsRes] = await Promise.all([
@@ -52,8 +50,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const { clinic, clientName } = await request.json()
-    const cookieStore = await cookies()
-    const supabase = createClient(cookieStore)
+    const supabase = await createClient()
 
     let query = supabase.from("students").select("*")
 
