@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-
+ 
 const supabase = createClient(
   process.env.supabase_SUPABASE_URL!,
   process.env.supabase_SUPABASE_SERVICE_ROLE_KEY!
