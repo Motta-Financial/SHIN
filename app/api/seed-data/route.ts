@@ -1,10 +1,27 @@
 import { createClient } from "@/utils/supabase/server"
 import { NextResponse } from "next/server"
 
+async function checkTableExists(supabase: any, tableName: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from(tableName).select("id").limit(1)
+    return !error || error.code !== "PGRST205"
+  } catch {
+    return false
+  }
+}
+
 export async function GET() {
   try {
-    // This prevents fetch errors from being logged when tables don't exist
-    const tablesReady = process.env.SUPABASE_TABLES_READY === "true"
+    const supabase = await createClient()
+
+    // Auto-detect if tables exist instead of relying on env var
+    const [studentsExist, directorsExist, clientsExist] = await Promise.all([
+      checkTableExists(supabase, "students"),
+      checkTableExists(supabase, "directors"),
+      checkTableExists(supabase, "clients"),
+    ])
+
+    const tablesReady = studentsExist && directorsExist && clientsExist
 
     if (!tablesReady) {
       console.log("[v0] Supabase tables not yet configured. Using Airtable as data source.")
@@ -20,67 +37,36 @@ export async function GET() {
           totalAssignments: 0,
         },
         setupRequired: true,
-        message:
-          "Supabase tables not configured. Visit /admin/setup to create tables, or set SUPABASE_TABLES_READY=true in environment variables after running SQL scripts.",
+        tablesStatus: {
+          students: studentsExist,
+          directors: directorsExist,
+          clients: clientsExist,
+        },
+        message: "Some Supabase tables not configured. Visit /admin/setup to create tables.",
       })
     }
 
-    const supabase = await createClient()
-
     console.log("[v0] Fetching SEED data from Supabase...")
 
-    const studentsRes = await supabase
-      .from("students")
-      .select("*")
-      .order("last_name")
-      .then(
-        (res) => res,
-        (err) => ({ data: null, error: err }),
-      )
+    const [studentsRes, directorsRes, clientsRes, assignmentsRes] = await Promise.all([
+      supabase.from("students").select("*").order("last_name"),
+      supabase.from("directors").select("*").order("full_name"),
+      supabase.from("clients").select(`*, primary_director:directors(full_name, email, clinic)`).order("name"),
+      supabase.from("client_assignments").select(`*, student:students(full_name, email, clinic), client:clients(name)`),
+    ])
 
-    const directorsRes = await supabase
-      .from("directors")
-      .select("*")
-      .order("full_name")
-      .then(
-        (res) => res,
-        (err) => ({ data: null, error: err }),
-      )
-
-    const clientsRes = await supabase
-      .from("clients")
-      .select(`
-        *,
-        primary_director:directors(full_name, email, clinic)
-      `)
-      .order("name")
-      .then(
-        (res) => res,
-        (err) => ({ data: null, error: err }),
-      )
-
-    const assignmentsRes = await supabase
-      .from("client_assignments")
-      .select(`
-        *,
-        student:students(full_name, email, clinic),
-        client:clients(name)
-      `)
-      .then(
-        (res) => res,
-        (err) => ({ data: null, error: err }),
-      )
-
-    if (studentsRes.error) throw studentsRes.error
-    if (directorsRes.error) throw directorsRes.error
-    if (clientsRes.error) throw clientsRes.error
-    if (assignmentsRes.error) throw assignmentsRes.error
+    // Check for errors but don't throw - return partial data
+    const errors = []
+    if (studentsRes.error) errors.push({ table: "students", error: studentsRes.error.message })
+    if (directorsRes.error) errors.push({ table: "directors", error: directorsRes.error.message })
+    if (clientsRes.error) errors.push({ table: "clients", error: clientsRes.error.message })
+    if (assignmentsRes.error) errors.push({ table: "assignments", error: assignmentsRes.error.message })
 
     return NextResponse.json({
-      students: studentsRes.data,
-      directors: directorsRes.data,
-      clients: clientsRes.data,
-      assignments: assignmentsRes.data,
+      students: studentsRes.data || [],
+      directors: directorsRes.data || [],
+      clients: clientsRes.data || [],
+      assignments: assignmentsRes.data || [],
       stats: {
         totalStudents: studentsRes.data?.length || 0,
         totalDirectors: directorsRes.data?.length || 0,
@@ -88,6 +74,7 @@ export async function GET() {
         totalAssignments: assignmentsRes.data?.length || 0,
       },
       setupRequired: false,
+      errors: errors.length > 0 ? errors : undefined,
     })
   } catch (error) {
     console.error("[v0] Error fetching SEED data:", error)

@@ -14,23 +14,42 @@ export interface UserProfile {
  * Returns null if not authenticated
  */
 export async function getCurrentUser() {
-  const supabase = await createClient()
+  try {
+    const supabase = await createClient()
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
 
-  if (authError || !user) {
+    if (authError || !user) {
+      return null
+    }
+
+    // Fetch user profile from profiles table
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .single()
+
+    // If profile doesn't exist, return user with null profile
+    // This allows the app to work even before profile is created
+    if (profileError) {
+      console.log("[v0] Profile not found for user, may need to be created:", user.id)
+      return {
+        user,
+        profile: null,
+      }
+    }
+
+    return {
+      user,
+      profile: profile as UserProfile,
+    }
+  } catch (error) {
+    console.error("[v0] Error in getCurrentUser:", error)
     return null
-  }
-
-  // Fetch user profile from profiles table
-  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
-
-  return {
-    user,
-    profile: profile as UserProfile | null,
   }
 }
 
@@ -56,29 +75,44 @@ export async function isAdmin(): Promise<boolean> {
  * Get user-specific data based on their role
  */
 export async function getUserRoleData() {
-  const supabase = await createClient()
-  const currentUser = await getCurrentUser()
+  try {
+    const supabase = await createClient()
+    const currentUser = await getCurrentUser()
 
-  if (!currentUser?.profile) return null
+    if (!currentUser?.profile) return null
 
-  const { role, id } = currentUser.profile
+    const { role } = currentUser.profile
+    const userId = currentUser.user.id
 
-  switch (role) {
-    case "student": {
-      const { data: studentData } = await supabase.from("students").select("*").eq("user_id", id).single()
-      return { role, data: studentData }
+    switch (role) {
+      case "student": {
+        const { data: studentData } = await supabase.from("students").select("*").eq("user_id", userId).single()
+        return { role, data: studentData }
+      }
+      case "director": {
+        // Directors may be linked by email instead of user_id
+        const { data: directorData } = await supabase
+          .from("directors")
+          .select("*")
+          .eq("email", currentUser.user.email)
+          .single()
+        return { role, data: directorData }
+      }
+      case "client": {
+        const { data: clientData } = await supabase
+          .from("clients")
+          .select("*")
+          .eq("email", currentUser.user.email)
+          .single()
+        return { role, data: clientData }
+      }
+      case "admin":
+        return { role, data: null }
+      default:
+        return null
     }
-    case "director": {
-      const { data: directorData } = await supabase.from("directors").select("*").eq("id", id).single()
-      return { role, data: directorData }
-    }
-    case "client": {
-      const { data: clientData } = await supabase.from("clients").select("*").eq("id", id).single()
-      return { role, data: clientData }
-    }
-    case "admin":
-      return { role, data: null }
-    default:
-      return null
+  } catch (error) {
+    console.error("[v0] Error in getUserRoleData:", error)
+    return null
   }
 }
