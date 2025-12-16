@@ -4,8 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ChevronDown, ChevronRight, FileText, Database } from "lucide-react"
-import { useState, useEffect } from "react"
+import { ChevronDown, ChevronRight, FileText } from "lucide-react"
+import { useState } from "react"
 
 interface DebriefSubmission {
   id: string
@@ -28,29 +28,21 @@ export function DetailedDebriefs({ selectedWeek, selectedClinic }: DetailedDebri
   const [loading, setLoading] = useState(true)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
-  useEffect(() => {
+  // Fetch debrief submissions
+  useState(() => {
     async function fetchDebriefs() {
       try {
-        // Fetch from Airtable (existing debriefs)
-        const airtableResponse = await fetch("/api/airtable/debriefs")
-        const airtableData = await airtableResponse.json()
+        const response = await fetch("/api/airtable/debriefs")
+        const data = await response.json()
 
-        // Fetch from Supabase (new debriefs)
-        const supabaseResponse = await fetch(
-          `/api/debriefs?week_ending=${selectedWeek}${selectedClinic !== "all" ? `&clinic=${selectedClinic}` : ""}`,
-        )
-        const supabaseData = await supabaseResponse.json()
-
-        const debriefsList: DebriefSubmission[] = []
-
-        // Process Airtable records
-        if (airtableData.records) {
-          const airtableDebriefs = airtableData.records
+        if (data.records) {
+          const debriefsList: DebriefSubmission[] = data.records
             .filter((record: any) => {
               const fields = record.fields
               const dateSubmitted = fields["Date Submitted"]
               const clinic = fields["Related Clinic"]
 
+              // Filter by week
               if (!dateSubmitted) return false
               const submittedDate = new Date(dateSubmitted)
               const weekEnd = new Date(selectedWeek)
@@ -58,6 +50,8 @@ export function DetailedDebriefs({ selectedWeek, selectedClinic }: DetailedDebri
               weekStart.setDate(weekStart.getDate() - 6)
 
               const isInWeek = submittedDate >= weekStart && submittedDate <= weekEnd
+
+              // Filter by clinic
               const matchesClinic = selectedClinic === "all" || clinic === selectedClinic
 
               return isInWeek && matchesClinic
@@ -67,7 +61,7 @@ export function DetailedDebriefs({ selectedWeek, selectedClinic }: DetailedDebri
               const studentName = fields["NAME (from SEED | Students)"]?.[0] || "Unknown"
 
               return {
-                id: `airtable-${record.id}`,
+                id: record.id,
                 student: studentName,
                 clinic: fields["Related Clinic"] || "Unknown",
                 client: fields["Client"] || "Unknown",
@@ -77,30 +71,10 @@ export function DetailedDebriefs({ selectedWeek, selectedClinic }: DetailedDebri
                 question: fields["Questions"] || undefined,
               }
             })
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
-          debriefsList.push(...airtableDebriefs)
+          setSubmissions(debriefsList)
         }
-
-        // Process Supabase records
-        if (supabaseData.debriefs) {
-          const supabaseDebriefs = supabaseData.debriefs.map((record: any) => ({
-            id: `supabase-${record.id}`,
-            student: record.student_name,
-            clinic: record.clinic,
-            client: record.client_name,
-            hours: record.hours_worked,
-            summary: record.work_summary,
-            date: record.date_submitted,
-            question: record.questions || undefined,
-          }))
-
-          debriefsList.push(...supabaseDebriefs)
-        }
-
-        // Sort by date
-        debriefsList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-
-        setSubmissions(debriefsList)
       } catch (error) {
         console.error("[v0] Error fetching debriefs:", error)
       } finally {
@@ -109,7 +83,7 @@ export function DetailedDebriefs({ selectedWeek, selectedClinic }: DetailedDebri
     }
 
     fetchDebriefs()
-  }, [selectedWeek, selectedClinic])
+  })
 
   const toggleRow = (id: string) => {
     const newExpanded = new Set(expandedRows)
@@ -138,10 +112,6 @@ export function DetailedDebriefs({ selectedWeek, selectedClinic }: DetailedDebri
         <CardTitle className="flex items-center gap-2">
           <FileText className="h-5 w-5" />
           Detailed Debrief Submissions
-          <Badge variant="outline" className="ml-2">
-            <Database className="h-3 w-3 mr-1" />
-            Airtable + Supabase
-          </Badge>
         </CardTitle>
         <CardDescription>All debrief submissions for the selected week ({submissions.length} total)</CardDescription>
       </CardHeader>
