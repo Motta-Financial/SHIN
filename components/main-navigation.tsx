@@ -3,96 +3,48 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-// import { ClerkUserButton } from "./user-button"
+import { UserButton } from "@/components/auth/user-button"
+import { useUser } from "@/lib/supabase/hooks"
 
 export function MainNavigation() {
   const pathname = usePathname()
+  const { profile } = useUser()
+
+  // Define role-based navigation items
+  const navItems = [
+    { href: "/", label: "Clinic Dashboard", roles: ["admin", "director"] },
+    { href: "/prospects", label: "Prospect Interviews", roles: ["admin", "director"] },
+    { href: "/students", label: "Student Dashboard", roles: ["admin", "director", "student"] },
+    { href: "/submit-debrief", label: "Submit Debrief", roles: ["admin", "director", "student"] },
+    { href: "/submit-attendance", label: "Submit Attendance", roles: ["admin", "director"] },
+    { href: "/submit-client", label: "Submit Client", roles: ["admin", "director"] },
+    { href: "/submit-evaluation", label: "Submit Evaluation", roles: ["admin", "director"] },
+    { href: "/admin/setup", label: "Database Setup", roles: ["admin"] },
+  ]
+
+  // Filter navigation items based on user role
+  const visibleItems = navItems.filter((item) => {
+    if (!profile?.role) return false
+    return item.roles.includes(profile.role) || profile.is_admin
+  })
 
   return (
     <nav className="flex flex-1 items-center justify-between gap-6 border-b bg-background px-6">
       <div className="flex items-center gap-6">
-        <Link
-          href="/"
-          className={cn(
-            "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
-            pathname === "/" ? "border-primary text-foreground" : "border-transparent text-muted-foreground",
-          )}
-        >
-          Clinic Dashboard
-        </Link>
-        <Link
-          href="/prospects"
-          className={cn(
-            "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
-            pathname === "/prospects" ? "border-primary text-foreground" : "border-transparent text-muted-foreground",
-          )}
-        >
-          Prospect Interviews
-        </Link>
-        <Link
-          href="/students"
-          className={cn(
-            "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
-            pathname === "/students" ? "border-primary text-foreground" : "border-transparent text-muted-foreground",
-          )}
-        >
-          Student Dashboard
-        </Link>
-        <Link
-          href="/submit-debrief"
-          className={cn(
-            "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
-            pathname === "/submit-debrief"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground",
-          )}
-        >
-          Submit Debrief
-        </Link>
-        <Link
-          href="/submit-attendance"
-          className={cn(
-            "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
-            pathname === "/submit-attendance"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground",
-          )}
-        >
-          Submit Attendance
-        </Link>
-        <Link
-          href="/submit-client"
-          className={cn(
-            "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
-            pathname === "/submit-client"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground",
-          )}
-        >
-          Submit Client
-        </Link>
-        <Link
-          href="/submit-evaluation"
-          className={cn(
-            "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
-            pathname === "/submit-evaluation"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground",
-          )}
-        >
-          Submit Evaluation
-        </Link>
-        <Link
-          href="/admin/setup"
-          className={cn(
-            "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
-            pathname === "/admin/setup" ? "border-primary text-foreground" : "border-transparent text-muted-foreground",
-          )}
-        >
-          Database Setup
-        </Link>
+        {visibleItems.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={cn(
+              "border-b-2 px-4 py-4 text-sm font-medium transition-colors hover:text-foreground",
+              pathname === item.href ? "border-primary text-foreground" : "border-transparent text-muted-foreground",
+            )}
+          >
+            {item.label}
+          </Link>
+        ))}
       </div>
-      {/* <ClerkUserButton /> */}
+      <UserButton />
     </nav>
   )
 }

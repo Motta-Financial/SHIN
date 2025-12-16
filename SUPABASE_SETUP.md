@@ -11,7 +11,7 @@ This guide will help you set up the complete Supabase integration for the SHIN d
 
 Add these to your `.env.local` file:
 
-\`\`\`env
+```env
 # Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
@@ -23,7 +23,7 @@ SUPABASE_STORAGE_SECRET_ACCESS_KEY=your-secret-access-key
 
 # Feature Flags
 SUPABASE_TABLES_READY=false  # Set to true after running SQL scripts
-\`\`\`
+```
 
 ## Step 1: Create Database Tables
 
@@ -88,7 +88,7 @@ Once all tables are created and populated:
 
 Use the storage utilities in `utils/supabase/storage.ts`:
 
-\`\`\`typescript
+```typescript
 import { uploadFile, getPublicUrl, downloadFile } from '@/utils/supabase/storage'
 
 // Upload a file
@@ -103,11 +103,11 @@ const url = getPublicUrl({
   bucket: 'documents',
   path: 'folder/filename.pdf'
 })
-\`\`\`
+```
 
 ### Database Queries
 
-\`\`\`typescript
+```typescript
 import { createClient } from '@/utils/supabase/server'
 
 // In Server Components or API Routes
@@ -116,7 +116,7 @@ const { data, error } = await supabase
   .from('students')
   .select('*')
   .eq('clinic', 'Accounting')
-\`\`\`
+```
 
 ## Performance Best Practices
 

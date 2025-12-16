@@ -26,20 +26,20 @@ A comprehensive dashboard for SEED clinic directors to monitor student progress,
    - Create a new application in the Clerk Dashboard
    - Copy your Publishable Key and Secret Key
    - Add them to your `.env.local` file:
-     \`\`\`
+     ```
      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
      CLERK_SECRET_KEY=sk_test_...
-     \`\`\`
+     ```
 
 3. **Install Dependencies**:
-   \`\`\`bash
+   ```bash
    npm install
-   \`\`\`
+   ```
 
 4. **Run Development Server**:
-   \`\`\`bash
+   ```bash
    npm run dev
-   \`\`\`
+   ```
 
 5. **Access the Dashboard**:
    - Navigate to http://localhost:3000
