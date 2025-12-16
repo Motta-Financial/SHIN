@@ -1,0 +1,4 @@
+# Optimize pnpm to reduce disk space usage
+shamefully-hoist=true
+store-dir=.pnpm-store
+prefer-offline=true
