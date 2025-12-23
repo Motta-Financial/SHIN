@@ -72,6 +72,6 @@ Once you've created the table with all these fields, the document submission fea
 - The table name must be exactly: **SEED| Work Submissions**
 - Field names should match exactly as listed above
 - The Status field should default to "Pending Review"
-```
+\`\`\`
 
-```typescript file="" isHidden
+\`\`\`typescript file="" isHidden
