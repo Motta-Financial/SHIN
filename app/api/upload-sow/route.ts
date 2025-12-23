@@ -1,5 +1,5 @@
 import { put } from "@vercel/blob"
-import { createClient } from "@/lib/supabase-client"
+import { createClient } from "@/lib/supabase/client"
 import { NextResponse } from "next/server"
 
 // SOW documents data

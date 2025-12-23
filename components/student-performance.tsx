@@ -17,11 +17,11 @@ interface StudentMetrics {
 }
 
 interface StudentPerformanceProps {
-  selectedWeek: string
+  selectedWeeks: string[]
   selectedClinic: string
 }
 
-export function StudentPerformance({ selectedWeek, selectedClinic }: StudentPerformanceProps) {
+export function StudentPerformance({ selectedWeeks, selectedClinic }: StudentPerformanceProps) {
   // Mock data - in production, this would be calculated from historical debrief data
   const [students] = useState<StudentMetrics[]>([
     {
@@ -113,6 +113,12 @@ export function StudentPerformance({ selectedWeek, selectedClinic }: StudentPerf
     return "text-red-600"
   }
 
+  const getPeriodLabel = () => {
+    if (selectedWeeks.length === 0) return "No Period Selected"
+    if (selectedWeeks.length === 1) return "This Week"
+    return `${selectedWeeks.length} Weeks`
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -120,7 +126,10 @@ export function StudentPerformance({ selectedWeek, selectedClinic }: StudentPerf
           <Users className="h-5 w-5" />
           Student Performance Trends
         </CardTitle>
-        <CardDescription>Individual student metrics and consistency tracking</CardDescription>
+        <CardDescription>
+          Individual student metrics and consistency tracking
+          {selectedWeeks.length > 1 && ` (${selectedWeeks.length} weeks)`}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
@@ -138,7 +147,7 @@ export function StudentPerformance({ selectedWeek, selectedClinic }: StudentPerf
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold">{student.currentWeekHours}h</div>
-                  <div className="text-xs text-muted-foreground">This Week</div>
+                  <div className="text-xs text-muted-foreground">{getPeriodLabel()}</div>
                 </div>
               </div>
 

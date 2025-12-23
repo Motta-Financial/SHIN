@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { MessageSquare, CheckCircle2, AlertCircle } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 interface Question {
   id: string
@@ -17,70 +17,58 @@ interface Question {
 }
 
 interface StudentQuestionsProps {
-  selectedWeek: string
+  selectedWeeks: string[]
   selectedClinic: string
 }
 
-export function StudentQuestions({ selectedWeek, selectedClinic }: StudentQuestionsProps) {
+export function StudentQuestions({ selectedWeeks, selectedClinic }: StudentQuestionsProps) {
   const [questions, setQuestions] = useState<Question[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Fetch questions from debrief forms
-  useState(() => {
+  useEffect(() => {
     async function fetchQuestions() {
       try {
-        const response = await fetch("/api/airtable/debriefs")
+        const response = await fetch("/api/supabase/debriefs")
         const data = await response.json()
 
-        if (data.records) {
-          const questionsList: Question[] = data.records
-            .filter((record: any) => {
-              const fields = record.fields
-              const dateSubmitted = fields["Date Submitted"]
-              const clinic = fields["Related Clinic"]
-              const question = fields["Questions"]
+        if (data.debriefs) {
+          const questionsList: Question[] = data.debriefs
+            .filter((debrief: any) => {
+              const weekEnding = debrief.weekEnding
+              const clinic = debrief.clinic
+              const question = debrief.questions
 
               // Filter by week
-              if (!dateSubmitted) return false
-              const submittedDate = new Date(dateSubmitted)
-              const weekEnd = new Date(selectedWeek)
-              const weekStart = new Date(weekEnd)
-              weekStart.setDate(weekStart.getDate() - 6)
-
-              const isInWeek = submittedDate >= weekStart && submittedDate <= weekEnd
+              if (!weekEnding) return false
+              const isInSelectedWeeks = selectedWeeks.includes(weekEnding)
 
               // Filter by clinic
               const matchesClinic = selectedClinic === "all" || clinic === selectedClinic
 
               // Only include records with questions
-              return isInWeek && matchesClinic && question && question.trim().length > 0
+              return isInSelectedWeeks && matchesClinic && question && question.trim().length > 0
             })
-            .map((record: any) => {
-              const fields = record.fields
-              const studentName = fields["NAME (from SEED | Students)"]?.[0] || "Unknown"
-
-              return {
-                id: record.id,
-                student: studentName,
-                clinic: fields["Related Clinic"] || "Unknown",
-                client: fields["Client"] || "Unknown",
-                question: fields["Questions"] || "",
-                date: fields["Date Submitted"] || "",
-                resolved: false, // TODO: Add resolved status to Airtable
-              }
-            })
+            .map((debrief: any) => ({
+              id: debrief.id,
+              student: debrief.studentName || "Unknown",
+              clinic: debrief.clinic || "Unknown",
+              client: debrief.clientName || "Unknown",
+              question: debrief.questions || "",
+              date: debrief.weekEnding || "",
+              resolved: false,
+            }))
 
           setQuestions(questionsList)
         }
       } catch (error) {
-        console.error("[v0] Error fetching questions:", error)
+        console.error("Error fetching questions:", error)
       } finally {
         setLoading(false)
       }
     }
 
     fetchQuestions()
-  })
+  }, [selectedWeeks, selectedClinic])
 
   const toggleResolved = (id: string) => {
     setQuestions(questions.map((q) => (q.id === id ? { ...q, resolved: !q.resolved } : q)))
@@ -122,7 +110,7 @@ export function StudentQuestions({ selectedWeek, selectedClinic }: StudentQuesti
         {questions.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
-            <p>No questions submitted this week</p>
+            <p>No questions submitted for selected weeks</p>
           </div>
         ) : (
           <div className="space-y-4">

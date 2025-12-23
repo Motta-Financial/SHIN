@@ -6,11 +6,11 @@ import { AlertCircle, ClipboardList, MessageSquare, FileText } from "lucide-reac
 import { useState, useEffect } from "react"
 
 interface DirectorRemindersProps {
-  selectedWeek: string
+  selectedWeeks: string[]
   selectedClinic: string
 }
 
-export function DirectorReminders({ selectedWeek, selectedClinic }: DirectorRemindersProps) {
+export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRemindersProps) {
   const [pendingEvaluations, setPendingEvaluations] = useState(0)
   const [unresolvedQuestions, setUnresolvedQuestions] = useState(0)
   const [documentsNeedingReview, setDocumentsNeedingReview] = useState(0)
@@ -70,8 +70,7 @@ export function DirectorReminders({ selectedWeek, selectedClinic }: DirectorRemi
           setDocumentsNeedingReview(docsNeedingReview)
         }
 
-        // Fetch unresolved student questions
-        const questionsResponse = await fetch("/api/airtable/debriefs")
+        const questionsResponse = await fetch("/api/supabase/debriefs")
         const questionsData = await questionsResponse.json()
 
         if (questionsData.records) {
@@ -81,20 +80,22 @@ export function DirectorReminders({ selectedWeek, selectedClinic }: DirectorRemi
             const clinic = fields["Related Clinic"]
             const question = fields["Questions"]
 
-            // Filter by week
+            // Filter by week - check if any selected week matches
             if (!dateSubmitted) return false
             const submittedDate = new Date(dateSubmitted)
-            const weekEnd = new Date(selectedWeek)
-            const weekStart = new Date(weekEnd)
-            weekStart.setDate(weekStart.getDate() - 6)
 
-            const isInWeek = submittedDate >= weekStart && submittedDate <= weekEnd
+            const isInSelectedWeeks = selectedWeeks.some((selectedWeek) => {
+              const weekEnd = new Date(selectedWeek)
+              const weekStart = new Date(weekEnd)
+              weekStart.setDate(weekStart.getDate() - 6)
+              return submittedDate >= weekStart && submittedDate <= weekEnd
+            })
 
             // Filter by clinic
             const matchesClinic = selectedClinic === "all" || clinic === selectedClinic
 
             // Only include records with questions
-            return isInWeek && matchesClinic && question && question.trim().length > 0
+            return isInSelectedWeeks && matchesClinic && question && question.trim().length > 0
           }).length
 
           setUnresolvedQuestions(unresolvedCount)
@@ -111,7 +112,7 @@ export function DirectorReminders({ selectedWeek, selectedClinic }: DirectorRemi
     } else {
       setLoading(false)
     }
-  }, [selectedWeek, selectedClinic])
+  }, [selectedWeeks, selectedClinic])
 
   // Don't show banner if viewing "all" clinics or if there are no pending tasks
   if (

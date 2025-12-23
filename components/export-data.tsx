@@ -12,45 +12,37 @@ interface ExportDataProps {
 export function ExportData({ selectedWeek, selectedClinic }: ExportDataProps) {
   const exportToCSV = async () => {
     try {
-      // Fetch data
-      const response = await fetch("/api/airtable")
+      const response = await fetch("/api/supabase/debriefs")
       const data = await response.json()
 
-      if (!data.records) return
+      if (!data.debriefs) return
 
       // Filter data by week and clinic
-      const filteredRecords = data.records.filter((record: any) => {
-        const fields = record.fields
-        const dateSubmitted = fields["Date Submitted"]
-        const clinic = fields["Related Clinic"]
+      const filteredRecords = data.debriefs.filter((debrief: any) => {
+        const weekEnding = debrief.weekEnding
+        const clinic = debrief.clinic
 
-        if (!dateSubmitted) return false
+        if (!weekEnding) return false
 
-        const submittedDate = new Date(dateSubmitted)
-        const weekEnd = new Date(selectedWeek)
-        const weekStart = new Date(weekEnd)
-        weekStart.setDate(weekStart.getDate() - 6)
-
-        const isInWeek = submittedDate >= weekStart && submittedDate <= weekEnd
+        const isInWeek = weekEnding === selectedWeek
         const matchesClinic = selectedClinic === "all" || clinic === selectedClinic
 
         return isInWeek && matchesClinic
       })
 
-      // Convert to CSV
-      const headers = ["Student", "Clinic", "Client", "Hours", "Summary", "Date", "Questions"]
+      // Convert to CSV with Supabase field names
+      const headers = ["Student", "Clinic", "Client", "Hours", "Summary", "Week Ending", "Questions"]
       const csvRows = [headers.join(",")]
 
-      filteredRecords.forEach((record: any) => {
-        const fields = record.fields
+      filteredRecords.forEach((debrief: any) => {
         const row = [
-          fields["NAME (from SEED | Students)"]?.[0] || "",
-          fields["Related Clinic"] || "",
-          fields["Client"] || "",
-          fields["Number of Hours Worked"] || 0,
-          `"${(fields["Summary of Work"] || "").replace(/"/g, '""')}"`,
-          fields["Date Submitted"] || "",
-          `"${(fields["Questions"] || "").replace(/"/g, '""')}"`,
+          debrief.studentName || "",
+          debrief.clinic || "",
+          debrief.clientName || "",
+          debrief.hoursWorked || 0,
+          `"${(debrief.workSummary || "").replace(/"/g, '""')}"`,
+          debrief.weekEnding || "",
+          `"${(debrief.questions || "").replace(/"/g, '""')}"`,
         ]
         csvRows.push(row.join(","))
       })
@@ -67,7 +59,7 @@ export function ExportData({ selectedWeek, selectedClinic }: ExportDataProps) {
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
     } catch (error) {
-      console.error("[v0] Error exporting data:", error)
+      console.error("Error exporting data:", error)
     }
   }
 

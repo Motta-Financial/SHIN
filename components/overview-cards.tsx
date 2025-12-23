@@ -3,7 +3,7 @@
 import { Card } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Users, Briefcase, AlertCircle } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { getClinicColor } from "@/lib/clinic-colors"
 
 interface OverviewStats {
@@ -21,172 +21,176 @@ interface Student {
   summary: string
 }
 
-interface OverviewCardsProps {
-  selectedWeek: string
-  selectedClinic: string
+interface WeekSchedule {
+  value: string
+  label: string
+  weekNumber: number
+  isBreak: boolean
+  weekStart: string
+  weekEnd: string
 }
 
-export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsProps) {
-  const [stats, setStats] = useState<OverviewStats>({
-    activeStudents: 0,
-    activeClients: 0,
-    totalHours: 0,
-    weeklyGrowth: 0,
-  })
-  const [activeStudents, setActiveStudents] = useState<Student[]>([])
-  const [inactiveStudents, setInactiveStudents] = useState<{ name: string; clinic: string; role: string }[]>([])
+interface OverviewCardsProps {
+  selectedWeeks: string[]
+  selectedClinic: string
+  weekSchedule?: WeekSchedule[]
+}
+
+export function OverviewCards({ selectedWeeks, selectedClinic, weekSchedule = [] }: OverviewCardsProps) {
+  const [debriefs, setDebriefs] = useState<any[]>([])
+  const [roster, setRoster] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
+  const isDateInWeekRange = (dateStr: string, selectedWeekValues: string[]): boolean => {
+    if (selectedWeekValues.length === 0) return true // No filter = all data
+
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return false
+
+    return selectedWeekValues.some((weekValue) => {
+      const week = weekSchedule.find((w) => w.value === weekValue)
+      if (!week) return false
+
+      const weekStart = new Date(week.weekStart)
+      const weekEnd = new Date(week.weekEnd)
+      // Add 1 day to weekEnd to make it inclusive
+      weekEnd.setDate(weekEnd.getDate() + 1)
+
+      return date >= weekStart && date < weekEnd
+    })
+  }
+
   useEffect(() => {
-    async function fetchStats() {
+    async function fetchData() {
+      setLoading(true)
       try {
-        console.log("[v0] Overview Cards - Selected clinic:", selectedClinic)
-
-        const [clientsRes, debriefsRes, rosterRes] = await Promise.all([
-          fetch("/api/airtable/clients"),
-          fetch("/api/airtable/debriefs"),
-          fetch("/api/airtable/roster"),
+        const [debriefsRes, rosterRes] = await Promise.all([
+          fetch("/api/supabase/debriefs"),
+          fetch("/api/supabase/roster"),
         ])
 
-        if (!clientsRes.ok || !debriefsRes.ok || !rosterRes.ok) {
-          throw new Error("Failed to fetch data")
+        if (debriefsRes.ok) {
+          const data = await debriefsRes.json()
+          setDebriefs(data.debriefs || [])
         }
 
-        const clientsData = await clientsRes.json()
-        const debriefsData = await debriefsRes.json()
-        const rosterData = await rosterRes.json()
-
-        const directorToClinicMap = new Map([
-          ["Mark Dwyer", "Accounting"],
-          ["Ken Mooney", "Consulting"],
-          ["Nick Vadala", "Funding"],
-          ["Christopher Hill", "Marketing"],
-          ["Chris Hill", "Marketing"],
-          ["Beth DiRusso", "Funding"],
-        ])
-
-        const roleToClinicMap = new Map([
-          ["ACCTING CLINIC", "Accounting"],
-          ["CONSULTING CLINIC", "Consulting"],
-          ["RESOURCE CLINIC", "Funding"],
-          ["MARKETING CLINIC", "Marketing"],
-        ])
-
-        const filterClinic =
-          selectedClinic === "all" ? "all" : directorToClinicMap.get(selectedClinic) || selectedClinic
-        console.log("[v0] Overview Cards - Filter clinic:", filterClinic)
-
-        const activeStudentsMap = new Map<string, Student>()
-        const activeClientIds = new Set<string>()
-        let totalHours = 0
-
-        if (debriefsData.records) {
-          debriefsData.records.forEach((record: any) => {
-            const fields = record.fields
-            const weekEnding = fields["END DATE (from WEEK (from SEED | Schedule))"]
-            const dateSubmitted = fields["Date Submitted"]
-
-            let recordWeek = ""
-            if (weekEnding) {
-              recordWeek = Array.isArray(weekEnding) ? weekEnding[0] : weekEnding
-            } else if (dateSubmitted) {
-              const date = new Date(dateSubmitted)
-              const day = date.getDay()
-              const diff = 6 - day
-              const weekEndingDate = new Date(date)
-              weekEndingDate.setDate(date.getDate() + diff)
-              recordWeek = weekEndingDate.toISOString().split("T")[0]
-            }
-
-            const studentRoleArray = fields["ROLE (from SEED | Students)"]
-            const studentRole = Array.isArray(studentRoleArray) ? studentRoleArray[0] : studentRoleArray
-            const studentClinic = roleToClinicMap.get(studentRole) || fields["Related Clinic"] || ""
-
-            const matchesClinic = filterClinic === "all" || studentClinic === filterClinic
-
-            if (recordWeek === selectedWeek && matchesClinic) {
-              const studentNameArray = fields["NAME (from SEED | Students)"]
-              const studentName = Array.isArray(studentNameArray) ? studentNameArray[0] : studentNameArray
-
-              const hours = Number.parseFloat(fields["Number of Hours Worked"] || "0")
-              const clientName = fields["Client"]
-              const summary = fields["Summary of Work"] || ""
-
-              if (studentName) {
-                const existing = activeStudentsMap.get(studentName)
-                if (existing) {
-                  existing.hours += hours
-                } else {
-                  activeStudentsMap.set(studentName, {
-                    name: studentName,
-                    hours,
-                    clinic: studentClinic,
-                    client: clientName || "",
-                    summary,
-                  })
-                }
-              }
-
-              if (clientName) {
-                activeClientIds.add(clientName)
-              }
-
-              totalHours += hours
-            }
-          })
+        if (rosterRes.ok) {
+          const data = await rosterRes.json()
+          setRoster(data.students || [])
         }
-
-        console.log("[v0] Overview Cards - Active students:", activeStudentsMap.size)
-        console.log("[v0] Overview Cards - Active clients:", activeClientIds.size)
-        console.log("[v0] Overview Cards - Total hours:", totalHours)
-
-        const allStudents = new Set<string>()
-        const inactiveList: { name: string; clinic: string; role: string }[] = []
-
-        if (rosterData.records) {
-          rosterData.records.forEach((record: any) => {
-            const fields = record.fields
-            const name = fields["NAME"]
-            const clinicRole = fields["Clinic| Role"]
-            const role = fields["ROLE"]
-
-            const studentClinic = roleToClinicMap.get(role) || fields["Related Clinic"] || ""
-
-            if (name && clinicRole === "Student") {
-              allStudents.add(name)
-
-              const matchesClinic = filterClinic === "all" || studentClinic === filterClinic
-
-              if (matchesClinic && !activeStudentsMap.has(name)) {
-                inactiveList.push({
-                  name,
-                  clinic: studentClinic,
-                  role: role || "",
-                })
-              }
-            }
-          })
-        }
-
-        console.log("[v0] Overview Cards - Inactive students:", inactiveList.length)
-
-        setActiveStudents(Array.from(activeStudentsMap.values()))
-        setInactiveStudents(inactiveList)
-        setStats({
-          activeStudents: activeStudentsMap.size,
-          activeClients: activeClientIds.size,
-          totalHours: Math.round(totalHours),
-          weeklyGrowth: 0,
-        })
       } catch (error) {
-        console.error("[v0] Error fetching overview stats:", error)
+        console.error("Error fetching data:", error)
       } finally {
         setLoading(false)
       }
     }
 
-    fetchStats()
-  }, [selectedWeek, selectedClinic])
+    fetchData()
+  }, [])
+
+  const { stats, activeStudents, inactiveStudents } = useMemo(() => {
+    if (loading) {
+      return {
+        stats: { activeStudents: 0, activeClients: 0, totalHours: 0, weeklyGrowth: 0 },
+        activeStudents: [],
+        inactiveStudents: [],
+      }
+    }
+
+    const directorToClinicMap = new Map([
+      ["Mark Dwyer", "Accounting"],
+      ["Dat Le", "Accounting"],
+      ["Nick Vadala", "Consulting"],
+      ["Ken Mooney", "Resource Acquisition"],
+      ["Christopher Hill", "Marketing"],
+      ["Chris Hill", "Marketing"],
+      ["Beth DiRusso", "Legal"],
+      ["Darrell Mottley", "Legal"],
+      ["Boris Lazic", "SEED"],
+      ["Grace Cha", "SEED"],
+      ["Chaim Letwin", "SEED"],
+      ["Dmitri Tcherevik", "SEED"],
+    ])
+
+    const filterClinic = selectedClinic === "all" ? "all" : directorToClinicMap.get(selectedClinic) || selectedClinic
+
+    const activeStudentsMap = new Map<string, Student>()
+    const activeClientIds = new Set<string>()
+    let totalHours = 0
+
+    if (debriefs.length > 0) {
+      debriefs.forEach((debrief: any) => {
+        const recordWeek = debrief.week_ending || debrief.weekEnding || ""
+        const studentClinic = debrief.clinic || ""
+        const clientName = debrief.client_name || debrief.clientName || ""
+        const hours = Number.parseFloat(debrief.hours_worked || debrief.hoursWorked || "0")
+        const summary = debrief.work_summary || debrief.workSummary || ""
+        const studentName = debrief.student_name || debrief.studentName || ""
+
+        const normalizedClinic = studentClinic.replace(" Clinic", "").trim()
+        const matchesClinic =
+          filterClinic === "all" || normalizedClinic.includes(filterClinic) || studentClinic.includes(filterClinic)
+        const matchesWeek = isDateInWeekRange(recordWeek, selectedWeeks)
+
+        if (matchesWeek && matchesClinic) {
+          if (studentName) {
+            const existing = activeStudentsMap.get(studentName)
+            if (existing) {
+              existing.hours += hours
+            } else {
+              activeStudentsMap.set(studentName, {
+                name: studentName,
+                hours,
+                clinic: studentClinic,
+                client: clientName,
+                summary,
+              })
+            }
+          }
+          if (clientName) {
+            activeClientIds.add(clientName)
+          }
+          totalHours += hours
+        }
+      })
+    }
+
+    const inactiveList: { name: string; clinic: string; role: string }[] = []
+
+    if (roster.length > 0) {
+      roster.forEach((record: any) => {
+        const name = record.fullName || record.full_name || `${record.firstName || ""} ${record.lastName || ""}`.trim()
+        const studentClinic = record.clinic || ""
+        const clientTeam = record.clientTeam || record.client_team || ""
+        const status = record.status || ""
+
+        if (name && status === "Active") {
+          const normalizedClinic = studentClinic.replace(" Clinic", "").trim()
+          const matchesClinic =
+            filterClinic === "all" || normalizedClinic.includes(filterClinic) || studentClinic.includes(filterClinic)
+
+          if (matchesClinic && !activeStudentsMap.has(name)) {
+            inactiveList.push({
+              name,
+              clinic: studentClinic,
+              role: clientTeam,
+            })
+          }
+        }
+      })
+    }
+
+    return {
+      stats: {
+        activeStudents: activeStudentsMap.size,
+        activeClients: activeClientIds.size,
+        totalHours: Math.round(totalHours),
+        weeklyGrowth: 0,
+      },
+      activeStudents: Array.from(activeStudentsMap.values()),
+      inactiveStudents: inactiveList,
+    }
+  }, [debriefs, roster, loading, selectedWeeks, selectedClinic, weekSchedule])
 
   const cards = [
     {
@@ -194,9 +198,9 @@ export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsPro
       value: loading ? "..." : stats.activeStudents,
       icon: Users,
       description: "Submitted this week",
-      bgColor: "bg-[#002855]",
-      iconBg: "bg-[#0077B6]",
-      iconColor: "text-white",
+      bgColor: "bg-[#2d3a4f]", // Using palette colors - Passionate Blueberry (dark navy)
+      iconBg: "bg-[#8fa889]", // Banyan Serenity
+      iconColor: "text-[#2d3a4f]",
       clickable: true,
       dialogContent: "active",
     },
@@ -205,9 +209,9 @@ export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsPro
       value: loading ? "..." : inactiveStudents.length,
       icon: AlertCircle,
       description: "Haven't submitted",
-      bgColor: "bg-amber-600",
-      iconBg: "bg-amber-700",
-      iconColor: "text-white",
+      bgColor: "bg-[#565f4b]", // Using palette colors - Jalapeno Poppers (olive)
+      iconBg: "bg-[#9aacb8]", // Tsunami
+      iconColor: "text-[#565f4b]",
       clickable: true,
       dialogContent: "inactive",
     },
@@ -216,15 +220,15 @@ export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsPro
       value: loading ? "..." : stats.activeClients,
       icon: Briefcase,
       description: "This week",
-      bgColor: "bg-[#0077B6]",
-      iconBg: "bg-[#002855]",
-      iconColor: "text-white",
+      bgColor: "bg-[#5f7082]", // Using palette colors - Silver Blueberry
+      iconBg: "bg-[#8fa889]", // Banyan Serenity
+      iconColor: "text-[#5f7082]",
       clickable: false,
     },
   ]
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {cards.map((card) => {
         const Icon = card.icon
 
@@ -233,16 +237,16 @@ export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsPro
             <Dialog key={card.title}>
               <DialogTrigger asChild>
                 <Card
-                  className={`p-6 ${card.bgColor} border-none shadow-lg cursor-pointer hover:opacity-90 transition-opacity`}
+                  className={`p-4 ${card.bgColor} border-none shadow-lg cursor-pointer hover:opacity-90 transition-opacity`}
                 >
                   <div className="flex items-start justify-between">
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium text-white/80">{card.title}</p>
-                      <p className="text-3xl font-bold text-white">{card.value}</p>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-white/80">{card.title}</p>
+                      <p className="text-2xl font-bold text-white">{card.value}</p>
                       <p className="text-xs text-white/70">{card.description}</p>
                     </div>
-                    <div className={`rounded-lg ${card.iconBg} p-3 shadow-md`}>
-                      <Icon className={`h-5 w-5 ${card.iconColor}`} />
+                    <div className={`rounded-lg ${card.iconBg} p-2 shadow-md`}>
+                      <Icon className={`h-4 w-4 ${card.iconColor}`} />
                     </div>
                   </div>
                 </Card>
@@ -310,15 +314,15 @@ export function OverviewCards({ selectedWeek, selectedClinic }: OverviewCardsPro
         }
 
         return (
-          <Card key={card.title} className={`p-6 ${card.bgColor} border-none shadow-lg`}>
+          <Card key={card.title} className={`p-4 ${card.bgColor} border-none shadow-lg`}>
             <div className="flex items-start justify-between">
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-white/80">{card.title}</p>
-                <p className="text-3xl font-bold text-white">{card.value}</p>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-white/80">{card.title}</p>
+                <p className="text-2xl font-bold text-white">{card.value}</p>
                 <p className="text-xs text-white/70">{card.description}</p>
               </div>
-              <div className={`rounded-lg ${card.iconBg} p-3 shadow-md`}>
-                <Icon className={`h-5 w-5 ${card.iconColor}`} />
+              <div className={`rounded-lg ${card.iconBg} p-2 shadow-md`}>
+                <Icon className={`h-4 w-4 ${card.iconColor}`} />
               </div>
             </div>
           </Card>

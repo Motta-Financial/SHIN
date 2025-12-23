@@ -19,10 +19,10 @@ interface ClientAgendaItem {
 
 interface AgendaWidgetProps {
   selectedClinic: string
-  selectedWeek: string
+  selectedWeeks: string[]
 }
 
-export function AgendaWidget({ selectedClinic, selectedWeek }: AgendaWidgetProps) {
+export function AgendaWidget({ selectedClinic, selectedWeeks }: AgendaWidgetProps) {
   const [items, setItems] = useState<ClientAgendaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddDialog, setShowAddDialog] = useState(false)
@@ -33,13 +33,20 @@ export function AgendaWidget({ selectedClinic, selectedWeek }: AgendaWidgetProps
     notes: "",
   })
 
+  const primaryWeek = selectedWeeks.length > 0 ? selectedWeeks.sort((a, b) => b.localeCompare(a))[0] : ""
+
   useEffect(() => {
     fetchAgendaItems()
-  }, [selectedClinic, selectedWeek])
+  }, [selectedClinic, selectedWeeks])
 
   const fetchAgendaItems = async () => {
+    if (!primaryWeek) {
+      setItems([])
+      setLoading(false)
+      return
+    }
     try {
-      const response = await fetch(`/api/weekly-client-agenda?weekEnding=${selectedWeek}&clinic=${selectedClinic}`)
+      const response = await fetch(`/api/weekly-client-agenda?weekEnding=${primaryWeek}&clinic=${selectedClinic}`)
       const data = await response.json()
       setItems(data.items || [])
     } catch (error) {
@@ -50,7 +57,7 @@ export function AgendaWidget({ selectedClinic, selectedWeek }: AgendaWidgetProps
   }
 
   const addClient = async () => {
-    if (!newClient.client_name) return
+    if (!newClient.client_name || !primaryWeek) return
 
     try {
       const response = await fetch("/api/weekly-client-agenda", {
@@ -58,7 +65,7 @@ export function AgendaWidget({ selectedClinic, selectedWeek }: AgendaWidgetProps
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           client_name: newClient.client_name,
-          week_ending: selectedWeek,
+          week_ending: primaryWeek,
           clinic: selectedClinic === "all" ? null : selectedClinic,
           notes: newClient.notes,
           order_index: items.length,

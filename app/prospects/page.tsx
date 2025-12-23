@@ -1,143 +1,114 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
-import { MainNavigation } from "@/components/main-navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import {
   Calendar,
-  Users,
-  CheckCircle,
-  AlertCircle,
-  ExternalLink,
-  ChevronDown,
-  ChevronUp,
   Clock,
-  UserCheck,
-  FileText,
-  Filter,
-  ArrowUpDown,
+  CheckCircle,
+  XCircle,
+  User,
+  Mail,
+  Phone,
+  Building,
+  Plus,
+  Users,
+  AlertCircle,
+  ArrowLeft,
 } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { MainNavigation } from "@/components/main-navigation"
+import Link from "next/link"
 
 interface ProspectRecord {
   id: string
   fields: {
     "Student Name"?: string
+    Name?: string
+    "Prospect Name"?: string
+    Student?: string
     "Student Email"?: string
+    Email?: string
+    "Student Phone"?: string
+    Phone?: string
+    "Interview Date"?: string
+    Date?: string
+    "Scheduled Date"?: string
+    "Interview Time"?: string
+    Time?: string
     "Interview Status"?: string
-    "Interview Link"?: string
-    "Prospect Acceptance Status copy"?: string
-    Interviewer?:
-      | Array<{
-          id: string
-          email: string
-          name: string
-        }>
-      | string
-    "Attachment Summary"?: any
-    "Interview Date (time)"?: string
-    "TXT: Interview Time"?: string
-    "Interview Schedule"?: string
-    "Director in Charge"?: string
-    "Interviewer Name"?: string
-    "PRESEED (Y/N) (from PRESEED| Interview)"?: string
+    Status?: string
+    "Interview State"?: string
+    Interviewer?: string
+    "Assigned Director"?: string
+    Director?: string
+    Notes?: string
+    "Interview Notes"?: string
+    "Preferred Clinic"?: string
+    Clinic?: string
+    "Clinic Preference"?: string
+    Resume?: { url: string }[]
+    "Resume URL"?: string
     [key: string]: any
   }
 }
 
-export default function ProspectsPage() {
+const mockProspects: ProspectRecord[] = [
+  {
+    id: "1",
+    fields: {
+      "Student Name": "John Smith",
+      "Student Email": "john.smith@example.com",
+      "Student Phone": "555-0101",
+      "Interview Date": "2025-01-15",
+      "Interview Time": "10:00 AM",
+      "Interview Status": "Completed",
+      Interviewer: "Beth DiRusso",
+      "Preferred Clinic": "Consulting",
+      Notes: "Strong candidate with good communication skills",
+    },
+  },
+  {
+    id: "2",
+    fields: {
+      "Student Name": "Jane Doe",
+      "Student Email": "jane.doe@example.com",
+      "Student Phone": "555-0102",
+      "Interview Date": "2025-01-16",
+      "Interview Time": "2:00 PM",
+      "Interview Status": "Scheduled",
+      Interviewer: "Mark Dwyer",
+      "Preferred Clinic": "Accounting",
+    },
+  },
+  {
+    id: "3",
+    fields: {
+      "Student Name": "Mike Johnson",
+      "Student Email": "mike.johnson@example.com",
+      "Student Phone": "555-0103",
+      "Interview Date": "2025-01-14",
+      "Interview Time": "11:00 AM",
+      "Interview Status": "Pending",
+      Interviewer: "Nick Vadala",
+      "Preferred Clinic": "Marketing",
+    },
+  },
+]
+
+export default function ProspectInterviewsPage() {
   const [prospects, setProspects] = useState<ProspectRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isFormsNeededOpen, setIsFormsNeededOpen] = useState(false)
-  const [filterBy, setFilterBy] = useState<"all" | "completed" | "upcoming">("all")
-  const [sortBy, setSortBy] = useState<"name" | "date" | "status" | "interviewer">("name")
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
 
   useEffect(() => {
-    fetchProspects()
+    setProspects(mockProspects)
+    setLoading(false)
   }, [])
-
-  const fetchProspects = async () => {
-    try {
-      console.log("[v0] Inspecting prospects table schema...")
-      const inspectResponse = await fetch("/api/airtable/inspect")
-      if (inspectResponse.ok) {
-        const inspectData = await inspectResponse.json()
-        const prospectsTable = inspectData.tables.find(
-          (t: any) => t.name === "PRESEED| Prospects" || t.id === "tblnSMYowQYwYqaDG",
-        )
-        if (prospectsTable) {
-          console.log("[v0] Prospects table fields:", prospectsTable.fields)
-          console.log("[v0] Sample prospect record:", prospectsTable.sampleRecord)
-        }
-      }
-
-      const response = await fetch("/api/airtable/prospects")
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch prospects")
-      }
-
-      const data = await response.json()
-      console.log("[v0] Total prospects fetched:", data.records?.length || 0)
-
-      if (data.records && data.records.length > 0) {
-        const allFieldNames = new Set<string>()
-        data.records.forEach((record: ProspectRecord) => {
-          Object.keys(record.fields).forEach((fieldName) => allFieldNames.add(fieldName))
-        })
-        console.log("[v0] All unique field names found in records:", Array.from(allFieldNames).sort())
-
-        console.log("[v0] Sample records (first 3):")
-        data.records.slice(0, 3).forEach((record: ProspectRecord, index: number) => {
-          console.log(`[v0] Record ${index + 1} fields:`, Object.keys(record.fields))
-          console.log(`[v0] Record ${index + 1} data:`, record.fields)
-        })
-      }
-
-      const uniqueProspects = new Map<string, ProspectRecord>()
-
-      data.records?.forEach((record: ProspectRecord) => {
-        const email = record.fields["Student Email"]
-        if (email) {
-          const existing = uniqueProspects.get(email)
-          if (!existing) {
-            uniqueProspects.set(email, record)
-          } else {
-            const existingFieldCount = Object.values(existing.fields).filter(
-              (v) => v !== null && v !== undefined && v !== "",
-            ).length
-            const newFieldCount = Object.values(record.fields).filter(
-              (v) => v !== null && v !== undefined && v !== "",
-            ).length
-
-            if (newFieldCount > existingFieldCount) {
-              uniqueProspects.set(email, record)
-            }
-          }
-        } else {
-          const name = record.fields["Student Name"] || "Unknown"
-          const key = `${name}_${record.id}`
-          uniqueProspects.set(key, record)
-        }
-      })
-
-      const deduplicatedRecords = Array.from(uniqueProspects.values())
-      console.log("[v0] After deduplication:", deduplicatedRecords.length, "unique prospects")
-
-      setProspects(deduplicatedRecords)
-    } catch (err) {
-      console.error("[v0] Error fetching prospects:", err)
-      setError(err instanceof Error ? err.message : "Failed to load prospects")
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const getProspectName = (fields: ProspectRecord["fields"]) => {
     return fields["Student Name"] || fields["Name"] || fields["Prospect Name"] || fields["Student"] || "Unknown"
@@ -147,700 +118,409 @@ export default function ProspectsPage() {
     return fields["Interview Status"] || fields["Status"] || fields["Interview State"] || "Pending"
   }
 
-  const getAcceptanceStatus = (fields: ProspectRecord["fields"]) => {
-    return (
-      fields["Prospect Acceptance Status copy"] ||
-      fields["Acceptance Status"] ||
-      fields["Status"] ||
-      fields["Prospect Status"] ||
-      "Unknown"
-    )
+  const getInterviewDate = (fields: ProspectRecord["fields"]) => {
+    return fields["Interview Date"] || fields["Date"] || fields["Scheduled Date"]
   }
 
-  const getInterviewerName = (fields: ProspectRecord["fields"]) => {
-    if (fields.Interviewer && Array.isArray(fields.Interviewer) && fields.Interviewer.length > 0) {
-      return fields.Interviewer[0].name
-    }
-    if (fields["Director in Charge"]) {
-      return fields["Director in Charge"]
-    }
-    if (fields.Interviewer && typeof fields.Interviewer === "string") {
-      return fields.Interviewer
-    }
-    if (fields["Interviewer Name"]) {
-      return fields["Interviewer Name"]
-    }
-    return "—"
+  const getInterviewTime = (fields: ProspectRecord["fields"]) => {
+    return fields["Interview Time"] || fields["Time"] || ""
   }
 
-  const getInterviewLink = (fields: ProspectRecord["fields"]) => {
-    return fields["Interview Link"] || fields["Zoom Link"] || fields["Meeting Link"] || fields["Link"] || null
+  const getEmail = (fields: ProspectRecord["fields"]) => {
+    return fields["Student Email"] || fields["Email"] || ""
   }
 
-  const getInterviewDateTime = (fields: ProspectRecord["fields"]) => {
-    if (fields["Interview Date (time)"]) {
-      const dateStr = fields["Interview Date (time)"]
-      try {
-        const date = new Date(dateStr)
-        const formattedDate = date.toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        })
-        const formattedTime = date.toLocaleTimeString("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        })
-        const timeStr = fields["TXT: Interview Time"] || fields["Interview Time"]
-        if (timeStr) {
-          return `${formattedDate} at ${timeStr}`
-        }
-        return `${formattedDate} at ${formattedTime}`
-      } catch (e) {
-        return dateStr
-      }
-    }
-
-    if (fields["Interview Schedule"]) {
-      return fields["Interview Schedule"]
-    }
-
-    const date = fields["Interview Date"] || fields["Date"] || fields["Scheduled Date"]
-    const time = fields["Interview Time"] || fields["Time"] || fields["Scheduled Time"] || fields["TXT: Interview Time"]
-
-    if (date && time) {
-      return `${date} at ${time}`
-    }
-    if (date) {
-      return date
-    }
-    return null
+  const getPhone = (fields: ProspectRecord["fields"]) => {
+    return fields["Student Phone"] || fields["Phone"] || ""
   }
 
-  const isInterviewCompleted = (fields: ProspectRecord["fields"]) => {
-    const interviewDateStr = fields["Interview Date (time)"]
-    if (!interviewDateStr) return false
-
-    try {
-      const interviewDate = new Date(interviewDateStr)
-      const now = new Date()
-      return interviewDate < now
-    } catch (e) {
-      return false
-    }
+  const getInterviewer = (fields: ProspectRecord["fields"]) => {
+    return fields["Interviewer"] || fields["Assigned Director"] || fields["Director"] || "Unassigned"
   }
 
-  const totalProspects = prospects.length
+  const getClinic = (fields: ProspectRecord["fields"]) => {
+    return fields["Preferred Clinic"] || fields["Clinic"] || fields["Clinic Preference"] || "Not specified"
+  }
 
-  const scheduledInterviews = prospects.filter((p) => {
-    const interviewDateStr = p.fields["Interview Date (time)"]
-    if (!interviewDateStr) return false
+  const getNotes = (fields: ProspectRecord["fields"]) => {
+    return fields["Notes"] || fields["Interview Notes"] || ""
+  }
 
-    try {
-      const interviewDate = new Date(interviewDateStr)
-      const now = new Date()
-      return interviewDate >= now
-    } catch (e) {
-      return false
+  const getStatusColor = (status: string) => {
+    const normalizedStatus = status.toLowerCase()
+    if (normalizedStatus.includes("complete") || normalizedStatus.includes("done")) {
+      return "bg-green-100 text-green-800 border-green-200"
     }
+    if (normalizedStatus.includes("schedule") || normalizedStatus.includes("confirm")) {
+      return "bg-blue-100 text-blue-800 border-blue-200"
+    }
+    if (normalizedStatus.includes("cancel") || normalizedStatus.includes("no show")) {
+      return "bg-red-100 text-red-800 border-red-200"
+    }
+    return "bg-yellow-100 text-yellow-800 border-yellow-200"
+  }
+
+  const getStatusIcon = (status: string) => {
+    const normalizedStatus = status.toLowerCase()
+    if (normalizedStatus.includes("complete") || normalizedStatus.includes("done")) {
+      return <CheckCircle className="h-4 w-4" />
+    }
+    if (normalizedStatus.includes("cancel") || normalizedStatus.includes("no show")) {
+      return <XCircle className="h-4 w-4" />
+    }
+    return <Clock className="h-4 w-4" />
+  }
+
+  const completedCount = prospects.filter((p) => {
+    const status = getInterviewStatus(p.fields).toLowerCase()
+    return status.includes("complete") || status.includes("done")
   }).length
 
-  const completedInterviews = prospects.filter((p) => isInterviewCompleted(p.fields)).length
-
-  const pendingReview = prospects.filter((p) => {
-    const status = getAcceptanceStatus(p.fields).toLowerCase()
-    return status === "invited" || status === "pending"
+  const scheduledCount = prospects.filter((p) => {
+    const status = getInterviewStatus(p.fields).toLowerCase()
+    return status.includes("schedule") || status.includes("confirm")
   }).length
 
-  const completedInterviewsWithoutForm = prospects.filter((p) => {
-    const isCompleted = isInterviewCompleted(p.fields)
-    const formCompleted = p.fields["PRESEED (Y/N) (from PRESEED| Interview)"]
-    return isCompleted && (!formCompleted || formCompleted !== "Yes")
-  })
-
-  const completedInterviewsWithForm = prospects.filter((p) => {
-    const formCompleted = p.fields["PRESEED (Y/N) (from PRESEED| Interview)"]
-    return formCompleted === "Yes"
-  })
-
-  const scheduledList = prospects
-    .filter((p) => {
-      const interviewDateStr = p.fields["Interview Date (time)"]
-      if (!interviewDateStr) return false
-
-      try {
-        const interviewDate = new Date(interviewDateStr)
-        const now = new Date()
-        return interviewDate >= now
-      } catch (e) {
-        return false
-      }
-    })
-    .sort((a, b) => {
-      const dateA = new Date(a.fields["Interview Date (time)"] || 0)
-      const dateB = new Date(b.fields["Interview Date (time)"] || 0)
-      return dateA.getTime() - dateB.getTime() // Sort by soonest first
-    })
-    .slice(0, 5)
-
-  const recentInterviews = prospects.filter((p) => isInterviewCompleted(p.fields)).slice(0, 5)
-
-  const getStatusBadge = (status: string) => {
-    const normalizedStatus = status.toLowerCase()
-
-    if (normalizedStatus === "completed") {
-      return <Badge className="bg-green-500">{status}</Badge>
-    }
-    if (normalizedStatus === "scheduled") {
-      return <Badge className="bg-blue-500">{status}</Badge>
-    }
-    if (normalizedStatus === "cancelled") {
-      return <Badge variant="destructive">{status}</Badge>
-    }
-    if (normalizedStatus === "no show") {
-      return <Badge className="bg-amber-500">{status}</Badge>
-    }
-    return <Badge variant="secondary">{status}</Badge>
-  }
-
-  const getAcceptanceBadge = (status: string) => {
-    const normalizedStatus = status.toLowerCase()
-
-    if (normalizedStatus === "accepted") {
-      return <Badge className="bg-green-500">{status}</Badge>
-    }
-    if (normalizedStatus === "invited") {
-      return <Badge className="bg-blue-500">{status}</Badge>
-    }
-    if (normalizedStatus === "declined") {
-      return <Badge variant="destructive">{status}</Badge>
-    }
-    return <Badge variant="secondary">{status}</Badge>
-  }
-
-  const getSortedProspects = (prospectsToSort: ProspectRecord[]) => {
-    const sorted = [...prospectsToSort].sort((a, b) => {
-      let compareA: any
-      let compareB: any
-
-      switch (sortBy) {
-        case "name":
-          compareA = getProspectName(a.fields).toLowerCase()
-          compareB = getProspectName(b.fields).toLowerCase()
-          break
-        case "date":
-          compareA = a.fields["Interview Date (time)"] || ""
-          compareB = b.fields["Interview Date (time)"] || ""
-          break
-        case "status":
-          compareA = getInterviewStatus(a.fields).toLowerCase()
-          compareB = getInterviewStatus(b.fields).toLowerCase()
-          break
-        case "interviewer":
-          compareA = getInterviewerName(a.fields).toLowerCase()
-          compareB = getInterviewerName(b.fields).toLowerCase()
-          break
-        default:
-          return 0
-      }
-
-      if (compareA < compareB) return sortOrder === "asc" ? -1 : 1
-      if (compareA > compareB) return sortOrder === "asc" ? 1 : -1
-      return 0
-    })
-
-    return sorted
-  }
-
-  const getFilteredProspects = () => {
-    let filtered = prospects
-
-    if (filterBy === "completed") {
-      filtered = prospects.filter((p) => isInterviewCompleted(p.fields))
-    } else if (filterBy === "upcoming") {
-      filtered = prospects.filter((p) => {
-        const interviewDateStr = p.fields["Interview Date (time)"]
-        if (!interviewDateStr) return false
-
-        try {
-          const interviewDate = new Date(interviewDateStr)
-          const now = new Date()
-          return interviewDate >= now
-        } catch (e) {
-          return false
-        }
-      })
-    }
-
-    return getSortedProspects(filtered)
-  }
+  const pendingCount = prospects.filter((p) => {
+    const status = getInterviewStatus(p.fields).toLowerCase()
+    return !status.includes("complete") && !status.includes("done") && !status.includes("schedule")
+  }).length
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
-        <MainNavigation />
-        <div className="container mx-auto p-6">
-          <div className="flex items-center justify-center h-64">
-            <p className="text-muted-foreground">Loading prospects data...</p>
-          </div>
-        </div>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4A6FA5]"></div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-background">
-        <MainNavigation />
-        <div className="container mx-auto p-6">
-          <Card className="border-destructive">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-destructive" />
-                Error Loading Prospects
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground mb-4">{error}</p>
-              <Button onClick={fetchProspects} className="mt-4">
-                Retry
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Card className="p-6 max-w-md">
+          <div className="text-center">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-slate-900 mb-2">Error Loading Prospects</h2>
+            <p className="text-slate-600 mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()}>Try Again</Button>
+          </div>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50/20 to-blue-50/30">
+    <div className="min-h-screen bg-slate-50 pt-[81px] pl-12">
       <MainNavigation />
 
-      <div className="container mx-auto p-6 space-y-6">
-        <div className="bg-[#1A2332] text-white rounded-lg p-6 shadow-sm border border-slate-700/20">
-          <div className="flex items-center justify-between mb-4">
+      <div className="container mx-auto p-6">
+        <div className="mb-6">
+          <Link href="/" className="inline-flex items-center gap-2 text-[#4A6FA5] hover:underline mb-4">
+            <ArrowLeft className="w-4 h-4" />
+            Back to Dashboard
+          </Link>
+
+          <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold">Prospect Interview Dashboard</h1>
-              <p className="mt-1 opacity-90">Track and manage prospect interviews for PRESEED program</p>
+              <h1 className="text-3xl font-bold text-slate-900">Pre-SEED Prospect Interviews</h1>
+              <p className="text-slate-600 mt-1">Track and manage prospective student interviews</p>
             </div>
-          </div>
-          <div className="flex items-center justify-end gap-4">
-            <div className="flex flex-col items-end gap-2">
-              <Button
-                size="lg"
-                onClick={() => window.open("https://airtable.com/appv3eSA0Ab2lJLe0/pagr17MqbIGB0UuAl/form", "_blank")}
-                className="bg-[#5B7C99] text-white hover:bg-[#4A6FA5] shadow-sm"
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                Fill Out Interview Form
-              </Button>
-              <p className="text-xs opacity-90">
-                Password: <span className="font-mono font-semibold bg-white/20 px-2 py-1 rounded">SEED2025</span>
-              </p>
-            </div>
+            <Button className="bg-[#4A6FA5] hover:bg-[#3A5F95] gap-2">
+              <Plus className="h-4 w-4" />
+              Add New Prospect
+            </Button>
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card className="border border-slate-200/60 shadow-sm bg-white/95 backdrop-blur-sm">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-slate-700">Total Prospects</CardTitle>
-              <Users className="h-5 w-5 text-[#5B7C99]" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-[#1A2332]">{totalProspects}</div>
-              <p className="text-xs text-slate-500 mt-1">All prospect candidates</p>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <Card className="bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-[#4A6FA5]/10">
+                  <Users className="h-6 w-6 text-[#4A6FA5]" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-slate-900">{prospects.length}</p>
+                  <p className="text-sm text-slate-600">Total Prospects</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="border border-[#4A6FA5]/30 shadow-sm bg-white/95 backdrop-blur-sm">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-[#4A6FA5]">Scheduled Interviews</CardTitle>
-              <Calendar className="h-5 w-5 text-[#4A6FA5]" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-[#1A2332]">{scheduledInterviews}</div>
-              <p className="text-xs text-[#5B7C99] mt-1">Upcoming interviews</p>
+          <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-green-500/10">
+                  <CheckCircle className="h-6 w-6 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-green-900">{completedCount}</p>
+                  <p className="text-sm text-green-700">Completed</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="border border-[#8B7B8B]/30 shadow-sm bg-white/95 backdrop-blur-sm">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-[#8B7B8B]">Forms Needed</CardTitle>
-              <AlertCircle className="h-5 w-5 text-[#8B7B8B]" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-[#1A2332]">{completedInterviewsWithoutForm.length}</div>
-              <p className="text-xs text-[#8B7B8B] mt-1">Interviews missing forms</p>
+          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-blue-500/10">
+                  <Calendar className="h-6 w-6 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-blue-900">{scheduledCount}</p>
+                  <p className="text-sm text-blue-700">Scheduled</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          <Card className="border border-[#5B7C99]/30 shadow-sm bg-white/95 backdrop-blur-sm">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-[#5B7C99]">Forms Completed</CardTitle>
-              <CheckCircle className="h-5 w-5 text-[#5B7C99]" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-[#1A2332]">{completedInterviewsWithForm.length}</div>
-              <p className="text-xs text-[#5B7C99] mt-1">Fully documented</p>
+          <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-200">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-yellow-500/10">
+                  <Clock className="h-6 w-6 text-yellow-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-yellow-900">{pendingCount}</p>
+                  <p className="text-sm text-yellow-700">Pending</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
 
-        {completedInterviewsWithoutForm.length > 0 && (
-          <Collapsible open={isFormsNeededOpen} onOpenChange={setIsFormsNeededOpen}>
-            <Card className="border border-[#C4B5C4]/40 shadow-sm bg-white/95 backdrop-blur-sm">
-              <CardHeader className="bg-[#C4B5C4]/20 border-b border-[#C4B5C4]/30">
-                <CollapsibleTrigger asChild>
-                  <div className="flex items-center justify-between cursor-pointer hover:opacity-80 transition-opacity">
-                    <div className="flex items-center gap-3">
-                      <AlertCircle className="h-5 w-5 text-[#8B7B8B]" />
-                      <div>
-                        <CardTitle className="text-[#1A2332]">Completed Interviews - Form Needed</CardTitle>
-                        <CardDescription className="text-slate-600">
-                          These interviews have passed their scheduled date but the interview form has not been
-                          submitted yet
-                        </CardDescription>
-                      </div>
-                      <Badge variant="secondary" className="ml-2 bg-[#C4B5C4]/30 text-[#8B7B8B] text-sm px-2 py-1">
-                        {completedInterviewsWithoutForm.length}
-                      </Badge>
-                    </div>
-                    <Button variant="ghost" size="sm" className="text-slate-600 hover:text-slate-900">
-                      {isFormsNeededOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                    </Button>
-                  </div>
-                </CollapsibleTrigger>
+        <Tabs defaultValue="all" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="all">All Prospects</TabsTrigger>
+            <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
+            <TabsTrigger value="completed">Completed</TabsTrigger>
+            <TabsTrigger value="pending">Pending</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="all">
+            <Card>
+              <CardHeader>
+                <CardTitle>All Prospects</CardTitle>
+                <CardDescription>Complete list of all prospective students</CardDescription>
               </CardHeader>
-              <CollapsibleContent>
-                <CardContent className="bg-white pt-6">
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-slate-50/50">
-                          <TableHead className="text-slate-700">Name</TableHead>
-                          <TableHead className="text-slate-700">Email</TableHead>
-                          <TableHead className="text-slate-700">Interviewer</TableHead>
-                          <TableHead className="text-slate-700">Interview Schedule</TableHead>
-                          <TableHead className="text-slate-700">Status</TableHead>
-                          <TableHead className="text-slate-700">Action</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {completedInterviewsWithoutForm.map((prospect) => (
-                          <TableRow key={prospect.id} className="hover:bg-slate-50/50">
-                            <TableCell className="font-medium">{getProspectName(prospect.fields)}</TableCell>
-                            <TableCell className="text-sm">{prospect.fields["Student Email"] || "—"}</TableCell>
-                            <TableCell className="text-sm">{getInterviewerName(prospect.fields)}</TableCell>
-                            <TableCell className="text-sm font-medium">
-                              {getInterviewDateTime(prospect.fields) || "—"}
-                            </TableCell>
-                            <TableCell>{getStatusBadge(getInterviewStatus(prospect.fields))}</TableCell>
-                            <TableCell>
-                              <Button
-                                size="sm"
-                                className="bg-[#8B7B8B] hover:bg-[#8B7B8B]/80 text-white"
-                                onClick={() =>
-                                  window.open("https://airtable.com/appv3eSA0Ab2lJLe0/pagr17MqbIGB0UuAl/form", "_blank")
-                                }
-                              >
-                                <FileText className="h-3 w-3 mr-1" />
-                                Fill Form
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
-        )}
-
-        {completedInterviewsWithForm.length > 0 && (
-          <Card className="border border-[#5B7C99]/30 shadow-sm bg-white/95 backdrop-blur-sm">
-            <CardHeader className="bg-[#5B7C99]/10 border-b border-[#5B7C99]/20">
-              <div className="flex items-center gap-3">
-                <CheckCircle className="h-5 w-5 text-[#5B7C99]" />
-                <div>
-                  <CardTitle className="text-[#1A2332]">Completed Interview Forms</CardTitle>
-                  <CardDescription className="text-slate-600">Interviews with completed documentation</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="bg-white pt-6">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50/50">
-                      <TableHead className="text-slate-700">Name</TableHead>
-                      <TableHead className="text-slate-700">Email</TableHead>
-                      <TableHead className="text-slate-700">Interviewer</TableHead>
-                      <TableHead className="text-slate-700">Interview Schedule</TableHead>
-                      <TableHead className="text-slate-700">Acceptance Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {completedInterviewsWithForm.map((prospect) => (
-                      <TableRow key={prospect.id} className="hover:bg-slate-50/50">
-                        <TableCell className="font-medium">{getProspectName(prospect.fields)}</TableCell>
-                        <TableCell className="text-sm">{prospect.fields["Student Email"] || "—"}</TableCell>
-                        <TableCell className="text-sm">{getInterviewerName(prospect.fields)}</TableCell>
-                        <TableCell className="text-sm font-medium">
-                          {getInterviewDateTime(prospect.fields) || "—"}
-                        </TableCell>
-                        <TableCell>{getAcceptanceBadge(getAcceptanceStatus(prospect.fields))}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card className="border border-[#4A6FA5]/30 shadow-sm bg-white/95 backdrop-blur-sm">
-            <CardHeader className="bg-[#4A6FA5]/10 border-b border-[#4A6FA5]/20">
-              <div className="flex items-center gap-3">
-                <Clock className="h-5 w-5 text-[#4A6FA5]" />
-                <div>
-                  <CardTitle className="text-[#1A2332]">Scheduled Interviews</CardTitle>
-                  <CardDescription className="text-slate-600">Upcoming prospect interviews</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-6 bg-white">
-              {scheduledList.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-[500px] text-muted-foreground">
-                  <Calendar className="h-12 w-12 mb-2 opacity-20" />
-                  <p>No scheduled interviews</p>
-                </div>
-              ) : (
-                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
-                  {scheduledList.map((prospect) => (
-                    <div
+              <CardContent>
+                <div className="space-y-4">
+                  {prospects.map((prospect) => (
+                    <ProspectCard
                       key={prospect.id}
-                      className="flex items-center justify-between border-l-4 border-[#4A6FA5] bg-[#4A6FA5]/5 p-4 rounded-r-lg hover:bg-[#4A6FA5]/10 transition-colors"
-                    >
-                      <div className="flex-1">
-                        <p className="font-semibold text-lg text-[#1A2332]">{getProspectName(prospect.fields)}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Clock className="h-4 w-4 text-[#4A6FA5]" />
-                          <p className="text-sm text-[#5B7C99] font-medium">
-                            {getInterviewDateTime(prospect.fields) || "Date/Time TBD"}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <UserCheck className="h-4 w-4 text-slate-400" />
-                          <p className="text-xs text-slate-600">Interviewer: {getInterviewerName(prospect.fields)}</p>
-                        </div>
-                        {getInterviewLink(prospect.fields) && (
-                          <a
-                            href={getInterviewLink(prospect.fields)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-[#4A6FA5] hover:text-[#5B7C99] font-medium flex items-center gap-1 mt-2"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                            Join Interview
-                          </a>
-                        )}
-                      </div>
-                      <div className="flex flex-col gap-2 items-end">
-                        {getStatusBadge(getInterviewStatus(prospect.fields))}
-                        {getAcceptanceBadge(getAcceptanceStatus(prospect.fields))}
-                      </div>
-                    </div>
+                      prospect={prospect}
+                      getProspectName={getProspectName}
+                      getInterviewStatus={getInterviewStatus}
+                      getInterviewDate={getInterviewDate}
+                      getInterviewTime={getInterviewTime}
+                      getEmail={getEmail}
+                      getPhone={getPhone}
+                      getInterviewer={getInterviewer}
+                      getClinic={getClinic}
+                      getNotes={getNotes}
+                      getStatusColor={getStatusColor}
+                      getStatusIcon={getStatusIcon}
+                    />
                   ))}
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-          <Card className="border border-[#C4B5C4]/40 shadow-sm bg-white/95 backdrop-blur-sm">
-            <CardHeader className="bg-[#C4B5C4]/10 border-b border-[#C4B5C4]/20">
-              <div className="flex items-center gap-3">
-                <CheckCircle className="h-5 w-5 text-[#8B7B8B]" />
-                <div>
-                  <CardTitle className="text-[#1A2332]">All Completed Interviews</CardTitle>
-                  <CardDescription className="text-slate-600">
-                    Interviews with past scheduled dates ({completedInterviews} total)
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-6 bg-white">
-              {completedInterviews === 0 ? (
-                <div className="flex flex-col items-center justify-center h-[500px] text-muted-foreground">
-                  <CheckCircle className="h-12 w-12 mb-2 opacity-20" />
-                  <p>No completed interviews</p>
-                </div>
-              ) : (
-                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+          <TabsContent value="scheduled">
+            <Card>
+              <CardHeader>
+                <CardTitle>Scheduled Interviews</CardTitle>
+                <CardDescription>Upcoming interviews that have been confirmed</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
                   {prospects
-                    .filter((p) => isInterviewCompleted(p.fields))
-                    .map((prospect) => {
-                      const formCompleted = prospect.fields["PRESEED (Y/N) (from PRESEED| Interview)"] === "Yes"
-                      return (
-                        <div
-                          key={prospect.id}
-                          className={`flex items-center justify-between border-l-4 ${
-                            formCompleted ? "border-[#5B7C99] bg-[#5B7C99]/5" : "border-[#8B7B8B] bg-[#C4B5C4]/10"
-                          } p-4 rounded-r-lg hover:opacity-80 transition-opacity`}
-                        >
-                          <div className="flex-1">
-                            <p className="font-semibold text-[#1A2332]">{getProspectName(prospect.fields)}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <UserCheck className="h-3 w-3 text-slate-400" />
-                              <p className="text-xs text-slate-600">
-                                Interviewer: {getInterviewerName(prospect.fields)}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Clock className="h-3 w-3 text-slate-400" />
-                              <p className="text-xs text-slate-600 font-medium">
-                                Scheduled: {getInterviewDateTime(prospect.fields) || "—"}
-                              </p>
-                            </div>
-                            {!formCompleted && (
-                              <div className="flex items-center gap-1 mt-2">
-                                <AlertCircle className="h-3 w-3 text-[#8B7B8B]" />
-                                <p className="text-xs text-[#8B7B8B] font-medium">Form needed</p>
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex flex-col gap-2 items-end">
-                            {formCompleted ? (
-                              <Badge className="bg-[#5B7C99] text-white">
-                                <CheckCircle className="h-3 w-3 mr-1" />
-                                Form Complete
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-[#8B7B8B] text-white">
-                                <AlertCircle className="h-3 w-3 mr-1" />
-                                Form Pending
-                              </Badge>
-                            )}
-                            {getAcceptanceBadge(getAcceptanceStatus(prospect.fields))}
-                          </div>
-                        </div>
-                      )
-                    })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="border border-slate-200/60 shadow-sm bg-white/95 backdrop-blur-sm">
-          <CardHeader className="bg-[#1A2332] text-white border-b border-slate-700/20">
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <Users className="h-5 w-5" />
-                <div>
-                  <CardTitle>All Prospects</CardTitle>
-                  <CardDescription className="text-white/80">
-                    Complete list of prospect candidates ({getFilteredProspects().length} shown)
-                  </CardDescription>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <Filter className="h-4 w-4 text-white" />
-                  <Select value={filterBy} onValueChange={(value: any) => setFilterBy(value)}>
-                    <SelectTrigger className="w-[180px] bg-white text-slate-900">
-                      <SelectValue placeholder="Filter by..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Prospects</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="upcoming">Upcoming</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center gap-2">
-                  <ArrowUpDown className="h-4 w-4 text-white" />
-                  <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
-                    <SelectTrigger className="w-[180px] bg-white text-slate-900">
-                      <SelectValue placeholder="Sort by..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="name">Name</SelectItem>
-                      <SelectItem value="date">Interview Date</SelectItem>
-                      <SelectItem value="status">Status</SelectItem>
-                      <SelectItem value="interviewer">Interviewer</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-                    className="text-white hover:bg-white/10"
-                  >
-                    {sortOrder === "asc" ? "↑" : "↓"}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-6 bg-white">
-            {getFilteredProspects().length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
-                <Users className="h-12 w-12 mb-2 opacity-20" />
-                <p>No prospects found for this filter</p>
-              </div>
-            ) : (
-              <div className="max-h-[500px] overflow-y-auto overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50/50">
-                      <TableHead className="font-semibold text-slate-700">Name</TableHead>
-                      <TableHead className="font-semibold text-slate-700">Email</TableHead>
-                      <TableHead className="font-semibold text-slate-700">Interviewer</TableHead>
-                      <TableHead className="font-semibold text-slate-700">Interview Schedule</TableHead>
-                      <TableHead className="font-semibold text-slate-700">Interview Status</TableHead>
-                      <TableHead className="font-semibold text-slate-700">Acceptance Status</TableHead>
-                      <TableHead className="font-semibold text-slate-700">Interview Link</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {getFilteredProspects().map((prospect) => (
-                      <TableRow key={prospect.id} className="hover:bg-slate-50/50">
-                        <TableCell className="font-medium">{getProspectName(prospect.fields)}</TableCell>
-                        <TableCell className="text-sm">{prospect.fields["Student Email"] || "—"}</TableCell>
-                        <TableCell className="text-sm">{getInterviewerName(prospect.fields)}</TableCell>
-                        <TableCell className="text-sm font-medium">
-                          {getInterviewDateTime(prospect.fields) || "—"}
-                        </TableCell>
-                        <TableCell>{getStatusBadge(getInterviewStatus(prospect.fields))}</TableCell>
-                        <TableCell>{getAcceptanceBadge(getAcceptanceStatus(prospect.fields))}</TableCell>
-                        <TableCell>
-                          {getInterviewLink(prospect.fields) ? (
-                            <a
-                              href={getInterviewLink(prospect.fields)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[#4A6FA5] hover:text-[#5B7C99] font-medium flex items-center gap-1"
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                              Join
-                            </a>
-                          ) : (
-                            "—"
-                          )}
-                        </TableCell>
-                      </TableRow>
+                    .filter((p) => {
+                      const status = getInterviewStatus(p.fields).toLowerCase()
+                      return status.includes("schedule") || status.includes("confirm")
+                    })
+                    .map((prospect) => (
+                      <ProspectCard
+                        key={prospect.id}
+                        prospect={prospect}
+                        getProspectName={getProspectName}
+                        getInterviewStatus={getInterviewStatus}
+                        getInterviewDate={getInterviewDate}
+                        getInterviewTime={getInterviewTime}
+                        getEmail={getEmail}
+                        getPhone={getPhone}
+                        getInterviewer={getInterviewer}
+                        getClinic={getClinic}
+                        getNotes={getNotes}
+                        getStatusColor={getStatusColor}
+                        getStatusIcon={getStatusIcon}
+                      />
                     ))}
-                  </TableBody>
-                </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="completed">
+            <Card>
+              <CardHeader>
+                <CardTitle>Completed Interviews</CardTitle>
+                <CardDescription>Interviews that have been conducted</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {prospects
+                    .filter((p) => {
+                      const status = getInterviewStatus(p.fields).toLowerCase()
+                      return status.includes("complete") || status.includes("done")
+                    })
+                    .map((prospect) => (
+                      <ProspectCard
+                        key={prospect.id}
+                        prospect={prospect}
+                        getProspectName={getProspectName}
+                        getInterviewStatus={getInterviewStatus}
+                        getInterviewDate={getInterviewDate}
+                        getInterviewTime={getInterviewTime}
+                        getEmail={getEmail}
+                        getPhone={getPhone}
+                        getInterviewer={getInterviewer}
+                        getClinic={getClinic}
+                        getNotes={getNotes}
+                        getStatusColor={getStatusColor}
+                        getStatusIcon={getStatusIcon}
+                      />
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="pending">
+            <Card>
+              <CardHeader>
+                <CardTitle>Pending Interviews</CardTitle>
+                <CardDescription>Prospects awaiting interview scheduling</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {prospects
+                    .filter((p) => {
+                      const status = getInterviewStatus(p.fields).toLowerCase()
+                      return !status.includes("complete") && !status.includes("done") && !status.includes("schedule")
+                    })
+                    .map((prospect) => (
+                      <ProspectCard
+                        key={prospect.id}
+                        prospect={prospect}
+                        getProspectName={getProspectName}
+                        getInterviewStatus={getInterviewStatus}
+                        getInterviewDate={getInterviewDate}
+                        getInterviewTime={getInterviewTime}
+                        getEmail={getEmail}
+                        getPhone={getPhone}
+                        getInterviewer={getInterviewer}
+                        getClinic={getClinic}
+                        getNotes={getNotes}
+                        getStatusColor={getStatusColor}
+                        getStatusIcon={getStatusIcon}
+                      />
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  )
+}
+
+function ProspectCard({
+  prospect,
+  getProspectName,
+  getInterviewStatus,
+  getInterviewDate,
+  getInterviewTime,
+  getEmail,
+  getPhone,
+  getInterviewer,
+  getClinic,
+  getNotes,
+  getStatusColor,
+  getStatusIcon,
+}: {
+  prospect: ProspectRecord
+  getProspectName: (fields: ProspectRecord["fields"]) => string
+  getInterviewStatus: (fields: ProspectRecord["fields"]) => string
+  getInterviewDate: (fields: ProspectRecord["fields"]) => string | undefined
+  getInterviewTime: (fields: ProspectRecord["fields"]) => string
+  getEmail: (fields: ProspectRecord["fields"]) => string
+  getPhone: (fields: ProspectRecord["fields"]) => string
+  getInterviewer: (fields: ProspectRecord["fields"]) => string
+  getClinic: (fields: ProspectRecord["fields"]) => string
+  getNotes: (fields: ProspectRecord["fields"]) => string
+  getStatusColor: (status: string) => string
+  getStatusIcon: (status: string) => React.ReactNode
+}) {
+  const status = getInterviewStatus(prospect.fields)
+  const date = getInterviewDate(prospect.fields)
+  const time = getInterviewTime(prospect.fields)
+
+  return (
+    <div className="p-4 rounded-lg border bg-white hover:shadow-md transition-shadow">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1">
+          <div className="flex items-center gap-3 mb-2">
+            <h3 className="font-semibold text-slate-900">{getProspectName(prospect.fields)}</h3>
+            <Badge className={`${getStatusColor(status)} flex items-center gap-1`}>
+              {getStatusIcon(status)}
+              {status}
+            </Badge>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            {date && (
+              <div className="flex items-center gap-2 text-slate-600">
+                <Calendar className="h-4 w-4" />
+                <span>
+                  {new Date(date).toLocaleDateString()}
+                  {time && ` at ${time}`}
+                </span>
               </div>
             )}
-          </CardContent>
-        </Card>
+
+            {getEmail(prospect.fields) && (
+              <div className="flex items-center gap-2 text-slate-600">
+                <Mail className="h-4 w-4" />
+                <span>{getEmail(prospect.fields)}</span>
+              </div>
+            )}
+
+            {getPhone(prospect.fields) && (
+              <div className="flex items-center gap-2 text-slate-600">
+                <Phone className="h-4 w-4" />
+                <span>{getPhone(prospect.fields)}</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 text-slate-600">
+              <User className="h-4 w-4" />
+              <span>{getInterviewer(prospect.fields)}</span>
+            </div>
+
+            <div className="flex items-center gap-2 text-slate-600">
+              <Building className="h-4 w-4" />
+              <span>{getClinic(prospect.fields)}</span>
+            </div>
+          </div>
+
+          {getNotes(prospect.fields) && (
+            <p className="mt-3 text-sm text-slate-500 italic">{getNotes(prospect.fields)}</p>
+          )}
+        </div>
       </div>
     </div>
   )

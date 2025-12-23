@@ -27,28 +27,44 @@ interface StudentSubmissionsProps {
 const CLINIC_COLORS = {
   Consulting: { bg: "bg-[#4A6FA5]/10", border: "border-[#4A6FA5]/30", text: "text-[#4A6FA5]" },
   Accounting: { bg: "bg-[#5B7C99]/10", border: "border-[#5B7C99]/30", text: "text-[#5B7C99]" },
-  Funding: { bg: "bg-[#8B7B8B]/10", border: "border-[#8B7B8B]/30", text: "text-[#8B7B8B]" },
+  "Resource Acquisition": { bg: "bg-[#8B7B8B]/10", border: "border-[#8B7B8B]/30", text: "text-[#8B7B8B]" },
   Marketing: { bg: "bg-[#C4B5C4]/10", border: "border-[#C4B5C4]/30", text: "text-[#C4B5C4]" },
 }
+
+const mockSubmissions: Submission[] = [
+  {
+    id: "1",
+    fields: {
+      "Student Name": "John Smith",
+      Client: "Serene Cycle",
+      Description: "Financial analysis report Q4",
+      "Document URL": "#",
+      "Related Clinic": "Accounting",
+      "Date Submitted": "2025-01-15",
+      Status: "Pending Review",
+    },
+  },
+  {
+    id: "2",
+    fields: {
+      "Student Name": "Jane Doe",
+      Client: "Tech Startup",
+      Description: "Marketing strategy presentation",
+      "Document URL": "#",
+      "Related Clinic": "Marketing",
+      "Date Submitted": "2025-01-14",
+      Status: "Reviewed",
+    },
+  },
+]
 
 export function StudentSubmissions({ selectedWeek, selectedClinic }: StudentSubmissionsProps) {
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function fetchSubmissions() {
-      try {
-        const response = await fetch("/api/airtable/submissions")
-        const data = await response.json()
-        setSubmissions(data.records || [])
-      } catch (error) {
-        console.error("Error fetching submissions:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchSubmissions()
+    setSubmissions(mockSubmissions)
+    setLoading(false)
   }, [])
 
   const filteredSubmissions = submissions.filter((submission) => {

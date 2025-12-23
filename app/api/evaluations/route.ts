@@ -1,13 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-
-function getSupabaseClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-}
+import { createClient } from "@/lib/supabase/server"
+import { requireAuth } from "@/lib/security/auth-middleware"
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseClient()
+    const { authorized, error } = await requireAuth()
+    if (!authorized) return error
+
+    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     const documentId = searchParams.get("documentId")
 
@@ -15,27 +15,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Document ID is required" }, { status: 400 })
     }
 
-    const { data, error } = await supabase
+    const { data, error: queryError } = await supabase
       .from("evaluations")
       .select("*")
       .eq("document_id", documentId)
       .order("created_at", { ascending: false })
 
-    if (error) {
-      console.error("[v0] Error fetching evaluations:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (queryError) {
+      console.error("Error fetching evaluations:", queryError)
+      return NextResponse.json({ error: queryError.message }, { status: 500 })
     }
 
     return NextResponse.json({ evaluations: data || [] })
   } catch (error) {
-    console.error("[v0] Error in evaluations GET:", error)
+    console.error("Error in evaluations GET:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = getSupabaseClient()
+    const { authorized, error } = await requireAuth()
+    if (!authorized) return error
+
+    const supabase = await createClient()
     const body = await request.json()
     const {
       documentId,
@@ -57,6 +60,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Document ID and director name are required" }, { status: 400 })
     }
 
+    if (typeof directorName !== "string" || directorName.length > 255) {
+      return NextResponse.json({ error: "Invalid director name" }, { status: 400 })
+    }
+
+    const ratings = [question1Rating, question2Rating, question3Rating, question4Rating, question5Rating]
+    if (ratings.some((r) => r !== undefined && (typeof r !== "number" || r < 1 || r > 5))) {
+      return NextResponse.json({ error: "Ratings must be between 1 and 5" }, { status: 400 })
+    }
+
     // Check if evaluation already exists
     const { data: existing } = await supabase
       .from("evaluations")
@@ -66,7 +78,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (existing) {
-      const { data, error } = await supabase
+      const { data, error: updateError } = await supabase
         .from("evaluations")
         .update({
           question_1_rating: question1Rating,
@@ -74,54 +86,54 @@ export async function POST(request: NextRequest) {
           question_3_rating: question3Rating,
           question_4_rating: question4Rating,
           question_5_rating: question5Rating,
-          question_1_notes: question1Notes,
-          question_2_notes: question2Notes,
-          question_3_notes: question3Notes,
-          question_4_notes: question4Notes,
-          question_5_notes: question5Notes,
-          additional_comments: additionalComments,
+          question_1_notes: question1Notes?.trim(),
+          question_2_notes: question2Notes?.trim(),
+          question_3_notes: question3Notes?.trim(),
+          question_4_notes: question4Notes?.trim(),
+          question_5_notes: question5Notes?.trim(),
+          additional_comments: additionalComments?.trim(),
           updated_at: new Date().toISOString(),
         })
         .eq("id", existing.id)
         .select()
         .single()
 
-      if (error) {
-        console.error("[v0] Error updating evaluation:", error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+      if (updateError) {
+        console.error("Error updating evaluation:", updateError)
+        return NextResponse.json({ error: updateError.message }, { status: 500 })
       }
 
       return NextResponse.json({ evaluation: data })
     } else {
-      const { data, error } = await supabase
+      const { data, error: insertError } = await supabase
         .from("evaluations")
         .insert({
           document_id: documentId,
-          director_name: directorName,
+          director_name: directorName.trim(),
           question_1_rating: question1Rating,
           question_2_rating: question2Rating,
           question_3_rating: question3Rating,
           question_4_rating: question4Rating,
           question_5_rating: question5Rating,
-          question_1_notes: question1Notes,
-          question_2_notes: question2Notes,
-          question_3_notes: question3Notes,
-          question_4_notes: question4Notes,
-          question_5_notes: question5Notes,
-          additional_comments: additionalComments,
+          question_1_notes: question1Notes?.trim(),
+          question_2_notes: question2Notes?.trim(),
+          question_3_notes: question3Notes?.trim(),
+          question_4_notes: question4Notes?.trim(),
+          question_5_notes: question5Notes?.trim(),
+          additional_comments: additionalComments?.trim(),
         })
         .select()
         .single()
 
-      if (error) {
-        console.error("[v0] Error creating evaluation:", error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+      if (insertError) {
+        console.error("Error creating evaluation:", insertError)
+        return NextResponse.json({ error: insertError.message }, { status: 500 })
       }
 
       return NextResponse.json({ evaluation: data })
     }
   } catch (error) {
-    console.error("[v0] Error in evaluations POST:", error)
+    console.error("Error in evaluations POST:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

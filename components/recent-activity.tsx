@@ -18,72 +18,48 @@ interface Activity {
 }
 
 interface RecentActivityProps {
-  selectedWeek: string
-  selectedClinic: string // Added selectedClinic prop
+  selectedWeeks: string[]
+  selectedClinic: string
 }
 
-export function RecentActivity({ selectedWeek, selectedClinic }: RecentActivityProps) {
+export function RecentActivity({ selectedWeeks, selectedClinic }: RecentActivityProps) {
   const [activities, setActivities] = useState<Activity[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function fetchActivity() {
+    async function fetchData() {
+      setLoading(true)
       try {
-        const debriefsRes = await fetch("/api/airtable/debriefs")
+        const res = await fetch("/api/supabase/debriefs")
+        if (res.ok) {
+          const data = await res.json()
+          const debriefs = data.debriefs || []
 
-        if (!debriefsRes.ok) {
-          throw new Error("Failed to fetch debriefs")
-        }
-
-        const debriefsData = await debriefsRes.json()
-
-        if (debriefsData.records) {
-          const filteredRecords = debriefsData.records.filter((record: any) => {
-            const fields = record.fields
-            const weekEnding = fields["END DATE (from WEEK (from SEED | Schedule))"]
-            const dateSubmitted = fields["Date Submitted"]
-
-            let recordWeek = ""
-            if (weekEnding) {
-              recordWeek = Array.isArray(weekEnding) ? weekEnding[0] : weekEnding
-            } else if (dateSubmitted) {
-              const date = new Date(dateSubmitted)
-              const day = date.getDay()
-              const diff = 6 - day
-              const weekEndingDate = new Date(date)
-              weekEndingDate.setDate(date.getDate() + diff)
-              recordWeek = weekEndingDate.toISOString().split("T")[0]
-            }
-
-            const relatedClinic = fields["Related Clinic"]
+          const filteredRecords = debriefs.filter((debrief: any) => {
+            const recordWeek = debrief.week_ending || debrief.weekEnding || ""
+            const relatedClinic = debrief.clinic || ""
             const matchesClinic = selectedClinic === "all" || relatedClinic === selectedClinic
-
-            return recordWeek === selectedWeek && matchesClinic
+            const matchesWeek = selectedWeeks.length === 0 || selectedWeeks.includes(recordWeek)
+            return matchesWeek && matchesClinic
           })
 
           const sortedRecords = filteredRecords
             .sort((a: any, b: any) => {
-              const dateA = new Date(a.fields["Date Submitted"] || 0)
-              const dateB = new Date(b.fields["Date Submitted"] || 0)
+              const dateA = new Date(a.week_ending || a.weekEnding || 0)
+              const dateB = new Date(b.week_ending || b.weekEnding || 0)
               return dateB.getTime() - dateA.getTime()
             })
             .slice(0, 10)
 
-          const activityList: Activity[] = sortedRecords.map((record: any) => {
-            const fields = record.fields
-            const studentName = fields["NAME (from SEED | Students)"]
-              ? Array.isArray(fields["NAME (from SEED | Students)"])
-                ? fields["NAME (from SEED | Students)"][0]
-                : fields["NAME (from SEED | Students)"]
-              : fields["Student Name"] || "Unknown Student"
-            const hours = Number.parseFloat(fields["Number of Hours Worked"] || "0")
-            const workDescription = fields["Summary of Work"] || ""
-            const clinic = fields["Related Clinic"] || ""
-
+          const activityList: Activity[] = sortedRecords.map((debrief: any) => {
+            const studentName = debrief.student_name || debrief.studentName || "Unknown"
+            const hours = Number.parseFloat(debrief.hours_worked || debrief.hoursWorked || "0")
+            const workDescription = debrief.work_summary || debrief.workSummary || ""
+            const clinic = debrief.clinic || ""
             const workPreview = workDescription.length > 60 ? `${workDescription.substring(0, 60)}...` : workDescription
 
             return {
-              id: record.id,
+              id: debrief.id,
               type: "debrief",
               student: studentName,
               description: `Logged ${hours} hours`,
@@ -97,14 +73,14 @@ export function RecentActivity({ selectedWeek, selectedClinic }: RecentActivityP
           setActivities(activityList)
         }
       } catch (error) {
-        console.error("[v0] Error fetching recent activity:", error)
+        console.error("Error fetching debriefs:", error)
       } finally {
         setLoading(false)
       }
     }
 
-    fetchActivity()
-  }, [selectedWeek, selectedClinic]) // Added selectedClinic to dependencies
+    fetchData()
+  }, [selectedWeeks, selectedClinic])
 
   const getInitials = (name: string) => {
     return name

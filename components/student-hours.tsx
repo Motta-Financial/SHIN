@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card"
 import { useEffect, useState } from "react"
 import { ChevronRight, X } from "lucide-react"
 import { getClinicColor } from "@/lib/clinic-colors"
+import Link from "next/link"
 
 interface DebriefRecord {
   weekEnding: string
@@ -21,11 +22,11 @@ interface StudentSummary {
 }
 
 interface StudentHoursProps {
-  selectedWeek: string
-  selectedClinic: string // Added selectedClinic prop
+  selectedWeeks: string[]
+  selectedClinic: string
 }
 
-export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps) {
+export function StudentHours({ selectedWeeks, selectedClinic }: StudentHoursProps) {
   const [data, setData] = useState<StudentSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [groupBy, setGroupBy] = useState<"clinic" | "client">("clinic")
@@ -52,7 +53,7 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
   useEffect(() => {
     async function fetchHoursData() {
       try {
-        const debriefsRes = await fetch("/api/airtable/debriefs")
+        const debriefsRes = await fetch("/api/supabase/debriefs")
 
         if (!debriefsRes.ok) {
           throw new Error("Failed to fetch data")
@@ -61,7 +62,7 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
         const debriefsData = await debriefsRes.json()
 
         console.log("[v0] Student Hours - Total debrief records:", debriefsData.records?.length || 0)
-        console.log("[v0] Student Hours - Selected week:", selectedWeek)
+        console.log("[v0] Student Hours - Selected weeks:", selectedWeeks)
         console.log("[v0] Student Hours - Selected clinic:", selectedClinic)
 
         const studentMap = new Map<string, StudentSummary>()
@@ -71,51 +72,28 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
           debriefsData.records.forEach((record: any) => {
             const fields = record.fields
 
-            const weekEnding = fields["END DATE (from WEEK (from SEED | Schedule))"]
-              ? Array.isArray(fields["END DATE (from WEEK (from SEED | Schedule))"])
-                ? fields["END DATE (from WEEK (from SEED | Schedule))"][0]
-                : fields["END DATE (from WEEK (from SEED | Schedule))"]
-              : null
+            const recordWeek = fields.week_ending || ""
 
-            const dateSubmitted = fields["Date Submitted"]
+            const filterClinic =
+              selectedClinic === "all" ? "all" : directorToClinicMap.get(selectedClinic) || selectedClinic
 
-            let recordWeek = ""
-            if (weekEnding) {
-              recordWeek = weekEnding
-            } else if (dateSubmitted) {
-              const date = new Date(dateSubmitted)
-              const day = date.getDay()
-              const diff = 6 - day
-              const weekEndingDate = new Date(date)
-              weekEndingDate.setDate(date.getDate() + diff)
-              recordWeek = weekEndingDate.toISOString().split("T")[0]
-            }
+            const studentClinic = fields.clinic || "Unknown"
 
-            const roleField = fields["ROLE (from SEED | Students)"]
-            const studentRole = Array.isArray(roleField) ? roleField[0] : roleField
-            const studentClinic =
-              roleToClinicMap.get(studentRole?.toUpperCase()) || fields["Related Clinic"] || "Unknown"
+            const matchesClinic = filterClinic === "all" || studentClinic === filterClinic
+            const matchesWeek = selectedWeeks.includes(recordWeek)
 
-            const matchesClinic = selectedClinic === "all" || studentClinic === directorToClinicMap.get(selectedClinic)
-
-            if (recordWeek !== selectedWeek || !matchesClinic) {
+            if (!matchesWeek || !matchesClinic) {
               return
             }
 
             filteredRecordsCount++
 
-            const studentName = fields["NAME (from SEED | Students)"]
-              ? Array.isArray(fields["NAME (from SEED | Students)"])
-                ? fields["NAME (from SEED | Students)"][0]
-                : fields["NAME (from SEED | Students)"]
-              : fields["Student Name"] || "Unknown Student"
+            const studentName = fields.client_name || "Unknown Client"
 
-            const clientField = fields["Client"]
-            const clientName = Array.isArray(clientField) ? clientField[0] : clientField
-            const client = clientName?.trim() || "No Client"
+            const client = fields.client_name?.trim() || "No Client"
             const clinic = studentClinic
-            const hours = Number.parseFloat(fields["Number of Hours Worked"] || "0")
-            const workSummary = fields["Summary of Work"] || "No summary provided"
+            const hours = Number.parseFloat(fields.total_hours || "0")
+            const workSummary = fields.summary || "No summary provided"
 
             if (!studentMap.has(studentName)) {
               studentMap.set(studentName, {
@@ -157,7 +135,7 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
     }
 
     fetchHoursData()
-  }, [selectedWeek, selectedClinic]) // Added selectedClinic to dependencies
+  }, [selectedWeeks, selectedClinic])
 
   const totalHours = data.reduce((sum, student) => sum + student.totalHours, 0)
 
@@ -173,15 +151,18 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
     {} as Record<string, StudentSummary[]>,
   )
 
+  const maxDisplay = 10
+  const hasMoreStudents = data.length > maxDisplay
+
   if (loading) {
     return (
-      <Card className="p-6 bg-white border-[#002855]/20 shadow-lg">
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-[#002855]">Student Hours Summary</h2>
-          <p className="text-sm text-[#002855]/70">Hours breakdown by student</p>
+      <Card className="p-4 bg-white border-[#002855]/20 shadow-lg">
+        <div className="mb-4">
+          <h2 className="text-lg font-bold text-[#002855]">Student Hours Summary</h2>
+          <p className="text-xs text-[#002855]/70">Hours breakdown by student</p>
         </div>
-        <div className="flex items-center justify-center h-[300px]">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0077B6]"></div>
+        <div className="flex items-center justify-center h-[200px]">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#0077B6]"></div>
         </div>
       </Card>
     )
@@ -189,37 +170,37 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
 
   return (
     <>
-      <Card className="p-6 bg-gradient-to-br from-blue-500/10 via-blue-400/5 to-blue-600/10 border-2 border-blue-200/50 shadow-lg backdrop-blur-sm">
-        <div className="mb-6">
-          <div className="flex items-start justify-between mb-4">
+      <Card className="p-4 bg-gradient-to-br from-blue-500/5 via-blue-400/5 to-blue-600/5 border border-blue-200/50 shadow-lg backdrop-blur-sm">
+        <div className="mb-4">
+          <div className="flex items-start justify-between mb-3">
             <div>
-              <h2 className="text-2xl font-bold text-[#002855]">Student Hours Summary</h2>
-              <p className="text-sm text-[#002855]/70">Click on a student to view detailed records</p>
+              <h2 className="text-lg font-bold text-[#002855]">Student Hours Summary</h2>
+              <p className="text-xs text-[#002855]/70">Click on a student to view detailed records</p>
             </div>
-            <div className="bg-blue-500/20 backdrop-blur-sm rounded-lg p-3 shadow-md text-center border-2 border-blue-300/50">
-              <p className="text-2xl font-bold text-blue-700">{totalHours.toFixed(1)}</p>
+            <div className="bg-blue-500/20 backdrop-blur-sm rounded-lg p-2 shadow-md text-center border border-blue-300/50">
+              <p className="text-xl font-bold text-blue-700">{totalHours.toFixed(1)}</p>
               <p className="text-xs text-blue-600">Total Hours</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 mb-4">
-            <label className="text-sm font-medium text-[#002855]">Group by:</label>
+          <div className="flex items-center gap-2 mb-3">
+            <label className="text-xs font-medium text-[#002855]">Group by:</label>
             <button
               onClick={() => setGroupBy("clinic")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 groupBy === "clinic"
-                  ? "bg-blue-600 text-white shadow-lg"
-                  : "bg-blue-100/50 text-blue-700 border-2 border-blue-200 hover:bg-blue-200/50"
+                  ? "bg-blue-600 text-white shadow-md"
+                  : "bg-blue-100/50 text-blue-700 border border-blue-200 hover:bg-blue-200/50"
               }`}
             >
               Clinic
             </button>
             <button
               onClick={() => setGroupBy("client")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 groupBy === "client"
-                  ? "bg-blue-600 text-white shadow-lg"
-                  : "bg-blue-100/50 text-blue-700 border-2 border-blue-200 hover:bg-blue-200/50"
+                  ? "bg-blue-600 text-white shadow-md"
+                  : "bg-blue-100/50 text-blue-700 border border-blue-200 hover:bg-blue-200/50"
               }`}
             >
               Client
@@ -228,72 +209,82 @@ export function StudentHours({ selectedWeek, selectedClinic }: StudentHoursProps
         </div>
 
         {Object.keys(groupedData).length > 0 ? (
-          <div className="space-y-6">
-            {Object.entries(groupedData).map(([groupName, students]) => {
-              const groupTotal = students.reduce((sum, s) => sum + s.totalHours, 0)
-              const colors = groupBy === "clinic" ? getClinicColor(groupName) : { hex: "#0077B6", bg: "bg-[#0077B6]" }
+          <div className="space-y-3">
+            {Object.entries(groupedData)
+              .slice(0, maxDisplay)
+              .map(([groupName, students]) => {
+                const groupTotal = students.reduce((sum, s) => sum + s.totalHours, 0)
+                const colors = groupBy === "clinic" ? getClinicColor(groupName) : { hex: "#0077B6", bg: "bg-[#0077B6]" }
 
-              return (
-                <div
-                  key={groupName}
-                  className="bg-white/90 backdrop-blur-sm rounded-lg p-4 shadow-lg border-2"
-                  style={{ borderColor: colors.hex }}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${colors.bg}`} />
-                      <h3 className="text-lg font-bold text-[#002855]">{groupName}</h3>
+                return (
+                  <div
+                    key={groupName}
+                    className="bg-white/90 backdrop-blur-sm rounded-lg p-3 shadow-md border"
+                    style={{ borderColor: colors.hex }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${colors.bg}`} />
+                        <h3 className="text-sm font-bold text-[#002855]">{groupName}</h3>
+                      </div>
+                      <span className="text-xs font-medium" style={{ color: colors.hex }}>
+                        {groupTotal.toFixed(1)} hours total
+                      </span>
                     </div>
-                    <span className="text-sm font-medium" style={{ color: colors.hex }}>
-                      {groupTotal.toFixed(1)} hours total
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    {students.map((student) => (
-                      <button
-                        key={student.name}
-                        onClick={() => setSelectedStudent(student)}
-                        className="w-full flex items-center justify-between p-3 rounded-lg bg-white border-2 hover:shadow-md transition-all group"
-                        style={{ borderColor: `${colors.hex}30` }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.borderColor = colors.hex
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.borderColor = `${colors.hex}30`
-                        }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-10 h-10 rounded-full ${colors.bg} flex items-center justify-center text-white font-bold`}
-                          >
-                            {student.name.charAt(0)}
+                    <div className="space-y-1.5">
+                      {students.map((student) => (
+                        <button
+                          key={student.name}
+                          onClick={() => setSelectedStudent(student)}
+                          className="w-full flex items-center justify-between p-2 rounded-lg bg-white border hover:shadow-md transition-all group"
+                          style={{ borderColor: `${colors.hex}30` }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.borderColor = colors.hex
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.borderColor = `${colors.hex}30`
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`w-8 h-8 rounded-full ${colors.bg} flex items-center justify-center text-white font-bold text-sm`}
+                            >
+                              {student.name.charAt(0)}
+                            </div>
+                            <div className="text-left">
+                              <p className="font-medium text-[#002855] text-sm">{student.name}</p>
+                              <p className="text-xs text-[#002855]/70">
+                                {student.records.length} {student.records.length === 1 ? "entry" : "entries"}
+                              </p>
+                            </div>
                           </div>
-                          <div className="text-left">
-                            <p className="font-medium text-[#002855]">{student.name}</p>
-                            <p className="text-xs text-[#002855]/70">
-                              {student.records.length} {student.records.length === 1 ? "entry" : "entries"}
-                            </p>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-base font-bold" style={{ color: colors.hex }}>
+                              {student.totalHours.toFixed(1)}h
+                            </span>
+                            <ChevronRight
+                              className="w-4 h-4 group-hover:translate-x-1 transition-transform"
+                              style={{ color: colors.hex }}
+                            />
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg font-bold" style={{ color: colors.hex }}>
-                            {student.totalHours.toFixed(1)}h
-                          </span>
-                          <ChevronRight
-                            className="w-5 h-5 group-hover:translate-x-1 transition-transform"
-                            style={{ color: colors.hex }}
-                          />
-                        </div>
-                      </button>
-                    ))}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            {hasMoreStudents && (
+              <Link href="/student-hours" className="block">
+                <button className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg hover:from-blue-700 hover:to-blue-800 transition-all flex items-center justify-center gap-2">
+                  <span>View All Students ({data.length})</span>
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </Link>
+            )}
           </div>
         ) : (
-          <div className="flex items-center justify-center h-[300px]">
-            <p className="text-[#002855]/50">No hours data available</p>
+          <div className="flex items-center justify-center h-[200px]">
+            <p className="text-[#002855]/50 text-sm">No hours data available</p>
           </div>
         )}
       </Card>

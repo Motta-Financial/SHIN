@@ -5,7 +5,7 @@ A comprehensive dashboard for SEED clinic directors to monitor student progress,
 ## Features
 
 - **Real-time Overview**: Track active students, clients, total hours, and weekly growth
-- **Clinic Performance**: Visual breakdown of hours logged by each clinic (Consulting, Accounting, Funding, Marketing)
+- **Clinic Performance**: Visual breakdown of hours logged by each clinic (Consulting, Accounting, Resource Acquisition, Marketing)
 - **Student Hours Tracking**: Daily breakdown of student hours with trends
 - **Client Engagements**: Monitor progress on each client project with status indicators
 - **Recent Activity Feed**: Stay updated with latest student submissions and milestones
@@ -15,54 +15,50 @@ A comprehensive dashboard for SEED clinic directors to monitor student progress,
 
 ## Setup
 
-1. **Configure Airtable Integration**:
-   - Copy `.env.example` to `.env.local`
-   - Add your Airtable API key and Base ID
-   - Get your API key from: https://airtable.com/account
-   - Find your Base ID in the Airtable URL
+1. **Configure Supabase Integration**:
+   - Connect your Supabase project in the v0 dashboard
+   - Environment variables will be automatically configured
 
 2. **Configure Clerk Authentication**:
    - Sign up for a free account at https://clerk.com
    - Create a new application in the Clerk Dashboard
    - Copy your Publishable Key and Secret Key
-   - Add them to your `.env.local` file:
-     \`\`\`
+   - Add them to your environment variables:
+     ```
      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
      CLERK_SECRET_KEY=sk_test_...
-     \`\`\`
+     ```
 
 3. **Install Dependencies**:
-   \`\`\`bash
+   ```bash
    npm install
-   \`\`\`
+   ```
 
 4. **Run Development Server**:
-   \`\`\`bash
+   ```bash
    npm run dev
-   \`\`\`
+   ```
 
 5. **Access the Dashboard**:
    - Navigate to http://localhost:3000
    - Sign up or sign in with Clerk
    - Access the Clinic Dashboard and Prospect Interviews
 
-## Airtable Integration
+## Database (Supabase)
 
-The dashboard connects to your Airtable base to pull real-time data from:
-- Student Debrief Forms
-- Weekly Attendance Forms
-- Pre-SEED Interview Forms (PRESEED| Prospects table)
-- Client Information
-- Clinic Assignments
-- Student Roster (SEED | Roster table)
+The dashboard connects to Supabase for all data storage:
+- Students, Directors, and Clients
+- Weekly Summaries and Debriefs
+- Attendance Records
+- Documents and Reviews
+- Course Materials
 
 ### API Endpoints
 
-- `GET /api/airtable/debriefs` - Fetch student debrief data
-- `GET /api/airtable/roster` - Fetch student roster
-- `GET /api/airtable/prospects` - Fetch prospect interview data
-- `GET /api/airtable/clients` - Fetch client information
-- `GET /api/airtable/tables` - List all available tables
+- `GET /api/supabase/debriefs` - Fetch student debrief data
+- `GET /api/supabase/roster` - Fetch student roster
+- `GET /api/supabase/clients` - Fetch client information
+- `GET /api/seed-data` - Students, directors, clients
 
 ## Authentication
 

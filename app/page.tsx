@@ -5,163 +5,115 @@ import { MainNavigation } from "@/components/main-navigation"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { OverviewCards } from "@/components/overview-cards"
 import { ClinicPerformance } from "@/components/clinic-performance"
-import { ClientEngagements } from "@/components/client-engagements"
 import { RecentActivity } from "@/components/recent-activity"
-import { StudentHours } from "@/components/student-hours"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { StudentQuestions } from "@/components/student-questions"
-import { DetailedDebriefs } from "@/components/detailed-debriefs"
-import { ClinicGoals } from "@/components/clinic-goals"
-import { StudentPerformance } from "@/components/student-performance"
-import { ExportData } from "@/components/export-data"
-import { UploadSOWButton } from "@/components/upload-sow-button"
-import { DirectorReminders } from "@/components/director-reminders"
+import { DirectorNotifications } from "@/components/director-notifications"
 import { AgendaWidget } from "@/components/agenda-widget"
+import { Card, CardContent } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 
-function getWeekEnding(date: Date): string {
-  const day = date.getDay()
-  const diff = 6 - day
-  const weekEnding = new Date(date)
-  weekEnding.setDate(date.getDate() + diff)
-  return weekEnding.toISOString().split("T")[0]
+interface WeekSchedule {
+  value: string
+  label: string
+  weekNumber: number
+  isBreak: boolean
+  weekStart: string
+  weekEnd: string
 }
 
-async function getAvailableWeeks(): Promise<string[]> {
+async function getAvailableWeeksAndSchedule(): Promise<{ weeks: string[]; schedule: WeekSchedule[] }> {
   try {
-    console.log("[v0] Fetching available weeks...")
-    const response = await fetch("/api/airtable/debriefs")
+    const response = await fetch("/api/supabase/weeks")
     const data = await response.json()
-
-    const weeks = new Set<string>()
-    data.records?.forEach((record: any) => {
-      const dateSubmitted = record.fields["Date Submitted"]
-
-      if (dateSubmitted) {
-        const weekEnding = getWeekEnding(new Date(dateSubmitted))
-        weeks.add(weekEnding)
+    if (data.success) {
+      return {
+        weeks: data.weeks || [],
+        schedule: data.schedule || [],
       }
-    })
-
-    const sortedWeeks = Array.from(weeks).sort((a, b) => b.localeCompare(a))
-    console.log("[v0] Available weeks:", sortedWeeks)
-    return sortedWeeks
+    }
+    return { weeks: [], schedule: [] }
   } catch (error) {
-    console.error("[v0] Error fetching available weeks:", error)
-    return []
+    console.error("Error fetching available weeks:", error)
+    return { weeks: [], schedule: [] }
   }
+}
+
+function LoadingSkeleton({ height = "h-48" }: { height?: string }) {
+  return (
+    <Card className="border-border">
+      <CardContent className={`${height} flex items-center justify-center`}>
+        <div className="space-y-3 w-full p-4">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
+          <Skeleton className="h-4 w-2/3" />
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 export default function DashboardPage() {
   const [availableWeeks, setAvailableWeeks] = useState<string[]>([])
-  const [selectedWeek, setSelectedWeek] = useState<string>("")
+  const [weekSchedule, setWeekSchedule] = useState<WeekSchedule[]>([])
+  const [selectedWeeks, setSelectedWeeks] = useState<string[]>([])
   const [selectedClinic, setSelectedClinic] = useState<string>("all")
 
   useEffect(() => {
-    getAvailableWeeks().then((weeks) => {
+    getAvailableWeeksAndSchedule().then(({ weeks, schedule }) => {
       setAvailableWeeks(weeks)
-      if (weeks.length > 0) {
-        setSelectedWeek(weeks[0])
-      }
+      setWeekSchedule(schedule)
+      // Don't auto-select a week - keep empty to show all data
     })
   }, [])
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pt-[48px] pl-12">
       <MainNavigation />
 
-      <div className="bg-gradient-to-br from-blue-50/40 via-background to-blue-100/30">
-        <DashboardHeader
-          selectedWeek={selectedWeek}
-          onWeekChange={setSelectedWeek}
-          availableWeeks={availableWeeks}
-          selectedClinic={selectedClinic}
-          onClinicChange={setSelectedClinic}
-        />
+      <DashboardHeader
+        selectedWeeks={selectedWeeks}
+        onWeeksChange={setSelectedWeeks}
+        availableWeeks={availableWeeks}
+        selectedClinic={selectedClinic}
+        onClinicChange={setSelectedClinic}
+      />
 
-        <main className="container mx-auto px-4 py-8 space-y-8">
-          {selectedWeek && (
-            <>
-              <Suspense fallback={<div>Loading overview...</div>}>
-                <OverviewCards selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
+      <main className="container mx-auto px-6 py-6 space-y-6">
+        <>
+          {/* Overview Cards - Full Width */}
+          <Suspense fallback={<LoadingSkeleton height="h-32" />}>
+            <OverviewCards selectedWeeks={selectedWeeks} selectedClinic={selectedClinic} weekSchedule={weekSchedule} />
+          </Suspense>
+
+          {/* Notifications - Full Width */}
+          <Suspense fallback={null}>
+            <DirectorNotifications selectedClinic={selectedClinic} compact />
+          </Suspense>
+
+          {/* Two Column Layout: Performance + Agenda */}
+          <div className="grid gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <Suspense fallback={<LoadingSkeleton height="h-96" />}>
+                <ClinicPerformance
+                  selectedWeeks={selectedWeeks}
+                  selectedClinic={selectedClinic}
+                  weekSchedule={weekSchedule}
+                />
               </Suspense>
+            </div>
 
-              <Tabs defaultValue="dashboard" className="w-full">
-                <TabsList className="grid w-full max-w-4xl grid-cols-5">
-                  <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-                  <TabsTrigger value="clients">Clients</TabsTrigger>
-                  <TabsTrigger value="students">Students</TabsTrigger>
-                  <TabsTrigger value="goals">Goals</TabsTrigger>
-                  <TabsTrigger value="export">Export</TabsTrigger>
-                </TabsList>
+            <div className="lg:col-span-1">
+              <Suspense fallback={<LoadingSkeleton height="h-96" />}>
+                <AgendaWidget selectedClinic={selectedClinic} selectedWeeks={selectedWeeks} />
+              </Suspense>
+            </div>
+          </div>
 
-                <TabsContent value="dashboard" className="space-y-8 mt-6">
-                  <div className="space-y-8">
-                    <div className="grid gap-8 lg:grid-cols-2">
-                      <Suspense fallback={<div>Loading clinic performance...</div>}>
-                        <ClinicPerformance selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                      </Suspense>
-
-                      <div className="space-y-4">
-                        <Suspense fallback={<div>Loading agenda...</div>}>
-                          <AgendaWidget selectedClinic={selectedClinic} selectedWeek={selectedWeek} />
-                        </Suspense>
-
-                        <Suspense fallback={<div>Loading student hours...</div>}>
-                          <StudentHours selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                        </Suspense>
-                      </div>
-                    </div>
-
-                    <Suspense fallback={<div>Loading recent activity...</div>}>
-                      <RecentActivity selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                    </Suspense>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="clients" className="space-y-8 mt-6">
-                  <Suspense fallback={null}>
-                    <DirectorReminders selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                  </Suspense>
-
-                  <div className="flex justify-end">
-                    <UploadSOWButton />
-                  </div>
-
-                  <Suspense fallback={<div>Loading client engagements...</div>}>
-                    <ClientEngagements selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                  </Suspense>
-                </TabsContent>
-
-                <TabsContent value="students" className="space-y-8 mt-6">
-                  <Suspense fallback={<div>Loading student questions...</div>}>
-                    <StudentQuestions selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                  </Suspense>
-
-                  <Suspense fallback={<div>Loading student performance...</div>}>
-                    <StudentPerformance selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                  </Suspense>
-
-                  <Suspense fallback={<div>Loading debrief submissions...</div>}>
-                    <DetailedDebriefs selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                  </Suspense>
-                </TabsContent>
-
-                <TabsContent value="goals" className="mt-6">
-                  <Suspense fallback={<div>Loading clinic goals...</div>}>
-                    <ClinicGoals selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                  </Suspense>
-                </TabsContent>
-
-                <TabsContent value="export" className="mt-6">
-                  <Suspense fallback={<div>Loading export options...</div>}>
-                    <ExportData selectedWeek={selectedWeek} selectedClinic={selectedClinic} />
-                  </Suspense>
-                </TabsContent>
-              </Tabs>
-            </>
-          )}
-        </main>
-      </div>
+          {/* Recent Activity - Full Width */}
+          <Suspense fallback={<LoadingSkeleton height="h-64" />}>
+            <RecentActivity selectedWeeks={selectedWeeks} selectedClinic={selectedClinic} />
+          </Suspense>
+        </>
+      </main>
     </div>
   )
 }

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ChevronDown, ChevronRight, FileText } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 interface DebriefSubmission {
   id: string
@@ -19,20 +19,20 @@ interface DebriefSubmission {
 }
 
 interface DetailedDebriefsProps {
-  selectedWeek: string
+  selectedWeeks: string[]
   selectedClinic: string
 }
 
-export function DetailedDebriefs({ selectedWeek, selectedClinic }: DetailedDebriefsProps) {
+export function DetailedDebriefs({ selectedWeeks, selectedClinic }: DetailedDebriefsProps) {
   const [submissions, setSubmissions] = useState<DebriefSubmission[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
-  // Fetch debrief submissions
-  useState(() => {
+  useEffect(() => {
     async function fetchDebriefs() {
+      setLoading(true)
       try {
-        const response = await fetch("/api/airtable/debriefs")
+        const response = await fetch("/api/supabase/debriefs")
         const data = await response.json()
 
         if (data.records) {
@@ -42,33 +42,34 @@ export function DetailedDebriefs({ selectedWeek, selectedClinic }: DetailedDebri
               const dateSubmitted = fields["Date Submitted"]
               const clinic = fields["Related Clinic"]
 
-              // Filter by week
               if (!dateSubmitted) return false
               const submittedDate = new Date(dateSubmitted)
-              const weekEnd = new Date(selectedWeek)
-              const weekStart = new Date(weekEnd)
-              weekStart.setDate(weekStart.getDate() - 6)
 
-              const isInWeek = submittedDate >= weekStart && submittedDate <= weekEnd
+              const isInSelectedWeeks = selectedWeeks.some((weekEnd) => {
+                const weekEndDate = new Date(weekEnd)
+                const weekStart = new Date(weekEndDate)
+                weekStart.setDate(weekStart.getDate() - 6)
+                return submittedDate >= weekStart && submittedDate <= weekEndDate
+              })
 
               // Filter by clinic
               const matchesClinic = selectedClinic === "all" || clinic === selectedClinic
 
-              return isInWeek && matchesClinic
+              return isInSelectedWeeks && matchesClinic
             })
             .map((record: any) => {
               const fields = record.fields
-              const studentName = fields["NAME (from SEED | Students)"]?.[0] || "Unknown"
+              const studentName = fields.client_name || "Unknown"
 
               return {
                 id: record.id,
                 student: studentName,
-                clinic: fields["Related Clinic"] || "Unknown",
-                client: fields["Client"] || "Unknown",
-                hours: fields["Number of Hours Worked"] || 0,
-                summary: fields["Summary of Work"] || "",
-                date: fields["Date Submitted"] || "",
-                question: fields["Questions"] || undefined,
+                clinic: fields.clinic || "Unknown",
+                client: fields.client_name || "Unknown",
+                hours: fields.total_hours || 0,
+                summary: fields.summary || "",
+                date: fields.week_ending || "",
+                question: undefined,
               }
             })
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -82,8 +83,13 @@ export function DetailedDebriefs({ selectedWeek, selectedClinic }: DetailedDebri
       }
     }
 
-    fetchDebriefs()
-  })
+    if (selectedWeeks.length > 0) {
+      fetchDebriefs()
+    } else {
+      setSubmissions([])
+      setLoading(false)
+    }
+  }, [selectedWeeks, selectedClinic])
 
   const toggleRow = (id: string) => {
     const newExpanded = new Set(expandedRows)
@@ -93,6 +99,12 @@ export function DetailedDebriefs({ selectedWeek, selectedClinic }: DetailedDebri
       newExpanded.add(id)
     }
     setExpandedRows(newExpanded)
+  }
+
+  const getWeeksDescription = () => {
+    if (selectedWeeks.length === 0) return "No weeks selected"
+    if (selectedWeeks.length === 1) return `Week ending ${new Date(selectedWeeks[0]).toLocaleDateString()}`
+    return `${selectedWeeks.length} weeks selected`
   }
 
   if (loading) {
@@ -113,13 +125,15 @@ export function DetailedDebriefs({ selectedWeek, selectedClinic }: DetailedDebri
           <FileText className="h-5 w-5" />
           Detailed Debrief Submissions
         </CardTitle>
-        <CardDescription>All debrief submissions for the selected week ({submissions.length} total)</CardDescription>
+        <CardDescription>
+          {getWeeksDescription()} ({submissions.length} submissions)
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {submissions.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
-            <p>No debrief submissions for this week</p>
+            <p>No debrief submissions for the selected {selectedWeeks.length === 1 ? "week" : "weeks"}</p>
           </div>
         ) : (
           <div className="rounded-md border">

@@ -1,5 +1,4 @@
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
+import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
 export async function GET(request: Request) {
@@ -12,23 +11,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "week_ending is required" }, { status: 400 })
     }
 
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: (cookies) => {
-            cookies.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options)
-            })
-          },
-        },
-      },
-    )
+    const supabase = await createClient()
 
-    let query = supabase.from("weekly_summaries").select("*").eq("week_ending", weekEnding)
+    const dates = weekEnding.split(",").map((d) => d.trim())
+    let query = supabase.from("weekly_summaries").select("*")
+
+    if (dates.length === 1) {
+      query = query.eq("week_ending", dates[0])
+    } else {
+      query = query.in("week_ending", dates)
+    }
 
     if (clientName) {
       query = query.eq("client_name", clientName)
@@ -38,7 +30,7 @@ export async function GET(request: Request) {
 
     if (error) {
       console.error("[v0] Error fetching cached summaries:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ summaries: {} })
     }
 
     // Convert array to map for easier lookup
@@ -50,7 +42,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ summaries: summariesMap })
   } catch (error) {
     console.error("[v0] Error in weekly-summaries GET:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json({ summaries: {} })
   }
 }
 
@@ -63,21 +55,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: (cookies) => {
-            cookies.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options)
-            })
-          },
-        },
-      },
-    )
+    const supabase = await createClient()
 
     // Upsert (insert or update if exists)
     const { data, error } = await supabase
