@@ -1,7 +1,9 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+function getSupabaseClient() {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+}
 
 // FALL 2025 Schedule data from the CSV files
 const FALL_2025_SCHEDULE = [
@@ -202,6 +204,8 @@ const FALL_2025_SCHEDULE = [
 ]
 
 export async function POST() {
+  const supabase = getSupabaseClient()
+
   try {
     const results = {
       inserted: 0,
@@ -252,6 +256,8 @@ export async function POST() {
 }
 
 export async function GET() {
+  const supabase = getSupabaseClient()
+
   try {
     // Fetch all weeks from semester_schedule
     const { data: schedule, error } = await supabase

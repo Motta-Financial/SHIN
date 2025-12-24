@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Users, Briefcase, AlertCircle } from "lucide-react"
 import { useEffect, useState, useMemo } from "react"
 import { getClinicColor } from "@/lib/clinic-colors"
+import { createBrowserClient } from "@supabase/ssr"
 
 interface OverviewStats {
   activeStudents: number
@@ -32,17 +33,23 @@ interface WeekSchedule {
 
 interface OverviewCardsProps {
   selectedWeeks: string[]
-  selectedClinic: string
+  selectedClinic: string // This is now a director ID (UUID), not a clinic name
   weekSchedule?: WeekSchedule[]
 }
 
 export function OverviewCards({ selectedWeeks, selectedClinic, weekSchedule = [] }: OverviewCardsProps) {
+  const [studentOverview, setStudentOverview] = useState<any[]>([])
   const [debriefs, setDebriefs] = useState<any[]>([])
-  const [roster, setRoster] = useState<any[]>([])
+  const [directorStudentIds, setDirectorStudentIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  )
+
   const isDateInWeekRange = (dateStr: string, selectedWeekValues: string[]): boolean => {
-    if (selectedWeekValues.length === 0) return true // No filter = all data
+    if (selectedWeekValues.length === 0) return true
 
     const date = new Date(dateStr)
     if (isNaN(date.getTime())) return false
@@ -53,7 +60,6 @@ export function OverviewCards({ selectedWeeks, selectedClinic, weekSchedule = []
 
       const weekStart = new Date(week.weekStart)
       const weekEnd = new Date(week.weekEnd)
-      // Add 1 day to weekEnd to make it inclusive
       weekEnd.setDate(weekEnd.getDate() + 1)
 
       return date >= weekStart && date < weekEnd
@@ -64,19 +70,70 @@ export function OverviewCards({ selectedWeeks, selectedClinic, weekSchedule = []
     async function fetchData() {
       setLoading(true)
       try {
-        const [debriefsRes, rosterRes] = await Promise.all([
+        let studentIdsForDirector: string[] = []
+
+        if (selectedClinic && selectedClinic !== "all") {
+          // Get director's clinic_id from clinic_directors table (proper mapping)
+          const { data: clinicDirectorData } = await supabase
+            .from("clinic_directors")
+            .select("clinic_id")
+            .eq("director_id", selectedClinic)
+            .single()
+
+          if (clinicDirectorData?.clinic_id) {
+            // Get students from director's clinic via clinic_students
+            const { data: clinicStudents } = await supabase
+              .from("clinic_students")
+              .select("student_id")
+              .eq("clinic_id", clinicDirectorData.clinic_id)
+
+            if (clinicStudents) {
+              studentIdsForDirector.push(...clinicStudents.map((s: { student_id: string }) => s.student_id))
+              console.log("[v0] OverviewCards - Students from clinic_students:", clinicStudents.length)
+            }
+          }
+
+          // Get students from clients where this director is primary
+          const { data: clientsData } = await supabase
+            .from("clients")
+            .select("id")
+            .eq("primary_director_id", selectedClinic)
+
+          if (clientsData && clientsData.length > 0) {
+            const clientIds = clientsData.map((c: { id: string }) => c.id)
+
+            const { data: assignmentsData } = await supabase
+              .from("client_assignments")
+              .select("student_id")
+              .in("client_id", clientIds)
+
+            if (assignmentsData) {
+              studentIdsForDirector.push(...assignmentsData.map((a: { student_id: string }) => a.student_id))
+              console.log("[v0] OverviewCards - Students from client_assignments:", assignmentsData.length)
+            }
+          }
+
+          // Deduplicate
+          studentIdsForDirector = [...new Set(studentIdsForDirector)]
+          console.log("[v0] OverviewCards - Total unique director student IDs:", studentIdsForDirector.length)
+        }
+
+        setDirectorStudentIds(studentIdsForDirector)
+
+        // Fetch all data
+        const [overviewRes, debriefsRes] = await Promise.all([
+          fetch("/api/supabase/students/overview"),
           fetch("/api/supabase/debriefs"),
-          fetch("/api/supabase/roster"),
         ])
+
+        if (overviewRes.ok) {
+          const data = await overviewRes.json()
+          setStudentOverview(data.students || [])
+        }
 
         if (debriefsRes.ok) {
           const data = await debriefsRes.json()
           setDebriefs(data.debriefs || [])
-        }
-
-        if (rosterRes.ok) {
-          const data = await rosterRes.json()
-          setRoster(data.students || [])
         }
       } catch (error) {
         console.error("Error fetching data:", error)
@@ -86,7 +143,7 @@ export function OverviewCards({ selectedWeeks, selectedClinic, weekSchedule = []
     }
 
     fetchData()
-  }, [])
+  }, [selectedClinic])
 
   const { stats, activeStudents, inactiveStudents } = useMemo(() => {
     if (loading) {
@@ -97,237 +154,204 @@ export function OverviewCards({ selectedWeeks, selectedClinic, weekSchedule = []
       }
     }
 
-    const directorToClinicMap = new Map([
-      ["Mark Dwyer", "Accounting"],
-      ["Dat Le", "Accounting"],
-      ["Nick Vadala", "Consulting"],
-      ["Ken Mooney", "Resource Acquisition"],
-      ["Christopher Hill", "Marketing"],
-      ["Chris Hill", "Marketing"],
-      ["Beth DiRusso", "Legal"],
-      ["Darrell Mottley", "Legal"],
-      ["Boris Lazic", "SEED"],
-      ["Grace Cha", "SEED"],
-      ["Chaim Letwin", "SEED"],
-      ["Dmitri Tcherevik", "SEED"],
-    ])
+    const allStudentsInClinic =
+      selectedClinic === "all" || !selectedClinic || directorStudentIds.length === 0
+        ? studentOverview
+        : studentOverview.filter((student) => directorStudentIds.includes(student.student_id))
 
-    const filterClinic = selectedClinic === "all" ? "all" : directorToClinicMap.get(selectedClinic) || selectedClinic
+    console.log("[v0] OverviewCards - allStudentsInClinic count:", allStudentsInClinic.length)
 
-    const activeStudentsMap = new Map<string, Student>()
-    const activeClientIds = new Set<string>()
+    const studentsWhoSubmitted = new Map<
+      string,
+      {
+        studentId: string
+        name: string
+        hours: number
+        clinic: string
+        client: string
+        summary: string
+      }
+    >()
+
+    const activeClientNames = new Set<string>()
     let totalHours = 0
 
-    if (debriefs.length > 0) {
-      debriefs.forEach((debrief: any) => {
-        const recordWeek = debrief.week_ending || debrief.weekEnding || ""
-        const studentClinic = debrief.clinic || ""
-        const clientName = debrief.client_name || debrief.clientName || ""
-        const hours = Number.parseFloat(debrief.hours_worked || debrief.hoursWorked || "0")
-        const summary = debrief.work_summary || debrief.workSummary || ""
-        const studentName = debrief.student_name || debrief.studentName || ""
+    debriefs.forEach((debrief: any) => {
+      const recordWeek = debrief.weekEnding || debrief.week_ending || ""
+      const matchesWeek = isDateInWeekRange(recordWeek, selectedWeeks)
 
-        const normalizedClinic = studentClinic.replace(" Clinic", "").trim()
-        const matchesClinic =
-          filterClinic === "all" || normalizedClinic.includes(filterClinic) || studentClinic.includes(filterClinic)
-        const matchesWeek = isDateInWeekRange(recordWeek, selectedWeeks)
+      if (!matchesWeek) return
 
-        if (matchesWeek && matchesClinic) {
-          if (studentName) {
-            const existing = activeStudentsMap.get(studentName)
-            if (existing) {
-              existing.hours += hours
-            } else {
-              activeStudentsMap.set(studentName, {
-                name: studentName,
-                hours,
-                clinic: studentClinic,
-                client: clientName,
-                summary,
-              })
-            }
-          }
-          if (clientName) {
-            activeClientIds.add(clientName)
-          }
-          totalHours += hours
+      const studentId = debrief.studentId || debrief.student_id
+
+      const matchesDirector =
+        selectedClinic === "all" ||
+        !selectedClinic ||
+        directorStudentIds.length === 0 ||
+        directorStudentIds.includes(studentId)
+
+      if (!matchesDirector) return
+
+      const hours = Number.parseFloat(debrief.hoursWorked || debrief.hours_worked || "0")
+      const clientName = debrief.clientName || debrief.client_name || ""
+      const studentName = debrief.studentName || debrief.student_name || ""
+      const summary = debrief.workSummary || debrief.work_summary || ""
+      const clinic = debrief.clinic || ""
+
+      if (studentId) {
+        const existing = studentsWhoSubmitted.get(studentId)
+        if (existing) {
+          existing.hours += hours
+        } else {
+          studentsWhoSubmitted.set(studentId, {
+            studentId,
+            name: studentName,
+            hours,
+            clinic,
+            client: clientName,
+            summary,
+          })
         }
-      })
-    }
+      }
 
-    const inactiveList: { name: string; clinic: string; role: string }[] = []
+      if (clientName) {
+        activeClientNames.add(clientName)
+      }
 
-    if (roster.length > 0) {
-      roster.forEach((record: any) => {
-        const name = record.fullName || record.full_name || `${record.firstName || ""} ${record.lastName || ""}`.trim()
-        const studentClinic = record.clinic || ""
-        const clientTeam = record.clientTeam || record.client_team || ""
-        const status = record.status || ""
+      totalHours += hours
+    })
 
-        if (name && status === "Active") {
-          const normalizedClinic = studentClinic.replace(" Clinic", "").trim()
-          const matchesClinic =
-            filterClinic === "all" || normalizedClinic.includes(filterClinic) || studentClinic.includes(filterClinic)
+    const activeStudentsList = Array.from(studentsWhoSubmitted.values())
+    const activeStudentIds = new Set(activeStudentsList.map((s) => s.studentId))
 
-          if (matchesClinic && !activeStudentsMap.has(name)) {
-            inactiveList.push({
-              name,
-              clinic: studentClinic,
-              role: clientTeam,
-            })
-          }
-        }
-      })
-    }
+    const inactiveStudentsList = allStudentsInClinic
+      .filter((student) => !activeStudentIds.has(student.student_id))
+      .map((student) => ({
+        name: student.student_name || student.full_name || "Unknown",
+        hours: 0,
+        clinic: student.clinic || "Unknown",
+        client: student.client_name || "Unassigned",
+        summary: "No debrief submitted",
+      }))
+
+    console.log("[v0] OverviewCards - Active:", activeStudentsList.length, "Inactive:", inactiveStudentsList.length)
 
     return {
       stats: {
-        activeStudents: activeStudentsMap.size,
-        activeClients: activeClientIds.size,
-        totalHours: Math.round(totalHours),
+        activeStudents: activeStudentsList.length,
+        activeClients: activeClientNames.size,
+        totalHours,
         weeklyGrowth: 0,
       },
-      activeStudents: Array.from(activeStudentsMap.values()),
-      inactiveStudents: inactiveList,
+      activeStudents: activeStudentsList,
+      inactiveStudents: inactiveStudentsList,
     }
-  }, [debriefs, roster, loading, selectedWeeks, selectedClinic, weekSchedule])
-
-  const cards = [
-    {
-      title: "Active Students",
-      value: loading ? "..." : stats.activeStudents,
-      icon: Users,
-      description: "Submitted this week",
-      bgColor: "bg-[#2d3a4f]", // Using palette colors - Passionate Blueberry (dark navy)
-      iconBg: "bg-[#8fa889]", // Banyan Serenity
-      iconColor: "text-[#2d3a4f]",
-      clickable: true,
-      dialogContent: "active",
-    },
-    {
-      title: "Inactive Students",
-      value: loading ? "..." : inactiveStudents.length,
-      icon: AlertCircle,
-      description: "Haven't submitted",
-      bgColor: "bg-[#565f4b]", // Using palette colors - Jalapeno Poppers (olive)
-      iconBg: "bg-[#9aacb8]", // Tsunami
-      iconColor: "text-[#565f4b]",
-      clickable: true,
-      dialogContent: "inactive",
-    },
-    {
-      title: "Active Clients",
-      value: loading ? "..." : stats.activeClients,
-      icon: Briefcase,
-      description: "This week",
-      bgColor: "bg-[#5f7082]", // Using palette colors - Silver Blueberry
-      iconBg: "bg-[#8fa889]", // Banyan Serenity
-      iconColor: "text-[#5f7082]",
-      clickable: false,
-    },
-  ]
+  }, [loading, studentOverview, debriefs, selectedWeeks, selectedClinic, directorStudentIds, weekSchedule])
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {cards.map((card) => {
-        const Icon = card.icon
-
-        if (card.clickable) {
-          return (
-            <Dialog key={card.title}>
-              <DialogTrigger asChild>
-                <Card
-                  className={`p-4 ${card.bgColor} border-none shadow-lg cursor-pointer hover:opacity-90 transition-opacity`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-white/80">{card.title}</p>
-                      <p className="text-2xl font-bold text-white">{card.value}</p>
-                      <p className="text-xs text-white/70">{card.description}</p>
-                    </div>
-                    <div className={`rounded-lg ${card.iconBg} p-2 shadow-md`}>
-                      <Icon className={`h-4 w-4 ${card.iconColor}`} />
-                    </div>
-                  </div>
-                </Card>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>
-                    {card.dialogContent === "active"
-                      ? `Active Students (${activeStudents.length})`
-                      : `Inactive Students (${inactiveStudents.length})`}
-                  </DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 mt-4">
-                  {card.dialogContent === "active" ? (
-                    activeStudents.length === 0 ? (
-                      <p className="text-muted-foreground text-center py-8">No active students for this week</p>
-                    ) : (
-                      activeStudents.map((student) => (
-                        <div key={student.name} className="border rounded-lg p-4 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <h3 className="font-semibold">{student.name}</h3>
-                            <span className="text-sm font-medium">{student.hours}h</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span
-                              className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                              style={{
-                                backgroundColor: getClinicColor(student.clinic).hex + "20",
-                                color: getClinicColor(student.clinic).hex,
-                              }}
-                            >
-                              {student.clinic}
-                            </span>
-                            <span className="text-sm text-muted-foreground">• {student.client}</span>
-                          </div>
-                          {student.summary && <p className="text-sm text-muted-foreground">{student.summary}</p>}
-                        </div>
-                      ))
-                    )
-                  ) : inactiveStudents.length === 0 ? (
-                    <p className="text-muted-foreground text-center py-8">All students have submitted this week!</p>
-                  ) : (
-                    inactiveStudents.map((student) => (
-                      <div key={student.name} className="border rounded-lg p-3 flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">{student.name}</p>
-                          <p className="text-sm text-muted-foreground">{student.role}</p>
-                        </div>
-                        <span
-                          className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                          style={{
-                            backgroundColor: getClinicColor(student.clinic).hex + "20",
-                            color: getClinicColor(student.clinic).hex,
-                          }}
-                        >
-                          {student.clinic}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </DialogContent>
-            </Dialog>
-          )
-        }
-
-        return (
-          <Card key={card.title} className={`p-4 ${card.bgColor} border-none shadow-lg`}>
-            <div className="flex items-start justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-white/80">{card.title}</p>
-                <p className="text-2xl font-bold text-white">{card.value}</p>
-                <p className="text-xs text-white/70">{card.description}</p>
+    <div className="grid gap-4 md:grid-cols-3">
+      <Dialog>
+        <DialogTrigger asChild>
+          <Card className="cursor-pointer p-6 transition-colors hover:bg-muted/50">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Active Students</p>
+                <p className="text-2xl font-bold">{stats.activeStudents}</p>
+                <p className="text-xs text-muted-foreground">Submitted debriefs this week</p>
               </div>
-              <div className={`rounded-lg ${card.iconBg} p-2 shadow-md`}>
-                <Icon className={`h-4 w-4 ${card.iconColor}`} />
-              </div>
+              <Users className="h-8 w-8 text-muted-foreground" />
             </div>
           </Card>
-        )
-      })}
+        </DialogTrigger>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Active Students</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {activeStudents.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No active students for selected period</p>
+            ) : (
+              activeStudents.map((student, i) => (
+                <div key={i} className="rounded-lg border p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{student.name}</span>
+                    <span className="text-sm text-muted-foreground">{student.hours.toFixed(1)} hrs</span>
+                  </div>
+                  <div className="mt-1 flex gap-2">
+                    <span
+                      className="rounded-full px-2 py-0.5 text-xs"
+                      style={{
+                        backgroundColor: getClinicColor(student.clinic).bg,
+                        color: getClinicColor(student.clinic).text,
+                      }}
+                    >
+                      {student.clinic}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{student.client}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog>
+        <DialogTrigger asChild>
+          <Card className="cursor-pointer p-6 transition-colors hover:bg-muted/50">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Inactive Students</p>
+                <p className="text-2xl font-bold">{inactiveStudents.length}</p>
+                <p className="text-xs text-muted-foreground">No debrief this week</p>
+              </div>
+              <AlertCircle className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </Card>
+        </DialogTrigger>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Inactive Students</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {inactiveStudents.length === 0 ? (
+              <p className="text-sm text-muted-foreground">All students have submitted debriefs</p>
+            ) : (
+              inactiveStudents.map((student, i) => (
+                <div key={i} className="rounded-lg border p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{student.name}</span>
+                    <span className="text-xs text-red-500">Missing debrief</span>
+                  </div>
+                  <div className="mt-1 flex gap-2">
+                    <span
+                      className="rounded-full px-2 py-0.5 text-xs"
+                      style={{
+                        backgroundColor: getClinicColor(student.clinic).bg,
+                        color: getClinicColor(student.clinic).text,
+                      }}
+                    >
+                      {student.clinic}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{student.client}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Card className="p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">Active Clients</p>
+            <p className="text-2xl font-bold">{stats.activeClients}</p>
+            <p className="text-xs text-muted-foreground">With activity this week</p>
+          </div>
+          <Briefcase className="h-8 w-8 text-muted-foreground" />
+        </div>
+      </Card>
     </div>
   )
 }

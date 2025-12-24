@@ -110,7 +110,7 @@ export function DashboardHeader({
               <SelectContent>
                 <SelectItem value="all">All Directors</SelectItem>
                 {directors.map((director) => (
-                  <SelectItem key={director.id} value={director.full_name}>
+                  <SelectItem key={director.id} value={director.id}>
                     {director.full_name} ({director.clinic})
                   </SelectItem>
                 ))}
