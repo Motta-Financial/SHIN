@@ -7,6 +7,7 @@ import { useEffect, useState } from "react"
 import { Building2, Users, Clock, AlertCircle, FileText, ExternalLink, CheckCircle2 } from "lucide-react"
 import { getClinicColor } from "@/lib/clinic-colors"
 import { Button } from "@/components/ui/button"
+import { DocumentUpload } from "@/components/document-upload"
 import {
   Dialog,
   DialogContent,
@@ -422,7 +423,7 @@ export function ClientEngagements({ selectedWeeks, selectedClinic }: ClientEngag
                         View Details
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-2xl">
+                    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>{client.name}</DialogTitle>
                         <DialogDescription>Client engagement details and documents</DialogDescription>
@@ -447,15 +448,32 @@ export function ClientEngagements({ selectedWeeks, selectedClinic }: ClientEngag
                           </div>
                         </div>
 
+                        <div className="border-t pt-4">
+                          <DocumentUpload
+                            clientName={client.name}
+                            clinic={client.clinic}
+                            studentName="Director"
+                            title="Upload Client Documents"
+                            description={`Upload documents for ${client.name}`}
+                            onUploadComplete={() => fetchAllDocuments([client])}
+                            compact
+                          />
+                        </div>
+
                         {clientDocs.length > 0 && (
                           <div>
-                            <p className="text-sm font-medium mb-2">Documents</p>
+                            <p className="text-sm font-medium mb-2">Documents ({clientDocs.length})</p>
                             <div className="space-y-2">
                               {clientDocs.map((doc) => (
                                 <div key={doc.id} className="flex items-center justify-between p-2 border rounded">
                                   <div className="flex items-center gap-2">
                                     <FileText className="h-4 w-4 text-muted-foreground" />
-                                    <span className="text-sm">{doc.file_name}</span>
+                                    <div>
+                                      <span className="text-sm">{doc.file_name}</span>
+                                      <p className="text-xs text-muted-foreground">
+                                        {doc.student_name} • {new Date(doc.uploaded_at).toLocaleDateString()}
+                                      </p>
+                                    </div>
                                   </div>
                                   <Button variant="ghost" size="sm" asChild>
                                     <a href={doc.file_url} target="_blank" rel="noopener noreferrer">

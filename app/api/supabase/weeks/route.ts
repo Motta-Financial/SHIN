@@ -25,14 +25,34 @@ export async function GET() {
     let schedule: typeof FALL_2025_WEEKS | null = null
 
     try {
-      const { data, error } = await supabase
-        .from("semester_schedule")
-        .select("week_start, week_end, week_label, week_number, is_break")
-        .eq("semester", "FALL 2025")
-        .order("week_start", { ascending: true })
+      const { data: semesterConfig } = await supabase
+        .from("semester_config")
+        .select("id, semester")
+        .or("is_active.eq.true,semester.ilike.%Fall 2025%")
+        .limit(1)
+        .single()
 
-      if (!error && data && data.length > 0) {
-        schedule = data
+      if (semesterConfig?.id) {
+        const { data, error } = await supabase
+          .from("semester_schedule")
+          .select("week_start, week_end, week_label, week_number, is_break")
+          .eq("semester_id", semesterConfig.id)
+          .order("week_start", { ascending: true })
+
+        if (!error && data && data.length > 0) {
+          schedule = data
+        }
+      }
+
+      if (!schedule || schedule.length === 0) {
+        const { data, error } = await supabase
+          .from("semester_schedule")
+          .select("week_start, week_end, week_label, week_number, is_break")
+          .order("week_start", { ascending: true })
+
+        if (!error && data && data.length > 0) {
+          schedule = data
+        }
       }
     } catch (e) {
       console.log("[v0] semester_schedule table not found, using hardcoded weeks")

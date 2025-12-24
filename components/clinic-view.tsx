@@ -1,13 +1,26 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Users, Briefcase, Calendar, FileText, GraduationCap, Building2, ExternalLink } from "lucide-react"
+import {
+  Users,
+  FileText,
+  GraduationCap,
+  Building2,
+  ExternalLink,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  TrendingUp,
+  Calendar,
+  BarChart3,
+} from "lucide-react"
 import { createBrowserClient } from "@supabase/ssr"
+import { DocumentUpload } from "@/components/document-upload"
 
 interface ClinicViewProps {
   selectedClinic: string
@@ -66,6 +79,7 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
   const [clinicData, setClinicData] = useState<ClinicData | null>(null)
   const [schedule, setSchedule] = useState<ScheduleWeek[]>([])
   const [materials, setMaterials] = useState<CourseMaterial[]>([])
+  const [debriefs, setDebriefs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeSubTab, setActiveSubTab] = useState("overview")
 
@@ -73,6 +87,27 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   )
+
+  const matchesSelectedWeek = (weekEnding: string, selectedWeekValues: string[]): boolean => {
+    if (selectedWeekValues.length === 0) return true
+    if (!weekEnding) return false
+
+    const normalizeDate = (dateStr: string): string => {
+      try {
+        const date = new Date(dateStr)
+        if (isNaN(date.getTime())) return dateStr
+        return date.toISOString().split("T")[0]
+      } catch {
+        return dateStr
+      }
+    }
+
+    const normalizedWeekEnding = normalizeDate(weekEnding)
+    return selectedWeekValues.some((selectedWeek) => {
+      const normalizedSelected = normalizeDate(selectedWeek)
+      return normalizedWeekEnding === normalizedSelected
+    })
+  }
 
   useEffect(() => {
     fetchClinicData()
@@ -127,6 +162,12 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
         semester: filteredStudents[0]?.semester || "Fall 2025",
       })
 
+      const debriefsRes = await fetch("/api/supabase/debriefs")
+      if (debriefsRes.ok) {
+        const debriefsData = await debriefsRes.json()
+        setDebriefs(debriefsData.debriefs || [])
+      }
+
       const { data: scheduleData } = await supabase
         .from("semester_schedule")
         .select("*")
@@ -151,6 +192,133 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
     }
   }
 
+  const fetchMaterials = async () => {
+    const { data: materialsData } = await supabase
+      .from("course_materials")
+      .select("*")
+      .order("created_at", { ascending: false })
+
+    if (materialsData) {
+      setMaterials(materialsData)
+    }
+  }
+
+  const activityMetrics = useMemo(() => {
+    if (!clinicData || debriefs.length === 0) {
+      return {
+        totalHours: 0,
+        activeStudents: 0,
+        debriefsSubmitted: 0,
+        studentsWithDebriefs: new Set<string>(),
+      }
+    }
+
+    const studentIds = new Set(clinicData.students.map((s) => s.student_id))
+    let totalHours = 0
+    const studentsWithDebriefs = new Set<string>()
+    let debriefsSubmitted = 0
+
+    debriefs.forEach((debrief: any) => {
+      const studentId = debrief.studentId || debrief.student_id
+      const weekEnding = debrief.weekEnding || debrief.week_ending || ""
+
+      if (!studentIds.has(studentId) && studentIds.size > 0) return
+
+      if (!matchesSelectedWeek(weekEnding, selectedWeeks)) return
+
+      const hours = Number.parseFloat(debrief.hoursWorked || debrief.hours_worked || "0")
+      totalHours += hours
+      if (studentId) studentsWithDebriefs.add(studentId)
+      debriefsSubmitted++
+    })
+
+    return {
+      totalHours,
+      activeStudents: studentsWithDebriefs.size,
+      debriefsSubmitted,
+      studentsWithDebriefs,
+    }
+  }, [clinicData, debriefs, selectedWeeks])
+
+  const weeklyBreakdown = useMemo(() => {
+    if (!clinicData || debriefs.length === 0) return []
+
+    const studentIds = new Set(clinicData.students.map((s) => s.student_id))
+    const breakdown: { week: string; hours: number; submissions: number; students: number }[] = []
+
+    const weekMap = new Map<string, { hours: number; submissions: number; studentSet: Set<string> }>()
+
+    debriefs.forEach((debrief: any) => {
+      const studentId = debrief.studentId || debrief.student_id
+      if (!studentIds.has(studentId) && studentIds.size > 0) return
+
+      const weekEnding = debrief.weekEnding || debrief.week_ending || ""
+      if (!weekEnding) return
+
+      const hours = Number.parseFloat(debrief.hoursWorked || debrief.hours_worked || "0")
+
+      if (!weekMap.has(weekEnding)) {
+        weekMap.set(weekEnding, { hours: 0, submissions: 0, studentSet: new Set() })
+      }
+
+      const weekData = weekMap.get(weekEnding)!
+      weekData.hours += hours
+      weekData.submissions++
+      if (studentId) weekData.studentSet.add(studentId)
+    })
+
+    weekMap.forEach((data, week) => {
+      breakdown.push({
+        week,
+        hours: data.hours,
+        submissions: data.submissions,
+        students: data.studentSet.size,
+      })
+    })
+
+    return breakdown.sort((a, b) => new Date(b.week).getTime() - new Date(a.week).getTime()).slice(0, 8)
+  }, [clinicData, debriefs])
+
+  const studentPerformance = useMemo(() => {
+    if (!clinicData || debriefs.length === 0) return []
+
+    const studentMetrics = new Map<
+      string,
+      { name: string; email: string; client: string; totalHours: number; submissions: number; lastSubmission: string }
+    >()
+
+    clinicData.students.forEach((s) => {
+      studentMetrics.set(s.student_id, {
+        name: s.student_name,
+        email: s.student_email,
+        client: s.client_name || "Unassigned",
+        totalHours: 0,
+        submissions: 0,
+        lastSubmission: "",
+      })
+    })
+
+    debriefs.forEach((debrief: any) => {
+      const studentId = debrief.studentId || debrief.student_id
+      if (!studentMetrics.has(studentId)) return
+
+      const weekEnding = debrief.weekEnding || debrief.week_ending || ""
+      if (selectedWeeks.length > 0 && !matchesSelectedWeek(weekEnding, selectedWeeks)) return
+
+      const hours = Number.parseFloat(debrief.hoursWorked || debrief.hours_worked || "0")
+      const metrics = studentMetrics.get(studentId)!
+      metrics.totalHours += hours
+      metrics.submissions++
+      if (!metrics.lastSubmission || weekEnding > metrics.lastSubmission) {
+        metrics.lastSubmission = weekEnding
+      }
+    })
+
+    return Array.from(studentMetrics.entries())
+      .map(([id, data]) => ({ id, ...data }))
+      .sort((a, b) => b.totalHours - a.totalHours)
+  }, [clinicData, debriefs, selectedWeeks])
+
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -172,10 +340,10 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Students</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Students</CardTitle>
             <GraduationCap className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -185,32 +353,48 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active This Period</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{activityMetrics.activeStudents}</div>
+            <p className="text-xs text-muted-foreground">
+              {selectedWeeks.length === 0 ? "All time" : `${selectedWeeks.length} week(s) selected`}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Hours Worked</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{activityMetrics.totalHours.toFixed(1)}</div>
+            <p className="text-xs text-muted-foreground">
+              {clinicData && clinicData.students.length > 0
+                ? `Avg: ${(activityMetrics.totalHours / clinicData.students.length).toFixed(1)} per student`
+                : "No students"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Debriefs</CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{activityMetrics.debriefsSubmitted}</div>
+            <p className="text-xs text-muted-foreground">Submitted this period</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Clients</CardTitle>
-            <Briefcase className="h-4 w-4 text-muted-foreground" />
+            <Building2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{clinicData?.clients.length || 0}</div>
             <p className="text-xs text-muted-foreground">Active engagements</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Directors</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{clinicData?.directors.length || 0}</div>
-            <p className="text-xs text-muted-foreground">Supporting team</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Semester</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{clinicData?.semester || "N/A"}</div>
-            <p className="text-xs text-muted-foreground">Current term</p>
           </CardContent>
         </Card>
       </div>
@@ -219,11 +403,50 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="students">Students</TabsTrigger>
+          <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="schedule">Schedule</TabsTrigger>
           <TabsTrigger value="materials">Materials</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Weekly Activity Trend
+              </CardTitle>
+              <CardDescription>Hours and submissions by week</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {weeklyBreakdown.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No activity data available</p>
+              ) : (
+                <div className="space-y-3">
+                  {weeklyBreakdown.map((week) => (
+                    <div key={week.week} className="flex items-center gap-4">
+                      <div className="w-24 text-sm text-muted-foreground">
+                        {new Date(week.week).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="h-4 rounded bg-primary"
+                            style={{ width: `${Math.min((week.hours / 50) * 100, 100)}%` }}
+                          />
+                          <span className="text-sm font-medium">{week.hours.toFixed(1)} hrs</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <span>{week.submissions} debriefs</span>
+                        <span>{week.students} students</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <div className="grid gap-6 lg:grid-cols-2">
             <Card>
               <CardHeader>
@@ -240,23 +463,35 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
                   <div className="space-y-4">
                     {clinicData?.clients.map((clientName) => {
                       const teamMembers = clinicData?.students.filter((s) => s.client_name === clientName) || []
+                      const teamHours = studentPerformance
+                        .filter((s) => s.client === clientName)
+                        .reduce((sum, s) => sum + s.totalHours, 0)
                       return (
                         <div key={clientName} className="rounded-lg border p-4">
                           <div className="mb-2 flex items-center justify-between">
                             <h4 className="font-medium">{clientName}</h4>
-                            <Badge variant="secondary">{teamMembers.length} members</Badge>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline">{teamHours.toFixed(1)} hrs</Badge>
+                              <Badge variant="secondary">{teamMembers.length} members</Badge>
+                            </div>
                           </div>
                           <div className="flex flex-wrap gap-2">
-                            {teamMembers.map((student) => (
-                              <div key={student.student_id} className="flex items-center gap-2">
-                                <Avatar className="h-6 w-6">
-                                  <AvatarFallback className="text-xs">
-                                    {getInitials(student.student_name)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <span className="text-sm">{student.student_name}</span>
-                              </div>
-                            ))}
+                            {teamMembers.map((student) => {
+                              const hasSubmitted = activityMetrics.studentsWithDebriefs.has(student.student_id)
+                              return (
+                                <div key={student.student_id} className="flex items-center gap-2">
+                                  <Avatar className={`h-6 w-6 ${hasSubmitted ? "ring-2 ring-green-500" : ""}`}>
+                                    <AvatarFallback className="text-xs">
+                                      {getInitials(student.student_name)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="text-sm">{student.student_name}</span>
+                                  {!hasSubmitted && selectedWeeks.length > 0 && (
+                                    <AlertCircle className="h-3 w-3 text-orange-500" />
+                                  )}
+                                </div>
+                              )
+                            })}
                           </div>
                         </div>
                       )
@@ -301,29 +536,109 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
           <Card>
             <CardHeader>
               <CardTitle>Student Roster</CardTitle>
-              <CardDescription>All students in {clinicData?.clinic || "this clinic"}</CardDescription>
+              <CardDescription>
+                All students in {clinicData?.clinic || "this clinic"}
+                {selectedWeeks.length > 0 && ` - showing activity for ${selectedWeeks.length} week(s)`}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {clinicData?.students.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No students found</p>
               ) : (
                 <div className="space-y-3">
-                  {clinicData?.students.map((student) => (
-                    <div key={student.student_id} className="flex items-center justify-between rounded-lg border p-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarFallback>{getInitials(student.student_name)}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">{student.student_name}</p>
-                          <p className="text-sm text-muted-foreground">{student.student_email}</p>
+                  {clinicData?.students.map((student) => {
+                    const hasSubmitted = activityMetrics.studentsWithDebriefs.has(student.student_id)
+                    const perf = studentPerformance.find((s) => s.id === student.student_id)
+                    return (
+                      <div key={student.student_id} className="flex items-center justify-between rounded-lg border p-4">
+                        <div className="flex items-center gap-3">
+                          <Avatar>
+                            <AvatarFallback>{getInitials(student.student_name)}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium">{student.student_name}</p>
+                            <p className="text-sm text-muted-foreground">{student.student_email}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">{student.client_name || "Unassigned"}</Badge>
+                          {perf && <Badge variant="secondary">{perf.totalHours.toFixed(1)} hrs</Badge>}
+                          {selectedWeeks.length > 0 &&
+                            (hasSubmitted ? (
+                              <Badge variant="default" className="bg-green-500">
+                                Submitted
+                              </Badge>
+                            ) : (
+                              <Badge variant="destructive">Missing</Badge>
+                            ))}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <Badge variant="outline">{student.client_name || "Unassigned"}</Badge>
+                    )
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="performance">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Student Performance
+              </CardTitle>
+              <CardDescription>
+                Ranked by hours worked {selectedWeeks.length > 0 ? "for selected period" : "all time"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {studentPerformance.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No performance data available</p>
+              ) : (
+                <div className="space-y-3">
+                  {studentPerformance.map((student, index) => {
+                    const maxHours = studentPerformance[0]?.totalHours || 1
+                    return (
+                      <div key={student.id} className="rounded-lg border p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-bold">
+                              {index + 1}
+                            </div>
+                            <div>
+                              <p className="font-medium">{student.name}</p>
+                              <p className="text-sm text-muted-foreground">{student.client}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <p className="font-bold">{student.totalHours.toFixed(1)} hrs</p>
+                              <p className="text-xs text-muted-foreground">{student.submissions} debriefs</p>
+                            </div>
+                            {student.submissions === 0 && <AlertCircle className="h-5 w-5 text-orange-500" />}
+                          </div>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-primary transition-all"
+                            style={{ width: `${(student.totalHours / maxHours) * 100}%` }}
+                          />
+                        </div>
+                        {student.lastSubmission && (
+                          <p className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            Last submission:{" "}
+                            {new Date(student.lastSubmission).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </p>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </CardContent>
@@ -361,13 +676,25 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
           </Card>
         </TabsContent>
 
-        <TabsContent value="materials">
+        <TabsContent value="materials" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Course Materials</CardTitle>
               <CardDescription>Resources and documents for the clinic</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-6">
+              <DocumentUpload
+                clinic={clinicData?.clinic || ""}
+                studentName="Director"
+                title="Upload Course Materials"
+                description="Upload resources, guides, or documents for students"
+                acceptedTypes=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls"
+                onUploadComplete={(files) => {
+                  fetchMaterials()
+                }}
+                compact
+              />
+
               {materials.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No materials uploaded yet</p>
               ) : (

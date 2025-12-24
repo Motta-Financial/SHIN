@@ -9,7 +9,7 @@ export async function GET() {
       .from("clients")
       .select(`
         *,
-        primary_director:directors(full_name, clinic)
+        primary_director:directors(id, full_name, email)
       `)
       .order("name", { ascending: true })
 

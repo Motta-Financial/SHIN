@@ -7,7 +7,7 @@ export async function GET() {
 
     const { data: clients, error } = await supabase
       .from("clients")
-      .select("id, name, email, contact_name, status, semester")
+      .select("id, name, email, contact_name, status, semester_id")
       .eq("status", "active")
       .order("name")
 

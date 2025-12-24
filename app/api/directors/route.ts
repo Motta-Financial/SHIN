@@ -25,7 +25,7 @@ export async function GET() {
 
     const { data: directors, error } = await supabase
       .from("directors")
-      .select("id, full_name, clinic, email, job_title, role")
+      .select("id, full_name, email, job_title, role, clinic_id, clinic:clinics(name)")
       .order("full_name")
 
     if (error) {

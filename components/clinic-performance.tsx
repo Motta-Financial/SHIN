@@ -102,22 +102,23 @@ export function ClinicPerformance({ selectedWeeks, selectedClinic, weekSchedule 
     fetchData()
   }, [])
 
-  const isDateInWeekRange = (dateStr: string, selectedWeekValues: string[]): boolean => {
+  const matchesSelectedWeek = (weekEnding: string, selectedWeekValues: string[]): boolean => {
     if (selectedWeekValues.length === 0) return true // No filter = all data
 
-    const date = new Date(dateStr)
-    if (isNaN(date.getTime())) return false
+    // Normalize the week ending date to YYYY-MM-DD format for comparison
+    const normalizeDate = (dateStr: string): string => {
+      if (!dateStr) return ""
+      const date = new Date(dateStr)
+      if (isNaN(date.getTime())) return dateStr
+      return date.toISOString().split("T")[0]
+    }
 
-    return selectedWeekValues.some((weekValue) => {
-      const week = weekSchedule.find((w) => w.value === weekValue)
-      if (!week) return false
+    const normalizedWeekEnding = normalizeDate(weekEnding)
 
-      const weekStart = new Date(week.weekStart)
-      const weekEnd = new Date(week.weekEnd)
-      // Add 1 day to weekEnd to make it inclusive
-      weekEnd.setDate(weekEnd.getDate() + 1)
-
-      return date >= weekStart && date < weekEnd
+    // Check if the debrief's week_ending matches any of the selected weeks
+    return selectedWeekValues.some((selectedWeek) => {
+      const normalizedSelected = normalizeDate(selectedWeek)
+      return normalizedWeekEnding === normalizedSelected
     })
   }
 
@@ -128,9 +129,8 @@ export function ClinicPerformance({ selectedWeeks, selectedClinic, weekSchedule 
     console.log("[v0] ClinicPerformance - selectedWeeks:", selectedWeeks)
     console.log("[v0] ClinicPerformance - debriefs count:", debriefs.length)
     if (debriefs.length > 0) {
-      console.log("[v0] Sample debrief:", debriefs[0])
-      const uniqueClinics = [...new Set(debriefs.map((d: any) => d.clinic))]
-      console.log("[v0] Unique clinics in debriefs:", uniqueClinics)
+      console.log("[v0] Sample debrief weekEnding:", debriefs[0].weekEnding || debriefs[0].week_ending)
+      console.log("[v0] Sample debrief hours:", debriefs[0].hoursWorked || debriefs[0].hours_worked)
     }
 
     const clientToClinicMap = new Map<string, string>()
@@ -155,7 +155,8 @@ export function ClinicPerformance({ selectedWeeks, selectedClinic, weekSchedule 
       { hours: number; students: Set<string>; latestSummary: string; director: string }
     >()
 
-    const uniqueClinicsFromData = new Set<string>()
+    let matchedCount = 0
+    let unmatchedWeekCount = 0
 
     debriefs.forEach((debrief: any) => {
       const recordWeek = debrief.weekEnding || debrief.week_ending || ""
@@ -166,13 +167,19 @@ export function ClinicPerformance({ selectedWeeks, selectedClinic, weekSchedule 
       const summary = debrief.workSummary || debrief.work_summary || ""
 
       const normalizedClinic = studentClinic.replace(" Clinic", "").trim()
-      if (normalizedClinic) uniqueClinicsFromData.add(normalizedClinic)
 
       const matchesClinic =
         filterClinic === "all" || normalizedClinic.includes(filterClinic) || studentClinic.includes(filterClinic)
-      const matchesWeek = isDateInWeekRange(recordWeek, selectedWeeks)
+
+      const matchesWeek = matchesSelectedWeek(recordWeek, selectedWeeks)
+
+      if (!matchesWeek && selectedWeeks.length > 0) {
+        unmatchedWeekCount++
+      }
 
       if (matchesWeek && matchesClinic) {
+        matchedCount++
+
         if (!clinicMap.has(normalizedClinic)) {
           clinicMap.set(normalizedClinic, { hours: 0, students: new Set(), clients: new Set() })
         }
@@ -198,6 +205,13 @@ export function ClinicPerformance({ selectedWeeks, selectedClinic, weekSchedule 
         }
       }
     })
+
+    console.log("[v0] ClinicPerformance - Matched debriefs:", matchedCount)
+    console.log("[v0] ClinicPerformance - Unmatched by week:", unmatchedWeekCount)
+    console.log(
+      "[v0] ClinicPerformance - Clinic hours:",
+      Array.from(clinicMap.entries()).map(([name, data]) => ({ name, hours: data.hours })),
+    )
 
     const clinicDataArray: ClinicData[] = Array.from(clinicMap.entries())
       .map(([name, data]) => ({

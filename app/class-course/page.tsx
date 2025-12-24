@@ -28,6 +28,8 @@ import {
   FileCheck,
   Files,
   FileCode,
+  Loader2,
+  AlertCircle,
 } from "lucide-react"
 import { UnifiedWeeklyAgenda } from "@/components/unified-weekly-agenda"
 
@@ -113,110 +115,6 @@ const getDirectorInitialsMap = (directors: Array<{ full_name: string; clinic: st
   return map
 }
 
-// Mock course materials data
-const mockCourseMaterials: CourseMaterial[] = [
-  {
-    id: "1",
-    title: "SEED Clinic Program Syllabus",
-    description:
-      "Complete syllabus for the Fall 2025 semester including learning objectives, grading criteria, and schedule.",
-    file_name: "SEED_Syllabus_Fall2025.pdf",
-    file_url: "#",
-    file_type: "application/pdf",
-    file_size: 245000,
-    uploaded_by_name: "Nick Vadala",
-    uploaded_by_email: "nvadala@temple.edu",
-    category: "syllabus",
-    target_clinic: "all",
-    created_at: "2025-01-10T10:00:00Z",
-  },
-  {
-    id: "2",
-    title: "Client Communication Guidelines",
-    description:
-      "Best practices for professional client communication including email templates and meeting protocols.",
-    file_name: "Client_Communication_Guide.pdf",
-    file_url: "#",
-    file_type: "application/pdf",
-    file_size: 128000,
-    uploaded_by_name: "Mark Dwyer",
-    uploaded_by_email: "mdwyer@temple.edu",
-    category: "resource",
-    target_clinic: "all",
-    created_at: "2025-01-12T14:30:00Z",
-  },
-  {
-    id: "3",
-    title: "Week 3: Financial Analysis Lecture",
-    description: "Lecture slides covering financial statement analysis and key metrics for consulting engagements.",
-    file_name: "Week3_Financial_Analysis.pptx",
-    file_url: "#",
-    file_type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    file_size: 3200000,
-    uploaded_by_name: "Ken Mooney",
-    uploaded_by_email: "kmooney@temple.edu",
-    category: "lecture",
-    target_clinic: "Accounting",
-    created_at: "2025-01-20T09:00:00Z",
-  },
-  {
-    id: "4",
-    title: "SOW Template",
-    description: "Standard Statement of Work template for all clinic engagements.",
-    file_name: "SOW_Template.docx",
-    file_url: "#",
-    file_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    file_size: 45000,
-    uploaded_by_name: "Nick Vadala",
-    uploaded_by_email: "nvadala@temple.edu",
-    category: "template",
-    target_clinic: "all",
-    created_at: "2025-01-08T11:00:00Z",
-  },
-  {
-    id: "5",
-    title: "Marketing Research Methods",
-    description: "Overview of primary and secondary research methods for marketing clinic projects.",
-    file_name: "Marketing_Research_Methods.pdf",
-    file_url: "#",
-    file_type: "application/pdf",
-    file_size: 890000,
-    uploaded_by_name: "Charlene Howell",
-    uploaded_by_email: "chowell@temple.edu",
-    category: "lecture",
-    target_clinic: "Marketing",
-    created_at: "2025-01-18T15:00:00Z",
-  },
-  {
-    id: "6",
-    title: "Midterm Project Assignment",
-    description: "Requirements and rubric for the midterm client deliverable.",
-    file_name: "Midterm_Assignment.pdf",
-    file_url: "#",
-    file_type: "application/pdf",
-    file_size: 156000,
-    uploaded_by_name: "Nick Vadala",
-    uploaded_by_email: "nvadala@temple.edu",
-    category: "assignment",
-    target_clinic: "all",
-    created_at: "2025-01-22T08:00:00Z",
-  },
-  {
-    id: "7",
-    title: "Grant Writing Basics",
-    description: "Introduction to grant writing for funding clinic teams.",
-    file_name: "Grant_Writing_Intro.pdf",
-    file_url: "#",
-    file_type: "application/pdf",
-    file_size: 520000,
-    uploaded_by_name: "Ken Mooney",
-    uploaded_by_email: "kmooney@temple.edu",
-    category: "lecture",
-    target_clinic: "Funding",
-    created_at: "2025-01-19T10:30:00Z",
-  },
-]
-
 export default function ClassCoursePage() {
   const [copied, setCopied] = useState(false)
   const [editingSession, setEditingSession] = useState<string | null>(null)
@@ -224,8 +122,9 @@ export default function ClassCoursePage() {
   const [clients, setClients] = useState<Array<{ name: string }>>([])
   const [scheduleNotes, setScheduleNotes] = useState("")
 
-  const [materials, setMaterials] = useState<CourseMaterial[]>(mockCourseMaterials) // Initialize with mock data
-  const [loadingMaterials, setLoadingMaterials] = useState(false) // Set to false since we have mock data
+  const [materials, setMaterials] = useState<CourseMaterial[]>([])
+  const [loadingMaterials, setLoadingMaterials] = useState(true)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -344,8 +243,13 @@ export default function ClassCoursePage() {
     fetchData()
   }, [])
 
+  useEffect(() => {
+    fetchMaterials()
+  }, [filterCategory, filterClinic])
+
   const fetchMaterials = async () => {
     setLoadingMaterials(true)
+    setUploadError(null)
     try {
       const params = new URLSearchParams()
       if (filterCategory !== "all") params.append("category", filterCategory)
@@ -355,9 +259,13 @@ export default function ClassCoursePage() {
       if (res.ok) {
         const data = await res.json()
         setMaterials(data.materials || [])
+      } else {
+        console.error("Failed to fetch materials")
+        setUploadError("Failed to load materials")
       }
     } catch (error) {
       console.error("Error fetching materials:", error)
+      setUploadError("Error loading materials")
     } finally {
       setLoadingMaterials(false)
     }
@@ -367,6 +275,8 @@ export default function ClassCoursePage() {
     if (!uploadFile || !uploadTitle) return
 
     setUploading(true)
+    setUploadError(null)
+
     try {
       const formData = new FormData()
       formData.append("file", uploadFile)
@@ -374,7 +284,8 @@ export default function ClassCoursePage() {
       formData.append("description", uploadDescription)
       formData.append("targetClinic", uploadTargetClinic)
       formData.append("category", uploadCategory)
-      formData.append("uploadedByName", "Program Director") // TODO: Get from auth
+      // TODO: Get from actual authenticated user
+      formData.append("uploadedByName", "Program Director")
       formData.append("uploadedByEmail", "director@example.com")
 
       const res = await fetch("/api/course-materials", {
@@ -391,10 +302,14 @@ export default function ClassCoursePage() {
         setUploadFile(null)
         setUploadDialogOpen(false)
         // Refresh materials
-        fetchMaterials()
+        await fetchMaterials()
+      } else {
+        const errorData = await res.json()
+        setUploadError(errorData.error || "Upload failed")
       }
     } catch (error) {
       console.error("Error uploading material:", error)
+      setUploadError("Upload failed. Please try again.")
     } finally {
       setUploading(false)
     }
@@ -674,7 +589,7 @@ export default function ClassCoursePage() {
             <UnifiedWeeklyAgenda semester="Fall 2025" />
           </TabsContent>
 
-          {/* Course Materials Tab - unchanged */}
+          {/* Course Materials Tab */}
           <TabsContent value="materials" className="space-y-4">
             <Card className="overflow-hidden border-0 shadow-sm">
               <div className="bg-slate-800 text-white p-4">
@@ -695,6 +610,12 @@ export default function ClassCoursePage() {
                         <DialogTitle>Upload Course Material</DialogTitle>
                       </DialogHeader>
                       <div className="space-y-4 py-4">
+                        {uploadError && (
+                          <div className="flex items-center gap-2 p-3 bg-red-50 text-red-700 rounded-md text-sm">
+                            <AlertCircle className="h-4 w-4" />
+                            {uploadError}
+                          </div>
+                        )}
                         <div className="space-y-2">
                           <Label htmlFor="title">Title *</Label>
                           <Input
@@ -748,15 +669,24 @@ export default function ClassCoursePage() {
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="file">File *</Label>
-                          <Input
-                            id="file"
-                            type="file"
-                            onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                            className="cursor-pointer"
-                          />
+                          <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center hover:border-slate-400 transition-colors">
+                            <Input
+                              id="file"
+                              type="file"
+                              onChange={(e) => {
+                                setUploadFile(e.target.files?.[0] || null)
+                                setUploadError(null)
+                              }}
+                              className="cursor-pointer"
+                              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.png,.jpg,.jpeg"
+                            />
+                            <p className="text-xs text-muted-foreground mt-2">
+                              Supported: PDF, Word, PowerPoint, Excel, Images
+                            </p>
+                          </div>
                           {uploadFile && (
                             <p className="text-xs text-muted-foreground">
-                              {uploadFile.name} ({formatFileSize(uploadFile.size)})
+                              Selected: {uploadFile.name} ({formatFileSize(uploadFile.size)})
                             </p>
                           )}
                         </div>
@@ -765,7 +695,14 @@ export default function ClassCoursePage() {
                           disabled={!uploadFile || !uploadTitle || uploading}
                           className="w-full"
                         >
-                          {uploading ? "Uploading..." : "Upload Material"}
+                          {uploading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Uploading...
+                            </>
+                          ) : (
+                            "Upload Material"
+                          )}
                         </Button>
                       </div>
                     </DialogContent>

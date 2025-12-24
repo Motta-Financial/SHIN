@@ -71,7 +71,7 @@ export async function GET(request: Request) {
           id,
           full_name,
           email,
-          clinic,
+          clinic_id,
           job_title,
           role
         )
@@ -101,7 +101,7 @@ export async function GET(request: Request) {
       id: d.director_id,
       name: d.directors?.full_name || "Unknown",
       email: d.directors?.email || "",
-      clinic: d.directors?.clinic || "",
+      clinicId: d.directors?.clinic_id || null,
       jobTitle: d.directors?.job_title || "Director",
       role: d.directors?.role || "Director",
       isPrimary: d.is_primary,

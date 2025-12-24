@@ -145,6 +145,29 @@ export function OverviewCards({ selectedWeeks, selectedClinic, weekSchedule = []
     fetchData()
   }, [selectedClinic])
 
+  const matchesSelectedWeek = (weekEnding: string, selectedWeekValues: string[]): boolean => {
+    if (selectedWeekValues.length === 0) return true // No filter = all data
+    if (!weekEnding) return false
+
+    // Normalize date to YYYY-MM-DD format
+    const normalizeDate = (dateStr: string): string => {
+      try {
+        const date = new Date(dateStr)
+        if (isNaN(date.getTime())) return dateStr
+        return date.toISOString().split("T")[0]
+      } catch {
+        return dateStr
+      }
+    }
+
+    const normalizedWeekEnding = normalizeDate(weekEnding)
+
+    return selectedWeekValues.some((selectedWeek) => {
+      const normalizedSelected = normalizeDate(selectedWeek)
+      return normalizedWeekEnding === normalizedSelected
+    })
+  }
+
   const { stats, activeStudents, inactiveStudents } = useMemo(() => {
     if (loading) {
       return {
@@ -178,7 +201,7 @@ export function OverviewCards({ selectedWeeks, selectedClinic, weekSchedule = []
 
     debriefs.forEach((debrief: any) => {
       const recordWeek = debrief.weekEnding || debrief.week_ending || ""
-      const matchesWeek = isDateInWeekRange(recordWeek, selectedWeeks)
+      const matchesWeek = matchesSelectedWeek(recordWeek, selectedWeeks)
 
       if (!matchesWeek) return
 

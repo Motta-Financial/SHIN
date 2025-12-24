@@ -22,7 +22,7 @@ export async function GET(request: Request) {
         questions,
         week_ending,
         week_number,
-        semester,
+        semester_id,
         status,
         created_at
       `)
@@ -78,7 +78,8 @@ export async function GET(request: Request) {
         questionType: (debrief as any).question_type || "clinic",
         weekEnding: debrief.week_ending,
         weekNumber: debrief.week_number,
-        semester: studentData?.semester || debrief.semester,
+        semester: studentData?.semester || null,
+        semesterId: debrief.semester_id,
         status: debrief.status,
         createdAt: debrief.created_at,
       }
@@ -120,7 +121,7 @@ export async function POST(request: Request) {
       work_summary: body.workSummary,
       questions: body.questions,
       week_ending: body.weekEnding || new Date().toISOString().split("T")[0],
-      semester: studentData?.semester || body.semester || "Fall 2025",
+      semester_id: body.semesterId || null,
       status: "submitted",
     }
 

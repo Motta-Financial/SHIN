@@ -6,7 +6,6 @@ import { DashboardHeader } from "@/components/dashboard-header"
 import { ClinicPerformance } from "@/components/clinic-performance"
 import { WeeklyProgramSummary } from "@/components/weekly-program-summary"
 import { DirectorNotifications } from "@/components/director-notifications"
-import { AgendaWidget } from "@/components/agenda-widget"
 import { ClinicView } from "@/components/clinic-view"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -45,6 +44,10 @@ interface WeekSchedule {
 }
 
 async function getAvailableWeeks(): Promise<{ weeks: string[]; schedule: WeekSchedule[] }> {
+  // Only run on client side
+  if (typeof window === "undefined") {
+    return { weeks: [], schedule: [] }
+  }
   try {
     const response = await fetch("/api/supabase/weeks")
     const data = await response.json()
@@ -320,9 +323,6 @@ export default function DirectorDashboardPage() {
             <div className="grid gap-6 lg:grid-cols-2">
               <Suspense fallback={<div>Loading summary...</div>}>
                 <WeeklyProgramSummary selectedClinic={selectedDirectorId} selectedWeeks={selectedWeeks} />
-              </Suspense>
-              <Suspense fallback={<div>Loading agenda...</div>}>
-                <AgendaWidget />
               </Suspense>
             </div>
           </TabsContent>
