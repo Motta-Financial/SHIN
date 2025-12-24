@@ -1,8 +1,11 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+function getSupabaseClient() {
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  return createClient(supabaseUrl!, supabaseKey!)
+}
 
 // Director data from CSV
 const directorsData = [
@@ -639,11 +642,7 @@ const clientsData = [
 ]
 
 export async function POST() {
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ error: "Missing Supabase credentials" }, { status: 500 })
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseKey)
+  const supabase = getSupabaseClient()
 
   const audit = {
     directors: { inserted: 0, skipped: 0, errors: 0, details: [] as string[] },
@@ -878,11 +877,7 @@ export async function POST() {
 }
 
 export async function GET() {
-  if (!supabaseUrl || !supabaseKey) {
-    return NextResponse.json({ error: "Missing Supabase credentials" }, { status: 500 })
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseKey)
+  const supabase = getSupabaseClient()
 
   // Audit existing data
   const { data: directors } = await supabase.from("directors").select("*").order("clinic")

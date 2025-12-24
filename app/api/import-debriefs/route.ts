@@ -1,8 +1,12 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_supabase_SUPABASE_URL
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.supabase_SUPABASE_SERVICE_ROLE_KEY
+// Function to get Supabase client
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_supabase_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.supabase_SUPABASE_SERVICE_ROLE_KEY
+  return createClient(supabaseUrl!, supabaseServiceKey!)
+}
 
 // All debriefs from the MIGRATION_DEBRIEFS CSV
 const DEBRIEFS_DATA = [
@@ -1046,11 +1050,7 @@ function mapClinicName(clinic: string): string {
 }
 
 export async function POST() {
-  if (!supabaseUrl || !supabaseServiceKey) {
-    return NextResponse.json({ error: "Missing Supabase credentials" }, { status: 500 })
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabase = getSupabaseClient()
 
   const results = {
     totalRecords: DEBRIEFS_DATA.length,
@@ -1137,11 +1137,7 @@ export async function POST() {
 }
 
 export async function GET() {
-  if (!supabaseUrl || !supabaseServiceKey) {
-    return NextResponse.json({ error: "Missing Supabase credentials" }, { status: 500 })
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const supabase = getSupabaseClient()
 
   // Get all records from weekly_summaries
   const { data, error, count } = await supabase
