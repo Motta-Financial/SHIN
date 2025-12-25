@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import {
   Bell,
   Calendar,
@@ -30,28 +31,35 @@ import {
   FileCode,
   Loader2,
   AlertCircle,
+  ClipboardList,
+  Star,
+  CheckCircle2,
+  Clock,
+  Users,
+  Send,
+  Megaphone,
 } from "lucide-react"
 import { UnifiedWeeklyAgenda } from "@/components/unified-weekly-agenda"
 
-// Mock announcements
-const mockAnnouncements = [
-  {
-    id: "1",
-    title: "Mid-semester Review Schedule",
-    content: "Mid-semester reviews will be held during weeks 7-8. Please prepare your progress reports.",
-    postedBy: "Program Director",
-    postedAt: "2025-01-15",
-    priority: "high",
-  },
-  {
-    id: "2",
-    title: "Guest Speaker Next Week",
-    content: "We will have a guest speaker from industry discussing career opportunities.",
-    postedBy: "Nick Vadala",
-    postedAt: "2025-01-10",
-    priority: "normal",
-  },
-]
+// Mock announcements - REMOVED - will fetch from database
+// const mockAnnouncements = [
+//   {
+//     id: "1",
+//     title: "Mid-semester Review Schedule",
+//     content: "Mid-semester reviews will be held during weeks 7-8. Please prepare your progress reports.",
+//     postedBy: "Program Director",
+//     postedAt: "2025-01-15",
+//     priority: "high",
+//   },
+//   {
+//     id: "2",
+//     title: "Guest Speaker Next Week",
+//     content: "We will have a guest speaker from industry discussing career opportunities.",
+//     postedBy: "Nick Vadala",
+//     postedAt: "2025-01-10",
+//     priority: "normal",
+//   },
+// ]
 
 // Mock course schedule
 const mockCourseSchedule = [
@@ -103,6 +111,18 @@ interface CourseMaterial {
   created_at: string
 }
 
+// Define Announcement interface
+interface Announcement {
+  id: string
+  title: string
+  content: string
+  postedBy: string
+  postedAt: string
+  priority: "high" | "normal"
+  clinicId: string | null
+  clinicName: string | null
+}
+
 // Director initials mapping - will be populated from database
 const getDirectorInitialsMap = (directors: Array<{ full_name: string; clinic: string }>) => {
   const map: Record<string, string> = {}
@@ -115,11 +135,141 @@ const getDirectorInitialsMap = (directors: Array<{ full_name: string; clinic: st
   return map
 }
 
+const EVALUATION_QUESTIONS = [
+  {
+    id: 1,
+    question: "How was the presentation opening?",
+    guidance:
+      "Consider attributes of clear & concise communication of presentation purpose and did the opening pique your interest.",
+  },
+  {
+    id: 2,
+    question:
+      "Did the presenter(s) demonstrate confidence and knowledge of their client's business and how the business model works?",
+    guidance: "Consider knowing the market, customers, how the product/service is sold and delivered.",
+  },
+  {
+    id: 3,
+    question: "Did the presenter(s) demonstrate knowledge of their client's industry?",
+    guidance:
+      "Consider knowing the general market, competition, and where the client fits within the industry at their current business stage.",
+  },
+  {
+    id: 4,
+    question: "Did the presenter(s) demonstrate knowledge of how the business measures/monitors performance?",
+    guidance: "Consider key performance indicators, reporting, and systems required to measure performance.",
+  },
+  {
+    id: 5,
+    question: "Was the team able to outline their project?",
+    guidance: "Consider ability to outline key deliverables and expected results.",
+  },
+]
+
+const FINAL_EVALUATION_QUESTIONS = [
+  {
+    id: 1,
+    question: "How was the presentation opening?",
+    guidance:
+      "Consider attributes of clear & concise communication of the presentation purpose and did the opening pique your interest.",
+  },
+  {
+    id: 2,
+    question:
+      "Did the presenter(s) demonstrate confidence and knowledge of the client's deliverables and the related solutions/recommendations?",
+    guidance: "Consider communication of the challenge and solutions/recommendations was clear.",
+  },
+  {
+    id: 3,
+    question: "Did the presenter(s) demonstrate knowledge of their client's business & industry?",
+    guidance:
+      "Consider how the solutions/recommendations were put in the context of the client's business stage and industry.",
+  },
+  {
+    id: 4,
+    question: "What was the quality of the recommendations?",
+    guidance: "Were they well thought out, clear, fit the client business, and implementable.",
+  },
+  {
+    id: 5,
+    question:
+      "Was the team organized in presenting their solutions as a team and handling the questions and answer session?",
+    guidance: "Consider if all team members participated, were the transitions smooth and clean.",
+  },
+]
+
+const DELIVERABLES_CONFIG = {
+  sow: {
+    title: "Statement of Work (SOW)",
+    description:
+      "Document outlining the project scope, objectives, deliverables, and timeline agreed upon with the client.",
+    dueDate: "Week 4",
+    weight: "Part of Team Grade (20%)",
+    instructions: [
+      "Define clear project objectives and scope",
+      "Outline specific deliverables and milestones",
+      "Establish timeline with key dates",
+      "Identify resources and team responsibilities",
+      "Get client sign-off before proceeding",
+    ],
+  },
+  midterm: {
+    title: "Mid-Term Presentation",
+    description: "Present your research findings, industry analysis, and project progress to instructors and guests.",
+    dueDate: "October 27, 2025",
+    weight: "Client Team Grade (20%)",
+    instructions: [
+      "Present client business overview and model",
+      "Demonstrate industry knowledge and competitive landscape",
+      "Show KPIs and performance metrics",
+      "Outline project focus and expected deliverables",
+      "15-minute presentation with Q&A",
+    ],
+  },
+  final: {
+    title: "Final Presentation",
+    description: "Deliver comprehensive research, solutions, and recommendations to the client and evaluation panel.",
+    dueDate: "End of Semester (Dec 2025)",
+    weight: "Team Grade (30%)",
+    instructions: [
+      "Use SEED PowerPoint template (same as mid-term)",
+      "Send draft to primary clinic director 24 hours before client submission",
+      "Send final presentation to client 24 hours before presentation day",
+      "Forward presentation to MJ and all clinic directors when sending to client",
+      "Arrive early to set up and meet your client",
+      "Dress code: Business casual",
+      "All team members must participate",
+    ],
+    submissionSteps: [
+      "Team leaders coordinate presentation construction in PowerPoint format",
+      "Primary clinic director reviews presentation before sending to client",
+      "Send near-final draft for review - doesn't need to be complete",
+      "Arrange brief call/Zoom with clinic director for feedback",
+      "Submit final presentation to client after director approval",
+      "Copy your team and primary clinic director on client email",
+      "Forward to MJ and all clinic directors simultaneously",
+    ],
+    presentationDay: [
+      "Arrive early to set up and coordinate with team and MJ",
+      "Meet and greet your client",
+      "Your audience: client(s), clinic director(s), legal team member, or Prof. Letwin",
+      "Have bottles of water in the room for your client",
+      "Teams not presenting are not required to attend class",
+    ],
+  },
+}
+
 export default function ClassCoursePage() {
   const [copied, setCopied] = useState(false)
   const [editingSession, setEditingSession] = useState<string | null>(null)
-  const [directors, setDirectors] = useState<Array<{ full_name: string; clinic: string }>>([])
-  const [clients, setClients] = useState<Array<{ name: string }>>([])
+  const [directors, setDirectors] = useState<Array<{ id: string; full_name: string; clinic: string }>>([])
+  const [clients, setClients] = useState<
+    Array<{
+      id: string
+      name: string
+      teamMembers?: Array<{ student_id: string; student_name: string; student_role: string; student_email: string }>
+    }>
+  >([])
   const [scheduleNotes, setScheduleNotes] = useState("")
 
   const [materials, setMaterials] = useState<CourseMaterial[]>([])
@@ -130,6 +280,28 @@ export default function ClassCoursePage() {
   const [uploading, setUploading] = useState(false)
   const [filterCategory, setFilterCategory] = useState("all")
   const [filterClinic, setFilterClinic] = useState("all")
+
+  const [evaluationDialogOpen, setEvaluationDialogOpen] = useState(false)
+  const [selectedClientForEval, setSelectedClientForEval] = useState<string | null>(null)
+  const [selectedDirectorForEval, setSelectedDirectorForEval] = useState<string>("")
+  const [evaluationRatings, setEvaluationRatings] = useState<Record<number, number>>({})
+  const [evaluationNotes, setEvaluationNotes] = useState<Record<number, string>>({})
+  const [additionalComments, setAdditionalComments] = useState("")
+  const [submittingEvaluation, setSubmittingEvaluation] = useState(false)
+  const [evaluationType, setEvaluationType] = useState<"midterm" | "final">("midterm")
+  const [evaluations, setEvaluations] = useState<
+    Array<{
+      id: string
+      client_id: string
+      director_name: string
+      created_at: string
+      average_rating: number
+      evaluation_type?: string
+    }>
+  >([])
+  const [clientDeliverables, setClientDeliverables] = useState<
+    Record<string, { sow: boolean; midterm: boolean; final: boolean }>
+  >({})
 
   const [scheduleData, setScheduleData] = useState<TimeBlock[]>([
     {
@@ -220,27 +392,137 @@ export default function ClassCoursePage() {
   const [uploadCategory, setUploadCategory] = useState("resource")
   const [uploadFile, setUploadFile] = useState<File | null>(null)
 
-  // Fetch directors and clients from database
+  const [announcements, setAnnouncements] = useState<Announcement[]>([])
+  const [loadingAnnouncements, setLoadingAnnouncements] = useState(true)
+  const [announcementDialogOpen, setAnnouncementDialogOpen] = useState(false)
+  const [newAnnouncementTitle, setNewAnnouncementTitle] = useState("")
+  const [newAnnouncementContent, setNewAnnouncementContent] = useState("")
+  const [newAnnouncementClinic, setNewAnnouncementClinic] = useState<string>("all")
+  const [newAnnouncementPriority, setNewAnnouncementPriority] = useState<"high" | "normal">("normal")
+  const [postingAnnouncement, setPostingAnnouncement] = useState(false)
+  const [clinics, setClinics] = useState<Array<{ id: string; name: string }>>([])
+
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchEvaluations = async () => {
       try {
-        const [directorsRes, clientsRes] = await Promise.all([fetch("/api/directors"), fetch("/api/supabase/clients")])
-
-        if (directorsRes.ok) {
-          const directorsData = await directorsRes.json()
-          setDirectors(directorsData.directors || [])
-        }
-
-        if (clientsRes.ok) {
-          const clientsData = await clientsRes.json()
-          setClients(clientsData.clients || [])
+        const res = await fetch("/api/evaluations")
+        if (res.ok) {
+          const data = await res.json()
+          setEvaluations(data.evaluations || [])
         }
       } catch (error) {
-        console.error("Error fetching data:", error)
+        console.error("Error fetching evaluations:", error)
       }
     }
 
-    fetchData()
+    const fetchClientDeliverables = async () => {
+      try {
+        const res = await fetch("/api/documents?submissionType=all")
+        if (res.ok) {
+          const data = await res.json()
+          const deliverablesByClient: Record<string, { sow: boolean; midterm: boolean; final: boolean }> = {}
+
+          for (const doc of data.documents || []) {
+            if (!deliverablesByClient[doc.client_id]) {
+              deliverablesByClient[doc.client_id] = { sow: false, midterm: false, final: false }
+            }
+            if (doc.submission_type === "sow") deliverablesByClient[doc.client_id].sow = true
+            if (doc.submission_type === "midterm") deliverablesByClient[doc.client_id].midterm = true
+            if (doc.submission_type === "final") deliverablesByClient[doc.client_id].final = true
+          }
+
+          setClientDeliverables(deliverablesByClient)
+        }
+      } catch (error) {
+        console.error("Error fetching deliverables:", error)
+      }
+    }
+
+    fetchEvaluations()
+    fetchClientDeliverables()
+  }, [])
+
+  // Fetch directors and clients from database
+  useEffect(() => {
+    const fetchDirectors = async () => {
+      try {
+        const res = await fetch("/api/directors")
+        if (res.ok) {
+          const data = await res.json()
+          setDirectors(data.directors || [])
+        }
+      } catch (error) {
+        console.error("Error fetching directors:", error)
+      }
+    }
+    fetchDirectors()
+  }, [])
+
+  useEffect(() => {
+    const fetchClients = async () => {
+      try {
+        const res = await fetch("/api/supabase/clients")
+        if (res.ok) {
+          const data = await res.json()
+          const clientsWithTeams = data.clients || []
+
+          // Fetch team members for each client
+          const teamRes = await fetch("/api/supabase/v-complete-mapping")
+          if (teamRes.ok) {
+            const teamData = await teamRes.json()
+            const mappings = teamData.records || []
+
+            for (const client of clientsWithTeams) {
+              client.teamMembers = mappings
+                .filter((m: any) => m.client_id === client.id)
+                .map((m: any) => ({
+                  student_id: m.student_id,
+                  student_name: m.student_name,
+                  student_role: m.student_role,
+                  student_email: m.student_email,
+                }))
+            }
+          }
+
+          setClients(clientsWithTeams)
+        }
+      } catch (error) {
+        console.error("Error fetching clients:", error)
+      }
+    }
+    fetchClients()
+  }, [])
+
+  useEffect(() => {
+    const fetchAnnouncements = async () => {
+      setLoadingAnnouncements(true)
+      try {
+        const res = await fetch("/api/announcements")
+        if (res.ok) {
+          const data = await res.json()
+          setAnnouncements(data.announcements || [])
+        }
+      } catch (error) {
+        console.error("Error fetching announcements:", error)
+      } finally {
+        setLoadingAnnouncements(false)
+      }
+    }
+
+    const fetchClinics = async () => {
+      try {
+        const res = await fetch("/api/supabase/clinics")
+        if (res.ok) {
+          const data = await res.json()
+          setClinics(data.clinics || [])
+        }
+      } catch (error) {
+        console.error("Error fetching clinics:", error)
+      }
+    }
+
+    fetchAnnouncements()
+    fetchClinics()
   }, [])
 
   useEffect(() => {
@@ -510,13 +792,129 @@ export default function ClassCoursePage() {
     return clinic === "all" ? "All Clinics (Program-Wide)" : `${clinic} Clinic`
   }
 
-  return (
-    <div className="min-h-screen bg-background pt-[48px] pl-12">
-      <MainNavigation />
+  const handlePostAnnouncement = async () => {
+    if (!newAnnouncementTitle.trim() || !newAnnouncementContent.trim()) {
+      alert("Please fill in all required fields")
+      return
+    }
 
-      <main className="container mx-auto p-6 space-y-6">
+    setPostingAnnouncement(true)
+    try {
+      const res = await fetch("/api/announcements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newAnnouncementTitle,
+          content: newAnnouncementContent,
+          clinicId: newAnnouncementClinic === "all" ? null : newAnnouncementClinic,
+          priority: newAnnouncementPriority,
+          postedBy: "Program Director", // This could be dynamic based on logged-in user
+        }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        setAnnouncements((prev) => [data.announcement, ...prev])
+        setAnnouncementDialogOpen(false)
+        setNewAnnouncementTitle("")
+        setNewAnnouncementContent("")
+        setNewAnnouncementClinic("all")
+        setNewAnnouncementPriority("normal")
+      } else {
+        const error = await res.json()
+        alert(error.error || "Failed to post announcement")
+      }
+    } catch (error) {
+      console.error("Error posting announcement:", error)
+      alert("Failed to post announcement")
+    } finally {
+      setPostingAnnouncement(false)
+    }
+  }
+
+  const handleSubmitEvaluation = async () => {
+    if (!selectedClientForEval || !selectedDirectorForEval) return
+
+    const questions = evaluationType === "final" ? FINAL_EVALUATION_QUESTIONS : EVALUATION_QUESTIONS
+
+    // Validate all ratings are filled
+    const missingRatings = questions.filter((q) => !evaluationRatings[q.id])
+    if (missingRatings.length > 0) {
+      alert("Please provide ratings for all questions")
+      return
+    }
+
+    setSubmittingEvaluation(true)
+    try {
+      const res = await fetch("/api/evaluations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_id: selectedClientForEval,
+          director_name: selectedDirectorForEval,
+          evaluation_type: evaluationType, // Include evaluation type
+          question_1_rating: evaluationRatings[1],
+          question_1_notes: evaluationNotes[1] || "",
+          question_2_rating: evaluationRatings[2],
+          question_2_notes: evaluationNotes[2] || "",
+          question_3_rating: evaluationRatings[3],
+          question_3_notes: evaluationNotes[3] || "",
+          question_4_rating: evaluationRatings[4],
+          question_4_notes: evaluationNotes[4] || "",
+          question_5_rating: evaluationRatings[5],
+          question_5_notes: evaluationNotes[5] || "",
+          additional_comments: additionalComments,
+        }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        // Ensure the new evaluation includes the type
+        setEvaluations((prev) => [...prev, { ...data.evaluation, evaluation_type: evaluationType }])
+        setEvaluationDialogOpen(false)
+        resetEvaluationForm()
+      } else {
+        const error = await res.json()
+        alert(error.error || "Failed to submit evaluation")
+      }
+    } catch (error) {
+      console.error("Error submitting evaluation:", error)
+      alert("Failed to submit evaluation")
+    } finally {
+      setSubmittingEvaluation(false)
+    }
+  }
+
+  const resetEvaluationForm = () => {
+    setSelectedClientForEval(null)
+    setSelectedDirectorForEval("")
+    setEvaluationRatings({})
+    setEvaluationNotes({})
+    setAdditionalComments("")
+    setEvaluationType("midterm") // Reset to default
+  }
+
+  const openEvaluationDialog = (clientId: string, type: "midterm" | "final") => {
+    setSelectedClientForEval(clientId)
+    setEvaluationType(type) // Set the evaluation type
+    setEvaluationDialogOpen(true)
+  }
+
+  const getClientEvaluations = (clientId: string, type?: "midterm" | "final") => {
+    return evaluations.filter((e) => {
+      const matchesClient = e.client_id === clientId
+      // Default to 'midterm' if evaluation_type is missing, to avoid filtering out old evaluations
+      const matchesType = type ? (e.evaluation_type || "midterm") === type : true
+      return matchesClient && matchesType
+    })
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <MainNavigation userRole="director" userName="Director" />
+      <main className="container mx-auto px-4 py-8 max-w-7xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Class Course</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Class Course Dashboard</h1>
           <p className="text-muted-foreground mt-1">Fall 2025 Semester</p>
         </div>
 
@@ -543,6 +941,13 @@ export default function ClassCoursePage() {
               <BookOpen className="h-4 w-4" />
               Course Materials
             </TabsTrigger>
+            <TabsTrigger
+              value="assignments"
+              className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md px-4"
+            >
+              <ClipboardList className="h-4 w-4" />
+              Assignments
+            </TabsTrigger>
           </TabsList>
 
           {/* Announcements Tab */}
@@ -551,36 +956,144 @@ export default function ClassCoursePage() {
               <CardHeader className="border-b bg-muted/30 rounded-t-lg">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl font-semibold">Announcements</CardTitle>
-                  <Button size="sm" className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    Post Announcement
-                  </Button>
+                  <Dialog open={announcementDialogOpen} onOpenChange={setAnnouncementDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" className="gap-2">
+                        <Plus className="h-4 w-4" />
+                        Post Announcement
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[500px]">
+                      <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                          <Megaphone className="h-5 w-5" />
+                          Post New Announcement
+                        </DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="announcement-title">Title *</Label>
+                          <Input
+                            id="announcement-title"
+                            placeholder="Enter announcement title"
+                            value={newAnnouncementTitle}
+                            onChange={(e) => setNewAnnouncementTitle(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="announcement-content">Content *</Label>
+                          <Textarea
+                            id="announcement-content"
+                            placeholder="Enter announcement details..."
+                            rows={4}
+                            value={newAnnouncementContent}
+                            onChange={(e) => setNewAnnouncementContent(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="announcement-clinic">Target Clinic</Label>
+                          <Select value={newAnnouncementClinic} onValueChange={setNewAnnouncementClinic}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select clinic" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Clinics (Program-Wide)</SelectItem>
+                              {clinics.map((clinic) => (
+                                <SelectItem key={clinic.id} value={clinic.id}>
+                                  {clinic.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            Only students in the selected clinic will receive this notification
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="announcement-priority">Priority</Label>
+                          <Select
+                            value={newAnnouncementPriority}
+                            onValueChange={(v) => setNewAnnouncementPriority(v as "high" | "normal")}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select priority" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="normal">Normal</SelectItem>
+                              <SelectItem value="high">High (Important)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button
+                          className="w-full gap-2"
+                          onClick={handlePostAnnouncement}
+                          disabled={
+                            postingAnnouncement || !newAnnouncementTitle.trim() || !newAnnouncementContent.trim()
+                          }
+                        >
+                          {postingAnnouncement ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Posting...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-4 w-4" />
+                              Post Announcement
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </CardHeader>
               <CardContent className="p-6">
-                <div className="space-y-4">
-                  {mockAnnouncements.map((announcement) => (
-                    <div key={announcement.id} className="border-l-4 border-l-primary bg-muted/20 rounded-r-lg p-4">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-base text-foreground">{announcement.title}</h3>
-                            {announcement.priority === "high" && (
-                              <Badge variant="destructive" className="text-xs font-medium">
-                                Important
-                              </Badge>
-                            )}
+                {loadingAnnouncements ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : announcements.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Megaphone className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No announcements yet</p>
+                    <p className="text-sm">Post an announcement to notify students</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {announcements.map((announcement) => (
+                      <div key={announcement.id} className="border-l-4 border-l-primary bg-muted/20 rounded-r-lg p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="font-semibold text-base text-foreground">{announcement.title}</h3>
+                              {announcement.priority === "high" && (
+                                <Badge variant="destructive" className="text-xs font-medium">
+                                  Important
+                                </Badge>
+                              )}
+                              {announcement.clinicName && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {announcement.clinicName}
+                                </Badge>
+                              )}
+                              {!announcement.clinicId && (
+                                <Badge variant="outline" className="text-xs">
+                                  All Clinics
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-2">{announcement.content}</p>
+                            <p className="text-xs text-muted-foreground mt-3">
+                              Posted by <span className="font-medium">{announcement.postedBy}</span> •{" "}
+                              {new Date(announcement.postedAt).toLocaleDateString()}
+                            </p>
                           </div>
-                          <p className="text-sm text-muted-foreground mt-2">{announcement.content}</p>
-                          <p className="text-xs text-muted-foreground mt-3">
-                            Posted by <span className="font-medium">{announcement.postedBy}</span> •{" "}
-                            {announcement.postedAt}
-                          </p>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -896,7 +1409,438 @@ export default function ClassCoursePage() {
               </div>
             </Card>
           </TabsContent>
+
+          <TabsContent value="assignments" className="space-y-6">
+            {/* Grading Breakdown */}
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="border-b bg-gradient-to-r from-slate-800 to-slate-700 text-white rounded-t-lg">
+                <CardTitle className="text-lg">Grading Breakdown</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <div className="grid grid-cols-5 gap-4">
+                  <div className="text-center p-3 bg-blue-50 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600">15%</div>
+                    <div className="text-xs text-muted-foreground">Attendance & Participation</div>
+                  </div>
+                  <div className="text-center p-3 bg-green-50 rounded-lg">
+                    <div className="text-2xl font-bold text-green-600">15%</div>
+                    <div className="text-xs text-muted-foreground">Written Assignments</div>
+                  </div>
+                  <div className="text-center p-3 bg-purple-50 rounded-lg">
+                    <div className="text-2xl font-bold text-purple-600">20%</div>
+                    <div className="text-xs text-muted-foreground">Mid-Term Presentation</div>
+                  </div>
+                  <div className="text-center p-3 bg-orange-50 rounded-lg">
+                    <div className="text-2xl font-bold text-orange-600">20%</div>
+                    <div className="text-xs text-muted-foreground">Client Work & Feedback</div>
+                  </div>
+                  <div className="text-center p-3 bg-red-50 rounded-lg">
+                    <div className="text-2xl font-bold text-red-600">30%</div>
+                    <div className="text-xs text-muted-foreground">Final Presentation</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Deliverables Overview */}
+            <div className="grid grid-cols-3 gap-4">
+              {Object.entries(DELIVERABLES_CONFIG).map(([key, config]) => (
+                <Card key={key} className="border-0 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base">{config.title}</CardTitle>
+                      <Badge variant={key === "sow" ? "default" : key === "midterm" ? "secondary" : "outline"}>
+                        {config.weight}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-muted-foreground">{config.description}</p>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span>Due: {config.dueDate}</span>
+                    </div>
+                    <Accordion type="single" collapsible className="w-full">
+                      <AccordionItem value="instructions" className="border-0">
+                        <AccordionTrigger className="text-sm py-2">View Instructions</AccordionTrigger>
+                        <AccordionContent>
+                          <ul className="space-y-1 text-sm text-muted-foreground">
+                            {config.instructions.map((instruction, i) => (
+                              <li key={i} className="flex items-start gap-2">
+                                <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+                                {instruction}
+                              </li>
+                            ))}
+                          </ul>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                    {/* Conditionally render submissionSteps and presentationDay for final */}
+                    {key === "final" && config.submissionSteps && (
+                      <Accordion type="single" collapsible className="w-full">
+                        <AccordionItem value="submissionSteps" className="border-0">
+                          <AccordionTrigger className="text-sm py-2">Submission Steps</AccordionTrigger>
+                          <AccordionContent>
+                            <ul className="space-y-1 text-sm text-muted-foreground">
+                              {config.submissionSteps.map((step, i) => (
+                                <li key={i} className="flex items-start gap-2">
+                                  <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+                                  {step}
+                                </li>
+                              ))}
+                            </ul>
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
+                    )}
+                    {key === "final" && config.presentationDay && (
+                      <Accordion type="single" collapsible className="w-full">
+                        <AccordionItem value="presentationDay" className="border-0">
+                          <AccordionTrigger className="text-sm py-2">Presentation Day</AccordionTrigger>
+                          <AccordionContent>
+                            <ul className="space-y-1 text-sm text-muted-foreground">
+                              {config.presentationDay.map((day, i) => (
+                                <li key={i} className="flex items-start gap-2">
+                                  <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+                                  {day}
+                                </li>
+                              ))}
+                            </ul>
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Client Teams & Evaluations */}
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="border-b bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Client Team Deliverables & Evaluations</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y">
+                  {clients.map((client) => {
+                    const deliverables = clientDeliverables[client.id] || { sow: false, midterm: false, final: false }
+                    const clientEvalsMidterm = getClientEvaluations(client.id, "midterm")
+                    const clientEvalsFinal = getClientEvaluations(client.id, "final")
+
+                    const allClientEvals = [...clientEvalsMidterm, ...clientEvalsFinal]
+                    const avgRating =
+                      allClientEvals.length > 0
+                        ? (
+                            allClientEvals.reduce((sum, e) => sum + e.average_rating, 0) / allClientEvals.length
+                          ).toFixed(1)
+                        : null
+
+                    return (
+                      <div key={client.id} className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <h3 className="font-semibold">{client.name}</h3>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Users className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">
+                                {client.teamMembers?.length || 0} team members
+                              </span>
+                              {avgRating && (
+                                <Badge variant="outline" className="ml-2">
+                                  <Star className="h-3 w-3 mr-1 text-yellow-500" />
+                                  {avgRating} avg
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openEvaluationDialog(client.id, "midterm")}
+                              className="gap-1"
+                            >
+                              <Star className="h-3 w-3" />
+                              Mid-Term Eval
+                              {getClientEvaluations(client.id, "midterm").length > 0 && (
+                                <Badge variant="secondary" className="ml-1 text-xs">
+                                  {getClientEvaluations(client.id, "midterm").length}
+                                </Badge>
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openEvaluationDialog(client.id, "final")}
+                              className="gap-1"
+                            >
+                              <Star className="h-3 w-3" />
+                              Final Eval
+                              {getClientEvaluations(client.id, "final").length > 0 && (
+                                <Badge variant="secondary" className="ml-1 text-xs">
+                                  {getClientEvaluations(client.id, "final").length}
+                                </Badge>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Deliverables Status */}
+                        <div className="grid grid-cols-3 gap-3 mb-3">
+                          <div
+                            className={`flex items-center gap-2 p-2 rounded-lg ${deliverables.sow ? "bg-green-50" : "bg-slate-50"}`}
+                          >
+                            {deliverables.sow ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <Clock className="h-4 w-4 text-slate-400" />
+                            )}
+                            <span className="text-sm">SOW</span>
+                          </div>
+                          <div
+                            className={`flex items-center gap-2 p-2 rounded-lg ${deliverables.midterm ? "bg-green-50" : "bg-slate-50"}`}
+                          >
+                            {deliverables.midterm ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <Clock className="h-4 w-4 text-slate-400" />
+                            )}
+                            <span className="text-sm">Mid-Term</span>
+                          </div>
+                          <div
+                            className={`flex items-center gap-2 p-2 rounded-lg ${deliverables.final ? "bg-green-50" : "bg-slate-50"}`}
+                          >
+                            {deliverables.final ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <Clock className="h-4 w-4 text-slate-400" />
+                            )}
+                            <span className="text-sm">Final</span>
+                          </div>
+                        </div>
+
+                        {/* Existing Evaluations */}
+                        {(clientEvalsMidterm.length > 0 || clientEvalsFinal.length > 0) && (
+                          <div className="mt-3 pt-3 border-t">
+                            <p className="text-xs font-medium text-muted-foreground mb-2">Submitted Evaluations</p>
+                            <div className="flex flex-wrap gap-2">
+                              {clientEvalsMidterm.map((evaluation) => (
+                                <Badge
+                                  key={evaluation.id}
+                                  variant="outline"
+                                  className="text-xs bg-blue-50 border-blue-200 text-blue-800"
+                                >
+                                  {evaluation.director_name} - {evaluation.average_rating.toFixed(1)}
+                                  <Star className="h-3 w-3 ml-1 text-yellow-500" />
+                                  (Mid-Term)
+                                </Badge>
+                              ))}
+                              {clientEvalsFinal.map((evaluation) => (
+                                <Badge
+                                  key={evaluation.id}
+                                  variant="outline"
+                                  className="text-xs bg-purple-50 border-purple-200 text-purple-800"
+                                >
+                                  {evaluation.director_name} - {evaluation.average_rating.toFixed(1)}
+                                  <Star className="h-3 w-3 ml-1 text-yellow-500" />
+                                  (Final)
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Team Members */}
+                        {client.teamMembers && client.teamMembers.length > 0 && (
+                          <Accordion type="single" collapsible className="w-full mt-2">
+                            <AccordionItem value="team" className="border-0">
+                              <AccordionTrigger className="text-xs py-1 text-muted-foreground">
+                                View Team Members
+                              </AccordionTrigger>
+                              <AccordionContent>
+                                <div className="flex flex-wrap gap-2">
+                                  {client.teamMembers.map((member, i) => (
+                                    <Badge key={i} variant="outline" className="text-xs">
+                                      {member.student_name}
+                                      {member.student_role && ` (${member.student_role})`}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          </Accordion>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
+
+        {/* Updated Evaluation Dialog */}
+        <Dialog open={evaluationDialogOpen} onOpenChange={setEvaluationDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <ClipboardList className="h-5 w-5" />
+                {evaluationType === "final" ? "Final" : "Mid-Term"} Presentation Evaluation
+              </DialogTitle>
+              <p className="text-sm text-muted-foreground">
+                {evaluationType === "final"
+                  ? "Evaluate the team's final presentation, deliverables, and recommendations."
+                  : "Evaluate the team's mid-term presentation on their client knowledge and project outline."}
+              </p>
+            </DialogHeader>
+
+            <div className="space-y-6 py-4">
+              {/* Evaluation Type Toggle */}
+              <div className="flex gap-2 p-1 bg-muted rounded-lg">
+                <Button
+                  variant={evaluationType === "midterm" ? "default" : "ghost"}
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => {
+                    setEvaluationType("midterm")
+                    setEvaluationRatings({})
+                    setEvaluationNotes({})
+                  }}
+                >
+                  Mid-Term Evaluation
+                </Button>
+                <Button
+                  variant={evaluationType === "final" ? "default" : "ghost"}
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => {
+                    setEvaluationType("final")
+                    setEvaluationRatings({})
+                    setEvaluationNotes({})
+                  }}
+                >
+                  Final Evaluation
+                </Button>
+              </div>
+
+              {/* Client Selection */}
+              <div className="space-y-2">
+                <Label>Client Team</Label>
+                <Select value={selectedClientForEval || ""} onValueChange={setSelectedClientForEval}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select client team" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Director Selection */}
+              <div className="space-y-2">
+                <Label>Evaluator (Director)</Label>
+                <Select value={selectedDirectorForEval} onValueChange={setSelectedDirectorForEval}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select your name" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {directors.map((director) => (
+                      <SelectItem key={director.id} value={director.full_name}>
+                        {director.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Rating Questions - dynamically use correct questions */}
+              <div className="space-y-6">
+                <h4 className="font-medium">
+                  Evaluation Questions{" "}
+                  <span className="text-muted-foreground font-normal">(Rate 1-5, where 5 is Excellent)</span>
+                </h4>
+                {(evaluationType === "final" ? FINAL_EVALUATION_QUESTIONS : EVALUATION_QUESTIONS).map((q) => (
+                  <div key={q.id} className="space-y-3 p-4 border rounded-lg">
+                    <div>
+                      <p className="font-medium text-sm">
+                        {q.id}. {q.question}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">{q.guidance}</p>
+                    </div>
+
+                    {/* Star Rating */}
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map((rating) => (
+                        <button
+                          key={rating}
+                          type="button"
+                          onClick={() => setEvaluationRatings((prev) => ({ ...prev, [q.id]: rating }))}
+                          className={`p-1 rounded hover:bg-muted transition-colors ${
+                            evaluationRatings[q.id] >= rating ? "text-amber-500" : "text-muted-foreground"
+                          }`}
+                        >
+                          <Star className={`h-6 w-6 ${evaluationRatings[q.id] >= rating ? "fill-current" : ""}`} />
+                        </button>
+                      ))}
+                      <span className="ml-2 text-sm text-muted-foreground">
+                        {evaluationRatings[q.id] ? `${evaluationRatings[q.id]}/5` : "Not rated"}
+                      </span>
+                    </div>
+
+                    {/* Notes */}
+                    <Textarea
+                      placeholder="Add comments for this question..."
+                      value={evaluationNotes[q.id] || ""}
+                      onChange={(e) => setEvaluationNotes((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                      className="min-h-[60px]"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Additional Comments */}
+              <div className="space-y-2">
+                <Label>Additional Comments</Label>
+                <Textarea
+                  placeholder="Any additional feedback or comments you would like to share..."
+                  value={additionalComments}
+                  onChange={(e) => setAdditionalComments(e.target.value)}
+                  className="min-h-[100px]"
+                />
+              </div>
+
+              {/* Submit Button */}
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" onClick={() => setEvaluationDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmitEvaluation}
+                  disabled={submittingEvaluation || !selectedClientForEval || !selectedDirectorForEval}
+                  className="gap-2"
+                >
+                  {submittingEvaluation ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      Submit {evaluationType === "final" ? "Final" : "Mid-Term"} Evaluation
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   )

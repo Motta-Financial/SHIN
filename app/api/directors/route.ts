@@ -33,9 +33,19 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    console.log("[v0] Fetched directors:", directors?.length)
+    const formattedDirectors = (directors || []).map((d: any) => ({
+      id: d.id,
+      full_name: d.full_name,
+      email: d.email,
+      job_title: d.job_title,
+      role: d.role,
+      clinic_id: d.clinic_id,
+      clinic: d.clinic?.name || "Unknown Clinic",
+    }))
 
-    return NextResponse.json({ directors: directors || [] })
+    console.log("[v0] Fetched directors:", formattedDirectors?.length)
+
+    return NextResponse.json({ directors: formattedDirectors })
   } catch (error) {
     console.error("[v0] Error in directors API:", error)
     return NextResponse.json({ error: "Failed to fetch directors" }, { status: 500 })

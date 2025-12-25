@@ -14,6 +14,7 @@ import { ClientQuestionsCard } from "@/components/client-portal/client-questions
 import { ClientDocumentUpload } from "@/components/client-portal/client-document-upload"
 import { ClientProgressCard } from "@/components/client-portal/client-progress-card"
 import { ClientDeliverablesCard } from "@/components/client-portal/client-deliverables-card"
+import { OnboardingAgreements } from "@/components/onboarding-agreements"
 
 interface ClientData {
   id: string
@@ -72,6 +73,7 @@ export default function ClientPortalPage() {
     uniqueStudents: 0,
     weeklyProgress: [] as any[],
   })
+  const [signedAgreements, setSignedAgreements] = useState<string[]>([])
 
   useEffect(() => {
     const fetchAvailableClients = async () => {
@@ -158,6 +160,22 @@ export default function ClientPortalPage() {
   useEffect(() => {
     fetchClientData()
   }, [fetchClientData])
+
+  useEffect(() => {
+    const fetchSignedAgreements = async () => {
+      if (!client?.email) return
+      try {
+        const response = await fetch(`/api/agreements?userEmail=${encodeURIComponent(client.email)}`)
+        const data = await response.json()
+        if (data.agreements) {
+          setSignedAgreements(data.agreements.map((a: any) => a.agreement_type))
+        }
+      } catch (error) {
+        console.error("Error fetching agreements:", error)
+      }
+    }
+    fetchSignedAgreements()
+  }, [client?.email])
 
   const refreshTasks = () => {
     if (client?.id) {
@@ -300,6 +318,23 @@ export default function ClientPortalPage() {
             </div>
           </Card>
         </div>
+
+        {/* Onboarding & Administrative Tasks */}
+        {client && (
+          <div className="space-y-6">
+            <OnboardingAgreements
+              userType="client"
+              userName={client.contactName || client.name}
+              userEmail={client.email}
+              clientName={client.name}
+              programName="SEED Program"
+              signedAgreements={signedAgreements as any}
+              onAgreementSigned={(type) => {
+                setSignedAgreements((prev) => [...prev, type])
+              }}
+            />
+          </div>
+        )}
 
         {/* Main Content Tabs */}
         <Tabs defaultValue="overview" className="w-full">

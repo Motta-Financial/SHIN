@@ -31,24 +31,33 @@ export function StudentHours({ selectedWeeks, selectedClinic }: StudentHoursProp
   const [loading, setLoading] = useState(true)
   const [groupBy, setGroupBy] = useState<"clinic" | "client">("clinic")
   const [selectedStudent, setSelectedStudent] = useState<StudentSummary | null>(null)
+  const [directors, setDirectors] = useState<any[]>([])
 
-  const directorToClinicMap = new Map<string, string>([
-    ["Mark Dwyer", "Accounting"],
-    ["Nick Vadala", "Consulting"],
-    ["Ken Mooney", "Funding"],
-    ["Christopher Hill", "Marketing"],
-    ["Chris Hill", "Marketing"],
-    ["Beth DiRusso", "Funding"],
-  ])
+  useEffect(() => {
+    async function fetchDirectors() {
+      try {
+        const res = await fetch("/api/directors")
+        if (res.ok) {
+          const data = await res.json()
+          setDirectors(data.directors || [])
+        }
+      } catch (error) {
+        console.error("[v0] Error fetching directors:", error)
+      }
+    }
+    fetchDirectors()
+  }, [])
 
-  const roleToClinicMap = new Map<string, string>([
-    ["ACCTING CLINIC", "Accounting"],
-    ["ACCOUNTING CLINIC", "Accounting"],
-    ["CONSULTING CLINIC", "Consulting"],
-    ["RESOURCE CLINIC", "Funding"],
-    ["RESOURCE ACQUISITION", "Funding"],
-    ["MARKETING CLINIC", "Marketing"],
-  ])
+  const normalizeDate = (dateStr: string): string => {
+    if (!dateStr) return ""
+    try {
+      const date = new Date(dateStr)
+      if (isNaN(date.getTime())) return dateStr
+      return date.toISOString().split("T")[0]
+    } catch {
+      return dateStr
+    }
+  }
 
   useEffect(() => {
     async function fetchHoursData() {
@@ -61,60 +70,69 @@ export function StudentHours({ selectedWeeks, selectedClinic }: StudentHoursProp
 
         const debriefsData = await debriefsRes.json()
 
-        console.log("[v0] Student Hours - Total debrief records:", debriefsData.records?.length || 0)
+        const debriefs = debriefsData.debriefs || []
+
+        console.log("[v0] Student Hours - Total debrief records:", debriefs.length)
         console.log("[v0] Student Hours - Selected weeks:", selectedWeeks)
         console.log("[v0] Student Hours - Selected clinic:", selectedClinic)
 
         const studentMap = new Map<string, StudentSummary>()
         let filteredRecordsCount = 0
 
-        if (debriefsData.records) {
-          debriefsData.records.forEach((record: any) => {
-            const fields = record.fields
-
-            const recordWeek = fields.week_ending || ""
-
-            const filterClinic =
-              selectedClinic === "all" ? "all" : directorToClinicMap.get(selectedClinic) || selectedClinic
-
-            const studentClinic = fields.clinic || "Unknown"
-
-            const matchesClinic = filterClinic === "all" || studentClinic === filterClinic
-            const matchesWeek = selectedWeeks.includes(recordWeek)
-
-            if (!matchesWeek || !matchesClinic) {
-              return
+        let filterClinicName = "all"
+        if (selectedClinic && selectedClinic !== "all") {
+          // Check if selectedClinic is a director ID (UUID format)
+          const isUUID = selectedClinic.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+          if (isUUID) {
+            const director = directors.find((d) => d.id === selectedClinic)
+            if (director?.clinicName) {
+              filterClinicName = director.clinicName
             }
-
-            filteredRecordsCount++
-
-            const studentName = fields.client_name || "Unknown Client"
-
-            const client = fields.client_name?.trim() || "No Client"
-            const clinic = studentClinic
-            const hours = Number.parseFloat(fields.total_hours || "0")
-            const workSummary = fields.summary || "No summary provided"
-
-            if (!studentMap.has(studentName)) {
-              studentMap.set(studentName, {
-                name: studentName,
-                totalHours: 0,
-                clinic,
-                client,
-                records: [],
-              })
-            }
-
-            const student = studentMap.get(studentName)!
-            student.totalHours += hours
-            student.records.push({
-              weekEnding: recordWeek,
-              hours,
-              workSummary,
-              client,
-            })
-          })
+          } else {
+            filterClinicName = selectedClinic
+          }
         }
+
+        debriefs.forEach((debrief: any) => {
+          const recordWeek = normalizeDate(debrief.weekEnding || debrief.week_ending || "")
+          const studentClinic = debrief.clinic || "Unknown"
+          const studentName = debrief.studentName || debrief.student_name || "Unknown Student"
+          const clientName = debrief.clientName || debrief.client_name || "No Client"
+          const hours = Number.parseFloat(debrief.hoursWorked || debrief.hours_worked || "0")
+          const workSummary = debrief.workSummary || debrief.work_summary || "No summary provided"
+
+          const normalizedStudentClinic = studentClinic.toLowerCase().replace(" clinic", "").trim()
+          const normalizedFilterClinic = filterClinicName.toLowerCase().replace(" clinic", "").trim()
+
+          const matchesClinic = filterClinicName === "all" || normalizedStudentClinic === normalizedFilterClinic
+
+          const matchesWeek = selectedWeeks.length === 0 || selectedWeeks.some((sw) => normalizeDate(sw) === recordWeek)
+
+          if (!matchesWeek || !matchesClinic) {
+            return
+          }
+
+          filteredRecordsCount++
+
+          if (!studentMap.has(studentName)) {
+            studentMap.set(studentName, {
+              name: studentName,
+              totalHours: 0,
+              clinic: studentClinic,
+              client: clientName,
+              records: [],
+            })
+          }
+
+          const student = studentMap.get(studentName)!
+          student.totalHours += hours
+          student.records.push({
+            weekEnding: recordWeek,
+            hours,
+            workSummary,
+            client: clientName,
+          })
+        })
 
         console.log("[v0] Student Hours - Filtered records for week:", filteredRecordsCount)
         console.log("[v0] Student Hours - Unique students:", studentMap.size)
@@ -135,7 +153,7 @@ export function StudentHours({ selectedWeeks, selectedClinic }: StudentHoursProp
     }
 
     fetchHoursData()
-  }, [selectedWeeks, selectedClinic])
+  }, [selectedWeeks, selectedClinic, directors])
 
   const totalHours = data.reduce((sum, student) => sum + student.totalHours, 0)
 
@@ -284,7 +302,7 @@ export function StudentHours({ selectedWeeks, selectedClinic }: StudentHoursProp
           </div>
         ) : (
           <div className="flex items-center justify-center h-[200px]">
-            <p className="text-[#002855]/50 text-sm">No hours data available</p>
+            <p className="text-[#002855]/50 text-sm">No hours data available for selected filters</p>
           </div>
         )}
       </Card>

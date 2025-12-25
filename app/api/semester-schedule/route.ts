@@ -16,11 +16,20 @@ export async function GET(request: Request) {
   const semester = searchParams.get("semester") || "Fall 2025"
 
   try {
-    const { data, error } = await supabase
-      .from("semester_schedule")
-      .select("*")
+    const { data: semesterConfig } = await supabase
+      .from("semester_config")
+      .select("id, semester")
       .eq("semester", semester)
-      .order("week_number", { ascending: true })
+      .single()
+
+    let query = supabase.from("semester_schedule").select("*").order("week_number", { ascending: true })
+
+    // Filter by semester_id if found, otherwise return all
+    if (semesterConfig?.id) {
+      query = query.eq("semester_id", semesterConfig.id)
+    }
+
+    const { data, error } = await query
 
     if (error) throw error
 
@@ -58,6 +67,12 @@ export async function POST(request: Request) {
       semester,
     } = body
 
+    const { data: semesterConfig } = await supabase
+      .from("semester_config")
+      .select("id")
+      .eq("semester", semester || "Fall 2025")
+      .single()
+
     const { data, error } = await supabase
       .from("semester_schedule")
       .insert({
@@ -72,7 +87,7 @@ export async function POST(request: Request) {
         class_time_minutes: class_time_minutes || 90,
         clinic_time_minutes: clinic_time_minutes || 90,
         is_break: is_break || false,
-        semester: semester || "Fall 2025",
+        semester_id: semesterConfig?.id, // Use semester_id instead of semester text
       })
       .select()
       .single()

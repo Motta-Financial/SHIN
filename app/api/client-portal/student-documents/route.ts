@@ -5,18 +5,27 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const clientName = searchParams.get("clientName")
-
-    if (!clientName) {
-      return NextResponse.json({ error: "Client name required" }, { status: 400 })
-    }
+    const clientId = searchParams.get("clientId")
 
     const supabase = await createClient()
 
-    // Get all documents submitted by students for this client
+    let targetClientId = clientId
+
+    if (!clientId && clientName) {
+      const { data: client } = await supabase.from("clients").select("id").eq("name", clientName).single()
+      if (client) {
+        targetClientId = client.id
+      }
+    }
+
+    if (!targetClientId) {
+      return NextResponse.json({ error: "Client ID or name required" }, { status: 400 })
+    }
+
     const { data: documents, error } = await supabase
       .from("documents")
       .select("*")
-      .eq("client_name", clientName)
+      .eq("client_id", targetClientId)
       .order("uploaded_at", { ascending: false })
 
     if (error) {

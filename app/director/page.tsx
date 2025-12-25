@@ -10,6 +10,7 @@ import { ClinicView } from "@/components/clinic-view"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { OnboardingAgreements } from "@/components/onboarding-agreements"
 import {
   RefreshCw,
   BarChart3,
@@ -126,7 +127,7 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
   }
 }
 
-export default function DirectorDashboardPage() {
+export default function DirectorPortal() {
   const [availableWeeks, setAvailableWeeks] = useState<string[]>([])
   const [weekSchedule, setWeekSchedule] = useState<WeekSchedule[]>([])
   const [selectedWeeks, setSelectedWeeks] = useState<string[]>([])
@@ -142,6 +143,8 @@ export default function DirectorDashboardPage() {
   })
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("overview")
+  const [signedAgreements, setSignedAgreements] = useState<string[]>([])
+  const [currentDirector, setCurrentDirector] = useState<{ name: string; email: string } | null>(null)
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -175,6 +178,33 @@ export default function DirectorDashboardPage() {
     fetchStats()
   }, [selectedWeeks, selectedDirectorId])
 
+  useEffect(() => {
+    const fetchDirectorInfo = async () => {
+      if (!selectedDirectorId || selectedDirectorId === "all") return
+      try {
+        // Get director info
+        const dirRes = await fetch("/api/directors")
+        const dirData = await dirRes.json()
+        const director = dirData.directors?.find((d: any) => d.id === selectedDirectorId)
+        if (director) {
+          setCurrentDirector({ name: director.full_name, email: director.email || "" })
+
+          // Fetch signed agreements for this director
+          if (director.email) {
+            const agreeRes = await fetch(`/api/agreements?userEmail=${encodeURIComponent(director.email)}`)
+            const agreeData = await agreeRes.json()
+            if (agreeData.agreements) {
+              setSignedAgreements(agreeData.agreements.map((a: any) => a.agreement_type))
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching director info:", error)
+      }
+    }
+    fetchDirectorInfo()
+  }, [selectedDirectorId])
+
   const handleClinicChange = (directorId: string) => {
     setSelectedDirectorId(directorId)
   }
@@ -195,13 +225,19 @@ export default function DirectorDashboardPage() {
     return week ? week.label : weekValue
   }
 
+  const handleDirectorChange = (directorId: string) => {
+    console.log("[v0] DirectorPortal - handleDirectorChange called with:", directorId)
+    console.log("[v0] DirectorPortal - directorId type:", typeof directorId)
+    setSelectedDirectorId(directorId)
+  }
+
   return (
-    <div className="min-h-screen bg-background pt-[48px] pl-12">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
       <MainNavigation activePortal="director" />
 
       <DashboardHeader
         selectedClinic={selectedDirectorId}
-        onClinicChange={handleClinicChange}
+        onClinicChange={handleDirectorChange}
         selectedWeeks={selectedWeeks}
         onWeeksChange={setSelectedWeeks}
         availableWeeks={availableWeeks}
@@ -253,7 +289,7 @@ export default function DirectorDashboardPage() {
               <BarChart3 className="h-4 w-4" />
               Overview
             </TabsTrigger>
-            <TabsTrigger value="clinic" className="gap-2">
+            <TabsTrigger value="my-clinic" className="gap-2">
               <Building2 className="h-4 w-4" />
               My Clinic
             </TabsTrigger>
@@ -268,6 +304,20 @@ export default function DirectorDashboardPage() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
+            {/* Onboarding & Administrative Tasks */}
+            {currentDirector && (
+              <OnboardingAgreements
+                userType="director"
+                userName={currentDirector.name}
+                userEmail={currentDirector.email}
+                programName="SEED Program"
+                signedAgreements={signedAgreements as any}
+                onAgreementSigned={(type) => {
+                  setSignedAgreements((prev) => [...prev, type])
+                }}
+              />
+            )}
+
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -327,7 +377,8 @@ export default function DirectorDashboardPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="clinic">
+          <TabsContent value="my-clinic" className="space-y-6">
+            {console.log("[v0] DirectorPortal - Passing to ClinicView:", selectedDirectorId)}
             <ClinicView selectedClinic={selectedDirectorId} selectedWeeks={selectedWeeks} />
           </TabsContent>
 

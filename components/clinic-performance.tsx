@@ -32,6 +32,13 @@ interface WeekSchedule {
   weekEnd: string
 }
 
+interface Director {
+  id: string
+  full_name: string
+  clinic_id: string
+  clinicName?: string
+}
+
 interface ClinicPerformanceProps {
   selectedWeeks: string[]
   selectedClinic: string
@@ -39,18 +46,19 @@ interface ClinicPerformanceProps {
 }
 
 const CLINIC_COLORS: Record<string, string> = {
-  Accounting: "#2d3a4f", // Passionate Blueberry
+  Accounting: "#2d3a4f",
   "Accounting Clinic": "#2d3a4f",
-  Marketing: "#8fa889", // Banyan Serenity
-  Consulting: "#565f4b", // Jalapeno Poppers
-  "Resource Acquisition": "#5f7082", // Silver Blueberry
-  Legal: "#9aacb8", // Tsunami
-  SEED: "#3d5a80", // Darker blue variant
+  Marketing: "#8fa889",
+  Consulting: "#565f4b",
+  "Resource Acquisition": "#5f7082",
+  Legal: "#9aacb8",
+  SEED: "#3d5a80",
 }
 
 export function ClinicPerformance({ selectedWeeks, selectedClinic, weekSchedule = [] }: ClinicPerformanceProps) {
   const [debriefs, setDebriefs] = useState<any[]>([])
   const [clients, setClients] = useState<any[]>([])
+  const [directors, setDirectors] = useState<Director[]>([])
   const [loading, setLoading] = useState(true)
 
   const [clinicData, setClinicData] = useState<ClinicData[]>([])
@@ -58,29 +66,14 @@ export function ClinicPerformance({ selectedWeeks, selectedClinic, weekSchedule 
   const [expandedClinic, setExpandedClinic] = useState<string | null>(null)
   const [clientToDirectorMap, setClientToDirectorMap] = useState<Map<string, string>>(new Map())
 
-  const directorToClinicMap = new Map<string, string>([
-    ["Mark Dwyer", "Accounting"],
-    ["Dat Le", "Accounting"],
-    ["Nick Vadala", "Consulting"],
-    ["Ken Mooney", "Resource Acquisition"],
-    ["Christopher Hill", "Marketing"],
-    ["Chris Hill", "Marketing"],
-    ["Beth DiRusso", "Legal"],
-    ["Darrell Mottley", "Legal"],
-    ["Boris Lazic", "SEED"],
-    ["Grace Cha", "SEED"],
-    ["Chaim Letwin", "SEED"],
-    ["Dmitri Tcherevik", "SEED"],
-  ])
-
-  // Fetch data on mount
   useEffect(() => {
     async function fetchData() {
       setLoading(true)
       try {
-        const [debriefsRes, clientsRes] = await Promise.all([
+        const [debriefsRes, clientsRes, directorsRes] = await Promise.all([
           fetch("/api/supabase/debriefs"),
           fetch("/api/supabase/clients"),
+          fetch("/api/directors"),
         ])
 
         if (debriefsRes.ok) {
@@ -92,6 +85,11 @@ export function ClinicPerformance({ selectedWeeks, selectedClinic, weekSchedule 
           const data = await clientsRes.json()
           setClients(data.records || [])
         }
+
+        if (directorsRes.ok) {
+          const data = await directorsRes.json()
+          setDirectors(data.directors || [])
+        }
       } catch (error) {
         console.error("Error fetching data:", error)
       } finally {
@@ -102,10 +100,19 @@ export function ClinicPerformance({ selectedWeeks, selectedClinic, weekSchedule 
     fetchData()
   }, [])
 
-  const matchesSelectedWeek = (weekEnding: string, selectedWeekValues: string[]): boolean => {
-    if (selectedWeekValues.length === 0) return true // No filter = all data
+  const directorToClinicMap = new Map<string, string>()
+  directors.forEach((director) => {
+    if (director.full_name && director.clinicName) {
+      directorToClinicMap.set(director.full_name, director.clinicName)
+    }
+    if (director.id && director.clinicName) {
+      directorToClinicMap.set(director.id, director.clinicName)
+    }
+  })
 
-    // Normalize the week ending date to YYYY-MM-DD format for comparison
+  const matchesSelectedWeek = (weekEnding: string, selectedWeekValues: string[]): boolean => {
+    if (selectedWeekValues.length === 0) return true
+
     const normalizeDate = (dateStr: string): string => {
       if (!dateStr) return ""
       const date = new Date(dateStr)
@@ -115,48 +122,46 @@ export function ClinicPerformance({ selectedWeeks, selectedClinic, weekSchedule 
 
     const normalizedWeekEnding = normalizeDate(weekEnding)
 
-    // Check if the debrief's week_ending matches any of the selected weeks
     return selectedWeekValues.some((selectedWeek) => {
       const normalizedSelected = normalizeDate(selectedWeek)
       return normalizedWeekEnding === normalizedSelected
     })
   }
 
-  // Process data when debriefs/clients/filters change
   useEffect(() => {
     if (loading) return
-
-    console.log("[v0] ClinicPerformance - selectedWeeks:", selectedWeeks)
-    console.log("[v0] ClinicPerformance - debriefs count:", debriefs.length)
-    if (debriefs.length > 0) {
-      console.log("[v0] Sample debrief weekEnding:", debriefs[0].weekEnding || debriefs[0].week_ending)
-      console.log("[v0] Sample debrief hours:", debriefs[0].hoursWorked || debriefs[0].hours_worked)
-    }
 
     const clientToClinicMap = new Map<string, string>()
 
     if (clients.length > 0) {
       clients.forEach((client: any) => {
         const clientName = client.name || client.fields?.["Name"]
-        const directorLead = client.primary_director || client.fields?.["Director Lead"]
-        if (clientName && directorLead) {
-          clientToClinicMap.set(clientName.trim(), directorLead)
+        const directorId = client.primary_director_id
+        const director = directors.find((d) => d.id === directorId)
+        if (clientName && director?.clinicName) {
+          clientToClinicMap.set(clientName.trim(), director.clinicName)
         }
       })
     }
 
     setClientToDirectorMap(clientToClinicMap)
 
-    const filterClinic = selectedClinic === "all" ? "all" : directorToClinicMap.get(selectedClinic) || selectedClinic
+    let filterClinicName = "all"
+    if (selectedClinic && selectedClinic !== "all") {
+      const isUUID = selectedClinic.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+      if (isUUID) {
+        const director = directors.find((d) => d.id === selectedClinic)
+        filterClinicName = director?.clinicName || "all"
+      } else {
+        filterClinicName = directorToClinicMap.get(selectedClinic) || selectedClinic
+      }
+    }
 
     const clinicMap = new Map<string, { hours: number; students: Set<string>; clients: Set<string> }>()
     const clientMap = new Map<
       string,
       { hours: number; students: Set<string>; latestSummary: string; director: string }
     >()
-
-    let matchedCount = 0
-    let unmatchedWeekCount = 0
 
     debriefs.forEach((debrief: any) => {
       const recordWeek = debrief.weekEnding || debrief.week_ending || ""
@@ -169,25 +174,21 @@ export function ClinicPerformance({ selectedWeeks, selectedClinic, weekSchedule 
       const normalizedClinic = studentClinic.replace(" Clinic", "").trim()
 
       const matchesClinic =
-        filterClinic === "all" || normalizedClinic.includes(filterClinic) || studentClinic.includes(filterClinic)
+        filterClinicName === "all" ||
+        normalizedClinic.toLowerCase().includes(filterClinicName.toLowerCase()) ||
+        studentClinic.toLowerCase().includes(filterClinicName.toLowerCase())
 
       const matchesWeek = matchesSelectedWeek(recordWeek, selectedWeeks)
 
-      if (!matchesWeek && selectedWeeks.length > 0) {
-        unmatchedWeekCount++
-      }
-
       if (matchesWeek && matchesClinic) {
-        matchedCount++
-
-        if (!clinicMap.has(normalizedClinic)) {
-          clinicMap.set(normalizedClinic, { hours: 0, students: new Set(), clients: new Set() })
+        const clinic = normalizedClinic || "Unknown"
+        if (!clinicMap.has(clinic)) {
+          clinicMap.set(clinic, { hours: 0, students: new Set(), clients: new Set() })
         }
-
-        const data = clinicMap.get(normalizedClinic)!
-        data.hours += hours
-        if (studentName) data.students.add(studentName)
-        if (clientName) data.clients.add(clientName)
+        const clinicInfo = clinicMap.get(clinic)!
+        clinicInfo.hours += hours
+        if (studentName) clinicInfo.students.add(studentName)
+        if (clientName) clinicInfo.clients.add(clientName)
 
         if (clientName) {
           if (!clientMap.has(clientName)) {
@@ -195,48 +196,42 @@ export function ClinicPerformance({ selectedWeeks, selectedClinic, weekSchedule 
               hours: 0,
               students: new Set(),
               latestSummary: "",
-              director: clientToClinicMap.get(clientName) || "Unknown",
+              director: clientToClinicMap.get(clientName) || "",
             })
           }
-          const cData = clientMap.get(clientName)!
-          cData.hours += hours
-          if (studentName) cData.students.add(studentName)
-          if (summary) cData.latestSummary = summary
+          const clientInfo = clientMap.get(clientName)!
+          clientInfo.hours += hours
+          if (studentName) clientInfo.students.add(studentName)
+          if (summary && !clientInfo.latestSummary) {
+            clientInfo.latestSummary = summary
+          }
         }
       }
     })
 
-    console.log("[v0] ClinicPerformance - Matched debriefs:", matchedCount)
-    console.log("[v0] ClinicPerformance - Unmatched by week:", unmatchedWeekCount)
-    console.log(
-      "[v0] ClinicPerformance - Clinic hours:",
-      Array.from(clinicMap.entries()).map(([name, data]) => ({ name, hours: data.hours })),
-    )
-
     const clinicDataArray: ClinicData[] = Array.from(clinicMap.entries())
-      .map(([name, data]) => ({
+      .map(([name, info]) => ({
         name,
-        hours: Math.round(data.hours * 10) / 10,
-        students: data.students.size,
-        clients: data.clients.size,
-        color: CLINIC_COLORS[name] || "#000000",
+        hours: Math.round(info.hours * 10) / 10,
+        students: info.students.size,
+        clients: info.clients.size,
+        color: CLINIC_COLORS[name] || CLINIC_COLORS[name + " Clinic"] || "#6b7280",
       }))
-      .filter((c) => c.hours > 0 || c.students > 0 || c.clients > 0)
       .sort((a, b) => b.hours - a.hours)
 
     const clientDataArray: ClientData[] = Array.from(clientMap.entries())
-      .map(([name, data]) => ({
+      .map(([name, info]) => ({
         name,
-        hours: Math.round(data.hours * 10) / 10,
-        students: Array.from(data.students),
-        latestSummary: data.latestSummary,
-        director: data.director,
+        hours: Math.round(info.hours * 10) / 10,
+        students: Array.from(info.students),
+        latestSummary: info.latestSummary,
+        director: info.director,
       }))
       .sort((a, b) => b.hours - a.hours)
 
     setClinicData(clinicDataArray)
     setClientData(clientDataArray)
-  }, [debriefs, clients, loading, selectedWeeks, selectedClinic, weekSchedule])
+  }, [debriefs, clients, directors, selectedWeeks, selectedClinic, loading])
 
   if (loading) {
     return (
@@ -356,7 +351,6 @@ export function ClinicPerformance({ selectedWeeks, selectedClinic, weekSchedule 
                       </DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
-                      {/* Stats */}
                       <div className="grid grid-cols-3 gap-4 text-center">
                         <div className="p-3 bg-muted/50 rounded-lg">
                           <div className="flex items-center justify-center gap-1 text-muted-foreground text-xs mb-1">
@@ -381,13 +375,12 @@ export function ClinicPerformance({ selectedWeeks, selectedClinic, weekSchedule 
                         </div>
                       </div>
 
-                      {/* Client list */}
                       {relatedClients.length > 0 && (
                         <div className="space-y-2">
                           <h4 className="text-sm font-semibold">Active Clients</h4>
                           <div className="max-h-60 overflow-y-auto space-y-2">
                             {relatedClients.map((client) => {
-                              const clientColors = "#000000" // Placeholder for client colors
+                              const clientColors = "#000000"
                               return (
                                 <div
                                   key={client.name}

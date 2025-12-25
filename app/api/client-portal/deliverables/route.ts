@@ -9,25 +9,23 @@ export async function GET(request: Request) {
 
     const supabase = await createClient()
 
-    let targetClientName = clientName
+    let targetClientId = clientId
 
-    // If clientId provided, get client name
-    if (clientId && !clientName) {
-      const { data: client } = await supabase.from("clients").select("name").eq("id", clientId).single()
+    if (!clientId && clientName) {
+      const { data: client } = await supabase.from("clients").select("id").eq("name", clientName).single()
       if (client) {
-        targetClientName = client.name
+        targetClientId = client.id
       }
     }
 
-    if (!targetClientName) {
-      return NextResponse.json({ error: "Client name or ID required" }, { status: 400 })
+    if (!targetClientId) {
+      return NextResponse.json({ error: "Client ID or name required" }, { status: 400 })
     }
 
-    // Get student documents for this client
     const { data: documents, error: docsError } = await supabase
       .from("documents")
       .select("*")
-      .eq("client_name", targetClientName)
+      .eq("client_id", targetClientId)
       .order("uploaded_at", { ascending: false })
 
     if (docsError) {

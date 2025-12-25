@@ -9,33 +9,40 @@ export async function GET(request: Request) {
 
     const supabase = await createClient()
 
+    let targetClientId = clientId
     let targetClientName = clientName
 
-    // If clientId provided, get client name
-    if (clientId && !clientName) {
-      const { data: client } = await supabase.from("clients").select("name").eq("id", clientId).single()
+    if (clientName && !clientId) {
+      const { data: client } = await supabase.from("clients").select("id, name").eq("name", clientName).single()
       if (client) {
+        targetClientId = client.id
         targetClientName = client.name
       }
     }
 
-    if (!targetClientName) {
+    if (clientId && !clientName) {
+      const { data: client } = await supabase.from("clients").select("id, name").eq("id", clientId).single()
+      if (client) {
+        targetClientId = client.id
+        targetClientName = client.name
+      }
+    }
+
+    if (!targetClientId) {
       return NextResponse.json({ error: "Client name or ID required" }, { status: 400 })
     }
 
-    // Get weekly summaries for this client
     const { data: summaries, error: summariesError } = await supabase
       .from("weekly_summaries")
       .select("*")
-      .eq("client_name", targetClientName)
+      .eq("client_id", targetClientId)
       .order("week_ending", { ascending: false })
       .limit(12)
 
-    // Get recent debriefs for this client
     const { data: debriefs, error: debriefsError } = await supabase
       .from("debriefs")
       .select("*")
-      .eq("client_name", targetClientName)
+      .eq("client_id", targetClientId)
       .order("week_ending", { ascending: false })
       .limit(20)
 

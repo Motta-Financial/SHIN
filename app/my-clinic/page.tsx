@@ -1,25 +1,49 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { ClinicView } from "@/components/clinic-view"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MainNavigation } from "@/components/main-navigation"
-import { Building2 } from "lucide-react"
+import { Building2, Loader2 } from "lucide-react"
 
-const directors = [
-  { name: "Mark Dwyer", clinic: "Accounting" },
-  { name: "Dat Le", clinic: "Accounting" },
-  { name: "Nick Vadala", clinic: "Consulting" },
-  { name: "Ken Mooney", clinic: "Resource Acquisition" },
-  { name: "Christopher Hill", clinic: "Marketing" },
-  { name: "Beth DiRusso", clinic: "Legal" },
-  { name: "Darrell Mottley", clinic: "Legal" },
-  { name: "Boris Lazic", clinic: "SEED" },
-  { name: "Grace Cha", clinic: "SEED" },
-]
+interface Director {
+  id: string
+  full_name: string
+  clinic: string
+  email: string
+  job_title?: string
+  role?: string
+}
 
 export default function MyClinicPage() {
-  const [selectedDirector, setSelectedDirector] = useState("Mark Dwyer")
+  const [selectedDirectorId, setSelectedDirectorId] = useState<string>("all")
+  const [directors, setDirectors] = useState<Director[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchDirectors() {
+      try {
+        const res = await fetch("/api/directors")
+        const data = await res.json()
+        if (data.directors) {
+          setDirectors(data.directors)
+        }
+      } catch (error) {
+        console.error("Error fetching directors:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchDirectors()
+  }, [])
+
+  const selectedDirector = directors.find((d) => d.id === selectedDirectorId)
+  const displayName =
+    selectedDirectorId === "all"
+      ? "All Directors"
+      : selectedDirector
+        ? `${selectedDirector.full_name} (${selectedDirector.clinic})`
+        : "Select director"
 
   return (
     <>
@@ -38,23 +62,29 @@ export default function MyClinicPage() {
               </div>
             </div>
 
-            {/* Director/Clinic Selector - for demo purposes */}
-            <Select value={selectedDirector} onValueChange={setSelectedDirector}>
-              <SelectTrigger className="w-[220px]">
-                <SelectValue placeholder="Select director" />
+            <Select value={selectedDirectorId} onValueChange={setSelectedDirectorId} disabled={isLoading}>
+              <SelectTrigger className="w-[250px]">
+                {isLoading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Loading directors...</span>
+                  </div>
+                ) : (
+                  <SelectValue placeholder="Select director">{displayName}</SelectValue>
+                )}
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">All Directors</SelectItem>
                 {directors.map((d) => (
-                  <SelectItem key={d.name} value={d.name}>
-                    {d.name} ({d.clinic})
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.full_name} ({d.clinic})
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Clinic View Component - This has all the tabs: Overview, Team, Clients, Schedule, Assignments, Materials */}
-          <ClinicView selectedClinic={selectedDirector} selectedWeeks={[]} />
+          <ClinicView selectedClinic={selectedDirectorId} selectedWeeks={[]} />
         </div>
       </main>
     </>

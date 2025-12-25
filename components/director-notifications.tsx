@@ -1,11 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createBrowserClient } from "@supabase/ssr"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Bell, FileText, HelpCircle, Calendar, Check, X } from "lucide-react"
+import { Bell, FileText, HelpCircle, Check, X, Users } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
@@ -14,9 +13,11 @@ type Notification = {
   type: "document_upload" | "question" | "meeting_request"
   title: string
   message: string
-  related_id: string
-  student_name: string
-  clinic: string
+  related_id?: string
+  student_id?: string
+  student_email?: string
+  clinic?: string
+  director_id?: string
   is_read: boolean
   created_at: string
 }
@@ -26,161 +27,92 @@ interface DirectorNotificationsProps {
   compact?: boolean
 }
 
-const mockNotifications: Notification[] = [
-  {
-    id: "1",
-    type: "document_upload",
-    title: "SOW Draft Uploaded",
-    message: "Sarah Chen uploaded a new Statement of Work draft for review",
-    related_id: "doc-1",
-    student_name: "Sarah Chen",
-    clinic: "Accounting",
-    is_read: false,
-    created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "2",
-    type: "question",
-    title: "Question about deliverables",
-    message: "I'm unsure about the format for the final presentation. Can we discuss?",
-    related_id: "q-1",
-    student_name: "Michael Rodriguez",
-    clinic: "Marketing",
-    is_read: false,
-    created_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "3",
-    type: "meeting_request",
-    title: "Meeting Request",
-    message: "Requesting a 30-minute check-in to discuss project timeline",
-    related_id: "meet-1",
-    student_name: "Jessica Park",
-    clinic: "Resource Acquisition", // Changed from "Funding" to "Resource Acquisition"
-    is_read: true,
-    created_at: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "4",
-    type: "document_upload",
-    title: "Weekly Report Submitted",
-    message: "David Kim submitted their weekly progress report",
-    related_id: "doc-2",
-    student_name: "David Kim",
-    clinic: "Consulting",
-    is_read: true,
-    created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-]
-
-const directorToClinicMap: Record<string, string> = {
-  "Mark Dwyer": "Accounting",
-  "Dat Le": "Accounting",
-  "Nick Vadala": "Consulting",
-  "Ken Mooney": "Resource Acquisition",
-  "Christopher Hill": "Marketing",
-  "Chris Hill": "Marketing",
-  "Beth DiRusso": "Legal",
-  "Darrell Mottley": "Legal",
-  "Boris Lazic": "SEED",
-  "Grace Cha": "SEED",
-  "Chaim Letwin": "SEED",
-  "Dmitri Tcherevik": "SEED",
-}
-
 export function DirectorNotifications({ selectedClinic, compact = false }: DirectorNotificationsProps) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null)
+  const [meetingRequests, setMeetingRequests] = useState<any[]>([])
 
   useEffect(() => {
     async function fetchNotifications() {
       setLoading(true)
       try {
-        const supabase = createBrowserClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        // Fetch notifications from database
+        const notifResponse = await fetch(
+          `/api/notifications?${selectedClinic !== "all" ? `directorId=${selectedClinic}` : ""}`,
+        )
+        const notifData = await notifResponse.json()
+
+        // Fetch pending meeting requests
+        const meetingResponse = await fetch("/api/meeting-requests?status=pending")
+        const meetingData = await meetingResponse.json()
+
+        // Map meeting requests to notification format
+        const meetingNotifs: Notification[] = (meetingData.requests || []).map((m: any) => ({
+          id: `meeting-${m.id}`,
+          type: "meeting_request" as const,
+          title: `Meeting Request: ${m.subject}`,
+          message: m.message || `${m.studentName} has requested a meeting`,
+          student_id: m.studentId,
+          student_email: m.studentEmail,
+          clinic: m.clinic,
+          is_read: false,
+          created_at: m.createdAt,
+        }))
+
+        // Combine and sort by date
+        const allNotifications = [...(notifData.notifications || []), ...meetingNotifs].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
         )
 
-        const { data, error } = await supabase
-          .from("notifications")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(compact ? 10 : 30)
-
-        if (error) {
-          console.error("[v0] Error fetching notifications:", error)
-          // Fall back to mock data filtered by clinic
-          const clinicName = directorToClinicMap[selectedClinic] || selectedClinic
-          const filtered =
-            selectedClinic === "all"
-              ? mockNotifications
-              : mockNotifications.filter((n) => n.clinic.toLowerCase().includes(clinicName.toLowerCase()))
-          setNotifications(filtered)
-        } else if (data && data.length > 0) {
-          // Map Supabase data to Notification type
-          const mapped: Notification[] = data.map((n) => ({
-            id: n.id,
-            type: n.type || "document_upload",
-            title: n.title,
-            message: n.message,
-            related_id: n.related_id || "",
-            student_name: n.student_name || "Unknown",
-            clinic: n.clinic || "",
-            is_read: n.is_read || false,
-            created_at: n.created_at,
-          }))
-
-          const clinicName = directorToClinicMap[selectedClinic] || selectedClinic
-          const filtered =
-            selectedClinic === "all"
-              ? mapped
-              : mapped.filter((n) => {
-                  const notificationClinic = (n.clinic || "").toLowerCase()
-                  const targetClinic = clinicName.toLowerCase()
-                  // Match "Accounting Clinic" with "Accounting" or vice versa
-                  return notificationClinic.includes(targetClinic) || targetClinic.includes(notificationClinic)
-                })
-
-          setNotifications(filtered)
-        } else {
-          // No data in Supabase, use mock data
-          const clinicName = directorToClinicMap[selectedClinic] || selectedClinic
-          const filtered =
-            selectedClinic === "all"
-              ? mockNotifications
-              : mockNotifications.filter((n) => n.clinic.toLowerCase().includes(clinicName.toLowerCase()))
-          setNotifications(filtered)
-        }
+        setNotifications(allNotifications)
+        setMeetingRequests(meetingData.requests || [])
       } catch (error) {
-        console.error("[v0] Error in fetchNotifications:", error)
-        const clinicName = directorToClinicMap[selectedClinic] || selectedClinic
-        const filtered =
-          selectedClinic === "all"
-            ? mockNotifications
-            : mockNotifications.filter((n) => n.clinic.toLowerCase().includes(clinicName.toLowerCase()))
-        setNotifications(filtered)
+        console.error("Error fetching notifications:", error)
+        setNotifications([])
       } finally {
         setLoading(false)
       }
     }
 
     fetchNotifications()
-  }, [selectedClinic, compact])
+  }, [selectedClinic])
 
   const markAsRead = async (notificationId: string) => {
-    try {
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      )
+    // Don't try to update meeting requests in notifications table
+    if (notificationId.startsWith("meeting-")) {
+      setNotifications((prev) => prev.map((n) => (n.id === notificationId ? { ...n, is_read: true } : n)))
+      return
+    }
 
-      await supabase.from("notifications").update({ is_read: true }).eq("id", notificationId)
+    try {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: notificationId, is_read: true }),
+      })
 
       setNotifications((prev) => prev.map((n) => (n.id === notificationId ? { ...n, is_read: true } : n)))
     } catch (error) {
-      // Update local state even if Supabase fails
+      // Update local state even if API fails
       setNotifications((prev) => prev.map((n) => (n.id === notificationId ? { ...n, is_read: true } : n)))
+    }
+  }
+
+  const handleMeetingAction = async (requestId: string, action: "approved" | "declined") => {
+    try {
+      await fetch("/api/meeting-requests", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: requestId, status: action }),
+      })
+
+      // Remove from notifications
+      setNotifications((prev) => prev.filter((n) => n.id !== `meeting-${requestId}`))
+      setMeetingRequests((prev) => prev.filter((m) => m.id !== requestId))
+      setSelectedNotification(null)
+    } catch (error) {
+      console.error("Error updating meeting request:", error)
     }
   }
 
@@ -191,7 +123,7 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
       case "question":
         return <HelpCircle className="h-4 w-4" />
       case "meeting_request":
-        return <Calendar className="h-4 w-4" />
+        return <Users className="h-4 w-4" />
     }
   }
 
@@ -308,21 +240,48 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
               {selectedNotification?.title}
             </DialogTitle>
             <DialogDescription>
-              From: {selectedNotification?.student_name} • {selectedNotification?.clinic}
+              {selectedNotification?.student_email && `From: ${selectedNotification.student_email}`}
+              {selectedNotification?.clinic && ` • ${selectedNotification.clinic}`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm">{selectedNotification?.message}</p>
-            <div className="flex gap-2">
-              <Button size="sm" variant="default">
-                <Check className="h-3 w-3 mr-1" />
-                View Details
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setSelectedNotification(null)}>
-                <X className="h-3 w-3 mr-1" />
-                Dismiss
-              </Button>
-            </div>
+
+            {selectedNotification?.type === "meeting_request" && selectedNotification.id.startsWith("meeting-") && (
+              <div className="flex gap-2 pt-2 border-t">
+                <Button
+                  size="sm"
+                  variant="default"
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={() => handleMeetingAction(selectedNotification.id.replace("meeting-", ""), "approved")}
+                >
+                  <Check className="h-3 w-3 mr-1" />
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-red-600 border-red-200 hover:bg-red-50 bg-transparent"
+                  onClick={() => handleMeetingAction(selectedNotification.id.replace("meeting-", ""), "declined")}
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Decline
+                </Button>
+              </div>
+            )}
+
+            {selectedNotification?.type !== "meeting_request" && (
+              <div className="flex gap-2">
+                <Button size="sm" variant="default">
+                  <Check className="h-3 w-3 mr-1" />
+                  View Details
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setSelectedNotification(null)}>
+                  <X className="h-3 w-3 mr-1" />
+                  Dismiss
+                </Button>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

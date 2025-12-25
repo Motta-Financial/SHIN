@@ -4,7 +4,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { TrendingUp, TrendingDown, Minus, Users } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+
+interface Director {
+  id: string
+  full_name: string
+  clinicName?: string
+}
 
 interface StudentMetrics {
   name: string
@@ -22,83 +28,99 @@ interface StudentPerformanceProps {
 }
 
 export function StudentPerformance({ selectedWeeks, selectedClinic }: StudentPerformanceProps) {
-  // Mock data - in production, this would be calculated from historical debrief data
-  const [students] = useState<StudentMetrics[]>([
-    {
-      name: "Annalise Fosnight",
-      clinic: "Consulting",
-      currentWeekHours: 12,
-      averageWeeklyHours: 10,
-      totalSubmissions: 8,
-      consistency: 95,
-      trend: "up",
-    },
-    {
-      name: "Franziska Greiner",
-      clinic: "Consulting",
-      currentWeekHours: 12,
-      averageWeeklyHours: 11,
-      totalSubmissions: 8,
-      consistency: 90,
-      trend: "stable",
-    },
-    {
-      name: "Declan Leahy",
-      clinic: "Accounting",
-      currentWeekHours: 3,
-      averageWeeklyHours: 8,
-      totalSubmissions: 7,
-      consistency: 75,
-      trend: "down",
-    },
-    {
-      name: "Urmi Vaghela",
-      clinic: "Funding",
-      currentWeekHours: 4,
-      averageWeeklyHours: 6,
-      totalSubmissions: 8,
-      consistency: 85,
-      trend: "down",
-    },
-    {
-      name: "Mason Holt",
-      clinic: "Funding",
-      currentWeekHours: 3,
-      averageWeeklyHours: 5,
-      totalSubmissions: 7,
-      consistency: 80,
-      trend: "down",
-    },
-    {
-      name: "Ishani Rana",
-      clinic: "Funding",
-      currentWeekHours: 2.5,
-      averageWeeklyHours: 4,
-      totalSubmissions: 8,
-      consistency: 88,
-      trend: "down",
-    },
-    {
-      name: "Maura Sullivan",
-      clinic: "Marketing",
-      currentWeekHours: 5,
-      averageWeeklyHours: 6,
-      totalSubmissions: 8,
-      consistency: 92,
-      trend: "stable",
-    },
-    {
-      name: "Margaret Distefano",
-      clinic: "Marketing",
-      currentWeekHours: 2,
-      averageWeeklyHours: 5,
-      totalSubmissions: 6,
-      consistency: 70,
-      trend: "down",
-    },
-  ])
+  const [students, setStudents] = useState<StudentMetrics[]>([])
+  const [directors, setDirectors] = useState<Director[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const filteredStudents = selectedClinic === "all" ? students : students.filter((s) => s.clinic === selectedClinic)
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true)
+      try {
+        const [directorsRes, debriefsRes] = await Promise.all([
+          fetch("/api/directors"),
+          fetch("/api/supabase/debriefs"),
+        ])
+
+        if (directorsRes.ok) {
+          const data = await directorsRes.json()
+          setDirectors(data.directors || [])
+        }
+
+        if (debriefsRes.ok) {
+          const data = await debriefsRes.json()
+          const debriefs = data.debriefs || []
+
+          // Group debriefs by student
+          const studentMap = new Map<string, any[]>()
+          debriefs.forEach((d: any) => {
+            const name = d.student_name || d.studentName || "Unknown"
+            if (!studentMap.has(name)) {
+              studentMap.set(name, [])
+            }
+            studentMap.get(name)!.push(d)
+          })
+
+          // Calculate metrics for each student
+          const studentMetrics: StudentMetrics[] = Array.from(studentMap.entries()).map(([name, records]) => {
+            const totalHours = records.reduce((sum, r) => sum + (Number(r.hours_worked || r.hoursWorked) || 0), 0)
+            const avgHours = records.length > 0 ? totalHours / records.length : 0
+            const latestRecord = records[0]
+            const currentWeekHours = Number(latestRecord?.hours_worked || latestRecord?.hoursWorked) || 0
+
+            // Calculate consistency (percentage of weeks with submissions)
+            const uniqueWeeks = new Set(records.map((r) => r.week_ending || r.weekEnding))
+            const consistency = Math.min(100, (uniqueWeeks.size / Math.max(selectedWeeks.length, 1)) * 100)
+
+            // Determine trend
+            let trend: "up" | "down" | "stable" = "stable"
+            if (records.length >= 2) {
+              const recentHours = Number(records[0]?.hours_worked || records[0]?.hoursWorked) || 0
+              const prevHours = Number(records[1]?.hours_worked || records[1]?.hoursWorked) || 0
+              if (recentHours > prevHours * 1.1) trend = "up"
+              else if (recentHours < prevHours * 0.9) trend = "down"
+            }
+
+            return {
+              name,
+              clinic: latestRecord?.clinic || "Unknown",
+              currentWeekHours: Math.round(currentWeekHours * 10) / 10,
+              averageWeeklyHours: Math.round(avgHours * 10) / 10,
+              totalSubmissions: records.length,
+              consistency: Math.round(consistency),
+              trend,
+            }
+          })
+
+          setStudents(studentMetrics)
+        }
+      } catch (error) {
+        console.error("Error fetching student performance:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [selectedWeeks])
+
+  const filteredStudents = (() => {
+    if (selectedClinic === "all") return students
+
+    // Check if selectedClinic is a UUID
+    const isUUID = selectedClinic.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    let filterClinicName = selectedClinic
+
+    if (isUUID) {
+      const director = directors.find((d) => d.id === selectedClinic)
+      filterClinicName = director?.clinicName || selectedClinic
+    }
+
+    return students.filter((s) => {
+      const normalizedStudentClinic = s.clinic.toLowerCase().replace(" clinic", "").trim()
+      const normalizedFilter = filterClinicName.toLowerCase().replace(" clinic", "").trim()
+      return normalizedStudentClinic === normalizedFilter
+    })
+  })()
 
   const getTrendIcon = (trend: string) => {
     if (trend === "up") return <TrendingUp className="h-4 w-4 text-green-600" />

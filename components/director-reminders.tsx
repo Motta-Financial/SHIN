@@ -10,31 +10,57 @@ interface DirectorRemindersProps {
   selectedClinic: string
 }
 
+interface Director {
+  id: string
+  full_name: string
+  clinic_id: string
+  clinicName?: string
+}
+
 export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRemindersProps) {
   const [pendingEvaluations, setPendingEvaluations] = useState(0)
   const [unresolvedQuestions, setUnresolvedQuestions] = useState(0)
   const [documentsNeedingReview, setDocumentsNeedingReview] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [directors, setDirectors] = useState<Director[]>([])
+
+  useEffect(() => {
+    async function fetchDirectors() {
+      try {
+        const res = await fetch("/api/directors")
+        if (res.ok) {
+          const data = await res.json()
+          setDirectors(data.directors || [])
+        }
+      } catch (error) {
+        console.error("Error fetching directors:", error)
+      }
+    }
+    fetchDirectors()
+  }, [])
 
   useEffect(() => {
     async function fetchReminders() {
       try {
-        // Fetch documents to check for pending evaluations and reviews
         const docsResponse = await fetch("/api/documents")
         const docsData = await docsResponse.json()
 
         if (docsData.documents) {
-          // Get current director name from selected clinic
-          const CLINIC_DIRECTORS: Record<string, string> = {
-            Consulting: "Nick Vadala",
-            Accounting: "Mark Dwyer",
-            Funding: "Ken Mooney",
-            Marketing: "Chris Hill",
+          let currentDirector: Director | undefined
+
+          if (selectedClinic && selectedClinic !== "all") {
+            // Check if selectedClinic is a UUID
+            const isUUID = selectedClinic.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+            if (isUUID) {
+              currentDirector = directors.find((d) => d.id === selectedClinic)
+            } else {
+              // Try to find by clinic name
+              currentDirector = directors.find((d) => d.clinicName === selectedClinic)
+            }
           }
 
-          const currentDirector = CLINIC_DIRECTORS[selectedClinic as keyof typeof CLINIC_DIRECTORS]
+          const currentDirectorName = currentDirector?.full_name
 
-          // Count PPTX files (midterm presentations) without evaluations from current director
           let pendingEvals = 0
           let docsNeedingReview = 0
 
@@ -42,23 +68,23 @@ export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRem
             const isPPTX = doc.file_name.toLowerCase().endsWith(".pptx") || doc.file_name.toLowerCase().endsWith(".ppt")
 
             if (isPPTX) {
-              // Check if current director has submitted an evaluation
               const evalsResponse = await fetch(`/api/evaluations?documentId=${doc.id}`)
               const evalsData = await evalsResponse.json()
 
-              const hasEvaluation = evalsData.evaluations?.some(
-                (evaluation: any) => evaluation.director_name === currentDirector,
-              )
+              const hasEvaluation = currentDirectorName
+                ? evalsData.evaluations?.some((evaluation: any) => evaluation.director_name === currentDirectorName)
+                : false
 
               if (!hasEvaluation) {
                 pendingEvals++
               }
             } else {
-              // For non-PPTX files (SOW documents), check if director has left a comment
               const reviewsResponse = await fetch(`/api/documents/reviews?documentId=${doc.id}`)
               const reviewsData = await reviewsResponse.json()
 
-              const hasReview = reviewsData.reviews?.some((review: any) => review.director_name === currentDirector)
+              const hasReview = currentDirectorName
+                ? reviewsData.reviews?.some((review: any) => review.director_name === currentDirectorName)
+                : false
 
               if (!hasReview) {
                 docsNeedingReview++
@@ -70,49 +96,60 @@ export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRem
           setDocumentsNeedingReview(docsNeedingReview)
         }
 
+        // Fetch debriefs for questions
         const questionsResponse = await fetch("/api/supabase/debriefs")
         const questionsData = await questionsResponse.json()
 
-        if (questionsData.records) {
-          const unresolvedCount = questionsData.records.filter((record: any) => {
-            const fields = record.fields
-            const dateSubmitted = fields["Date Submitted"]
-            const clinic = fields["Related Clinic"]
-            const question = fields["Questions"]
+        if (questionsData.debriefs) {
+          let filterClinicName = "all"
+          if (selectedClinic && selectedClinic !== "all") {
+            const isUUID = selectedClinic.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+            if (isUUID) {
+              const director = directors.find((d) => d.id === selectedClinic)
+              filterClinicName = director?.clinicName || "all"
+            } else {
+              filterClinicName = selectedClinic
+            }
+          }
 
-            // Filter by week - check if any selected week matches
+          const unresolvedCount = questionsData.debriefs.filter((debrief: any) => {
+            const dateSubmitted = debrief.date_submitted || debrief.dateSubmitted
+            const clinic = debrief.clinic || ""
+            const question = debrief.questions
+
             if (!dateSubmitted) return false
             const submittedDate = new Date(dateSubmitted)
 
-            const isInSelectedWeeks = selectedWeeks.some((selectedWeek) => {
-              const weekEnd = new Date(selectedWeek)
-              const weekStart = new Date(weekEnd)
-              weekStart.setDate(weekStart.getDate() - 6)
-              return submittedDate >= weekStart && submittedDate <= weekEnd
-            })
+            const isInSelectedWeeks =
+              selectedWeeks.length === 0 ||
+              selectedWeeks.some((selectedWeek) => {
+                const weekEnd = new Date(selectedWeek)
+                const weekStart = new Date(weekEnd)
+                weekStart.setDate(weekStart.getDate() - 6)
+                return submittedDate >= weekStart && submittedDate <= weekEnd
+              })
 
-            // Filter by clinic
-            const matchesClinic = selectedClinic === "all" || clinic === selectedClinic
+            const normalizedClinic = clinic.toLowerCase().replace(" clinic", "").trim()
+            const normalizedFilter = filterClinicName.toLowerCase().replace(" clinic", "").trim()
+            const matchesClinic = filterClinicName === "all" || normalizedClinic === normalizedFilter
 
-            // Only include records with questions
             return isInSelectedWeeks && matchesClinic && question && question.trim().length > 0
           }).length
 
           setUnresolvedQuestions(unresolvedCount)
         }
+
+        setLoading(false)
       } catch (error) {
-        console.error("[v0] Error fetching reminders:", error)
-      } finally {
+        console.error("Error fetching reminders:", error)
         setLoading(false)
       }
     }
 
-    if (selectedClinic !== "all") {
+    if (directors.length > 0 || selectedClinic === "all") {
       fetchReminders()
-    } else {
-      setLoading(false)
     }
-  }, [selectedWeeks, selectedClinic])
+  }, [selectedWeeks, selectedClinic, directors])
 
   // Don't show banner if viewing "all" clinics or if there are no pending tasks
   if (

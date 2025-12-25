@@ -1,6 +1,10 @@
 import { put } from "@vercel/blob"
-import { createClient } from "@/lib/supabase/client"
+import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
+
+function createServiceClient() {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+}
 
 // SOW documents data
 const sowDocuments = [
@@ -98,7 +102,7 @@ SEED Team & Roles:
 export async function POST() {
   try {
     console.log("[v0] Starting SOW document upload...")
-    const supabase = createClient()
+    const supabase = createServiceClient()
     const results = []
 
     for (const doc of sowDocuments) {
@@ -116,7 +120,7 @@ export async function POST() {
 
         console.log(`[v0] Uploaded to Blob: ${url}`)
 
-        // Insert into Supabase
+        // Insert into Supabase using service role (bypasses RLS)
         const { data, error } = await supabase.from("documents").insert({
           client_name: doc.clientName,
           file_name: doc.fileName,

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   Users,
   FileText,
@@ -16,8 +17,13 @@ import {
   CheckCircle,
   AlertCircle,
   TrendingUp,
-  Calendar,
   BarChart3,
+  ChevronDown,
+  ChevronUp,
+  Mail,
+  Calendar,
+  Briefcase,
+  MessageSquare,
 } from "lucide-react"
 import { createBrowserClient } from "@supabase/ssr"
 import { DocumentUpload } from "@/components/document-upload"
@@ -75,32 +81,37 @@ interface CourseMaterial {
   created_at: string
 }
 
-export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
+export function ClinicView({ selectedClinic, selectedWeeks = [] }: ClinicViewProps) {
   const [clinicData, setClinicData] = useState<ClinicData | null>(null)
   const [schedule, setSchedule] = useState<ScheduleWeek[]>([])
   const [materials, setMaterials] = useState<CourseMaterial[]>([])
   const [debriefs, setDebriefs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeSubTab, setActiveSubTab] = useState("overview")
+  const [expandedCard, setExpandedCard] = useState<string | null>(null)
+  const [expandedClient, setExpandedClient] = useState<string | null>(null)
+  const [expandedStudent, setExpandedStudent] = useState<string | null>(null)
+  const [expandedDebrief, setExpandedDebrief] = useState<string | null>(null)
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   )
 
+  const normalizeDate = (dateStr: string): string => {
+    if (!dateStr) return ""
+    try {
+      const date = new Date(dateStr)
+      if (isNaN(date.getTime())) return dateStr
+      return date.toISOString().split("T")[0]
+    } catch {
+      return dateStr
+    }
+  }
+
   const matchesSelectedWeek = (weekEnding: string, selectedWeekValues: string[]): boolean => {
     if (selectedWeekValues.length === 0) return true
     if (!weekEnding) return false
-
-    const normalizeDate = (dateStr: string): string => {
-      try {
-        const date = new Date(dateStr)
-        if (isNaN(date.getTime())) return dateStr
-        return date.toISOString().split("T")[0]
-      } catch {
-        return dateStr
-      }
-    }
 
     const normalizedWeekEnding = normalizeDate(weekEnding)
     return selectedWeekValues.some((selectedWeek) => {
@@ -116,28 +127,26 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
   const fetchClinicData = async () => {
     setLoading(true)
     try {
-      console.log("[v0] ClinicView - selectedClinic value:", selectedClinic)
-
-      const isValidUUID =
+      const isValidUUID = Boolean(
         selectedClinic &&
-        selectedClinic !== "all" &&
-        selectedClinic.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+          selectedClinic !== "all" &&
+          typeof selectedClinic === "string" &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedClinic),
+      )
 
       const { data: mappingData, error: mappingError } = await supabase.from("v_complete_mapping").select("*")
-
-      console.log("[v0] ClinicView - v_complete_mapping count:", mappingData?.length, "error:", mappingError)
 
       let filteredStudents: CompleteMapping[] = []
 
       if (mappingData && mappingData.length > 0) {
         if (!isValidUUID) {
           filteredStudents = mappingData as CompleteMapping[]
-          console.log("[v0] ClinicView - Showing ALL students:", filteredStudents.length)
         } else {
-          filteredStudents = mappingData.filter(
-            (s: CompleteMapping) => s.clinic_director_id === selectedClinic || s.client_director_id === selectedClinic,
-          )
-          console.log("[v0] ClinicView - Filtered by director ID:", filteredStudents.length)
+          filteredStudents = mappingData.filter((s: CompleteMapping) => {
+            const matchesClinicDirector = s.clinic_director_id === selectedClinic
+            const matchesClientDirector = s.client_director_id === selectedClinic
+            return matchesClinicDirector || matchesClientDirector
+          })
         }
       }
 
@@ -186,7 +195,7 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
         setMaterials(materialsData)
       }
     } catch (error) {
-      console.error("[v0] Error fetching clinic data:", error)
+      console.error("Error fetching clinic data:", error)
     } finally {
       setLoading(false)
     }
@@ -203,52 +212,62 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
     }
   }
 
+  const filteredDebriefs = useMemo(() => {
+    if (!clinicData || !debriefs.length) return []
+
+    const studentIds = new Set(clinicData.students.map((s) => s.student_id))
+
+    return debriefs.filter((d) => {
+      const studentId = d.student_id || d.studentId
+      return studentIds.has(studentId)
+    })
+  }, [clinicData, debriefs])
+
   const activityMetrics = useMemo(() => {
-    if (!clinicData || debriefs.length === 0) {
+    if (!filteredDebriefs.length) {
       return {
         totalHours: 0,
         activeStudents: 0,
         debriefsSubmitted: 0,
-        studentsWithDebriefs: new Set<string>(),
+        submittedStudentIds: new Set<string>(),
       }
     }
 
-    const studentIds = new Set(clinicData.students.map((s) => s.student_id))
+    const weekFilteredDebriefs = filteredDebriefs.filter((d) =>
+      matchesSelectedWeek(d.week_ending || d.weekEnding, selectedWeeks),
+    )
+
     let totalHours = 0
-    const studentsWithDebriefs = new Set<string>()
-    let debriefsSubmitted = 0
+    const activeStudentIds = new Set<string>()
+    const submittedStudentIds = new Set<string>()
 
-    debriefs.forEach((debrief: any) => {
-      const studentId = debrief.studentId || debrief.student_id
-      const weekEnding = debrief.weekEnding || debrief.week_ending || ""
-
-      if (!studentIds.has(studentId) && studentIds.size > 0) return
-
-      if (!matchesSelectedWeek(weekEnding, selectedWeeks)) return
-
-      const hours = Number.parseFloat(debrief.hoursWorked || debrief.hours_worked || "0")
+    weekFilteredDebriefs.forEach((d) => {
+      const hours = Number.parseFloat(d.hours_worked || d.hoursWorked || "0")
       totalHours += hours
-      if (studentId) studentsWithDebriefs.add(studentId)
-      debriefsSubmitted++
+      const studentId = d.student_id || d.studentId
+      if (studentId) {
+        activeStudentIds.add(studentId)
+        submittedStudentIds.add(studentId)
+      }
     })
 
     return {
-      totalHours,
-      activeStudents: studentsWithDebriefs.size,
-      debriefsSubmitted,
-      studentsWithDebriefs,
+      totalHours: Math.round(totalHours * 10) / 10,
+      activeStudents: activeStudentIds.size,
+      debriefsSubmitted: weekFilteredDebriefs.length,
+      submittedStudentIds,
     }
-  }, [clinicData, debriefs, selectedWeeks])
+  }, [filteredDebriefs, selectedWeeks])
 
   const weeklyBreakdown = useMemo(() => {
-    if (!clinicData || debriefs.length === 0) return []
+    if (!clinicData || !filteredDebriefs.length) return []
 
     const studentIds = new Set(clinicData.students.map((s) => s.student_id))
     const breakdown: { week: string; hours: number; submissions: number; students: number }[] = []
 
     const weekMap = new Map<string, { hours: number; submissions: number; studentSet: Set<string> }>()
 
-    debriefs.forEach((debrief: any) => {
+    filteredDebriefs.forEach((debrief: any) => {
       const studentId = debrief.studentId || debrief.student_id
       if (!studentIds.has(studentId) && studentIds.size > 0) return
 
@@ -277,10 +296,10 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
     })
 
     return breakdown.sort((a, b) => new Date(b.week).getTime() - new Date(a.week).getTime()).slice(0, 8)
-  }, [clinicData, debriefs])
+  }, [clinicData, filteredDebriefs])
 
   const studentPerformance = useMemo(() => {
-    if (!clinicData || debriefs.length === 0) return []
+    if (!clinicData || !filteredDebriefs.length) return []
 
     const studentMetrics = new Map<
       string,
@@ -298,12 +317,12 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
       })
     })
 
-    debriefs.forEach((debrief: any) => {
+    filteredDebriefs.forEach((debrief: any) => {
       const studentId = debrief.studentId || debrief.student_id
       if (!studentMetrics.has(studentId)) return
 
       const weekEnding = debrief.weekEnding || debrief.week_ending || ""
-      if (selectedWeeks.length > 0 && !matchesSelectedWeek(weekEnding, selectedWeeks)) return
+      if (!matchesSelectedWeek(weekEnding, selectedWeeks)) return
 
       const hours = Number.parseFloat(debrief.hoursWorked || debrief.hours_worked || "0")
       const metrics = studentMetrics.get(studentId)!
@@ -314,269 +333,847 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
       }
     })
 
-    return Array.from(studentMetrics.entries())
-      .map(([id, data]) => ({ id, ...data }))
+    return Array.from(studentMetrics.values())
+      .filter((s) => s.submissions > 0)
       .sort((a, b) => b.totalHours - a.totalHours)
-  }, [clinicData, debriefs, selectedWeeks])
+  }, [clinicData, filteredDebriefs, selectedWeeks])
 
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2)
-  }
+  const clientTeams = useMemo(() => {
+    if (!clinicData) return []
+
+    const clientMap = new Map<string, { name: string; students: CompleteMapping[]; totalHours: number }>()
+
+    clinicData.students.forEach((s) => {
+      if (!s.client_name) return
+
+      if (!clientMap.has(s.client_name)) {
+        clientMap.set(s.client_name, { name: s.client_name, students: [], totalHours: 0 })
+      }
+
+      clientMap.get(s.client_name)!.students.push(s)
+    })
+
+    filteredDebriefs.forEach((debrief: any) => {
+      const clientName = debrief.clientName || debrief.client_name
+      if (!clientName || !clientMap.has(clientName)) return
+
+      const weekEnding = debrief.weekEnding || debrief.week_ending || ""
+      if (!matchesSelectedWeek(weekEnding, selectedWeeks)) return
+
+      const hours = Number.parseFloat(debrief.hoursWorked || debrief.hours_worked || "0")
+      clientMap.get(clientName)!.totalHours += hours
+    })
+
+    return Array.from(clientMap.values()).sort((a, b) => b.students.length - a.students.length)
+  }, [clinicData, filteredDebriefs, selectedWeeks])
 
   if (loading) {
     return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0077B6]" />
+      </div>
+    )
+  }
+
+  if (!clinicData) {
+    return (
       <Card>
-        <CardContent className="flex items-center justify-center py-8">
-          <div className="animate-pulse text-muted-foreground">Loading clinic data...</div>
+        <CardContent className="p-6">
+          <p className="text-center text-muted-foreground">No clinic data available</p>
         </CardContent>
       </Card>
     )
   }
 
+  const avgHoursPerStudent =
+    activityMetrics.activeStudents > 0 ? (activityMetrics.totalHours / activityMetrics.activeStudents).toFixed(1) : "0"
+
+  const getStudentDetails = (studentId: string) => {
+    const student = clinicData.students.find((s) => s.student_id === studentId)
+    const studentDebriefs = filteredDebriefs.filter((d) => (d.studentId || d.student_id) === studentId)
+    const totalHours = studentDebriefs.reduce((sum, d) => {
+      return sum + Number.parseFloat(d.hoursWorked || d.hours_worked || "0")
+    }, 0)
+    const lastDebrief = studentDebriefs.sort(
+      (a, b) =>
+        new Date(b.week_ending || b.weekEnding || 0).getTime() - new Date(a.week_ending || a.weekEnding || 0).getTime(),
+    )[0]
+    return { student, debriefs: studentDebriefs, totalHours, lastDebrief }
+  }
+
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Students</CardTitle>
-            <GraduationCap className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{clinicData?.students.length || 0}</div>
-            <p className="text-xs text-muted-foreground">In {clinicData?.clinic || "clinic"}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active This Period</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{activityMetrics.activeStudents}</div>
-            <p className="text-xs text-muted-foreground">
-              {selectedWeeks.length === 0 ? "All time" : `${selectedWeeks.length} week(s) selected`}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Hours Worked</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{activityMetrics.totalHours.toFixed(1)}</div>
-            <p className="text-xs text-muted-foreground">
-              {clinicData && clinicData.students.length > 0
-                ? `Avg: ${(activityMetrics.totalHours / clinicData.students.length).toFixed(1)} per student`
-                : "No students"}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Debriefs</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{activityMetrics.debriefsSubmitted}</div>
-            <p className="text-xs text-muted-foreground">Submitted this period</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Clients</CardTitle>
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{clinicData?.clients.length || 0}</div>
-            <p className="text-xs text-muted-foreground">Active engagements</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="students">Students</TabsTrigger>
-          <TabsTrigger value="performance">Performance</TabsTrigger>
-          <TabsTrigger value="schedule">Schedule</TabsTrigger>
-          <TabsTrigger value="materials">Materials</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
-                Weekly Activity Trend
-              </CardTitle>
-              <CardDescription>Hours and submissions by week</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {weeklyBreakdown.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No activity data available</p>
-              ) : (
-                <div className="space-y-3">
-                  {weeklyBreakdown.map((week) => (
-                    <div key={week.week} className="flex items-center gap-4">
-                      <div className="w-24 text-sm text-muted-foreground">
-                        {new Date(week.week).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="h-4 rounded bg-primary"
-                            style={{ width: `${Math.min((week.hours / 50) * 100, 100)}%` }}
-                          />
-                          <span className="text-sm font-medium">{week.hours.toFixed(1)} hrs</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>{week.submissions} debriefs</span>
-                        <span>{week.students} students</span>
-                      </div>
-                    </div>
-                  ))}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <Collapsible
+          open={expandedCard === "students"}
+          onOpenChange={(open) => setExpandedCard(open ? "students" : null)}
+        >
+          <CollapsibleTrigger asChild>
+            <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 cursor-pointer hover:shadow-md transition-shadow">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-500 rounded-lg">
+                    <Users className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-2xl font-bold text-blue-700">{clinicData.students.length}</p>
+                    <p className="text-xs text-blue-600">Total Students</p>
+                  </div>
+                  {expandedCard === "students" ? (
+                    <ChevronUp className="h-4 w-4 text-blue-600" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-blue-600" />
+                  )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Building2 className="h-5 w-5" />
-                  Client Engagement Teams
-                </CardTitle>
-                <CardDescription>Students grouped by client assignment</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {clinicData?.clients.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No client assignments found</p>
-                ) : (
-                  <div className="space-y-4">
-                    {clinicData?.clients.map((clientName) => {
-                      const teamMembers = clinicData?.students.filter((s) => s.client_name === clientName) || []
-                      const teamHours = studentPerformance
-                        .filter((s) => s.client === clientName)
-                        .reduce((sum, s) => sum + s.totalHours, 0)
-                      return (
-                        <div key={clientName} className="rounded-lg border p-4">
-                          <div className="mb-2 flex items-center justify-between">
-                            <h4 className="font-medium">{clientName}</h4>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline">{teamHours.toFixed(1)} hrs</Badge>
-                              <Badge variant="secondary">{teamMembers.length} members</Badge>
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {teamMembers.map((student) => {
-                              const hasSubmitted = activityMetrics.studentsWithDebriefs.has(student.student_id)
-                              return (
-                                <div key={student.student_id} className="flex items-center gap-2">
-                                  <Avatar className={`h-6 w-6 ${hasSubmitted ? "ring-2 ring-green-500" : ""}`}>
-                                    <AvatarFallback className="text-xs">
-                                      {getInitials(student.student_name)}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <span className="text-sm">{student.student_name}</span>
-                                  {!hasSubmitted && selectedWeeks.length > 0 && (
-                                    <AlertCircle className="h-3 w-3 text-orange-500" />
-                                  )}
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5" />
-                  Clinic Directors
-                </CardTitle>
-                <CardDescription>Directors supporting this clinic</CardDescription>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2">
+            <Card className="border-blue-200">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">All Students ({clinicData.students.length})</CardTitle>
               </CardHeader>
-              <CardContent>
-                {clinicData?.directors.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No directors found</p>
-                ) : (
-                  <div className="space-y-3">
-                    {clinicData?.directors.map((director) => (
-                      <div key={director} className="flex items-center gap-3 rounded-lg border p-3">
-                        <Avatar>
-                          <AvatarFallback>{getInitials(director)}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">{director}</p>
-                          <p className="text-sm text-muted-foreground">Director</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="students">
-          <Card>
-            <CardHeader>
-              <CardTitle>Student Roster</CardTitle>
-              <CardDescription>
-                All students in {clinicData?.clinic || "this clinic"}
-                {selectedWeeks.length > 0 && ` - showing activity for ${selectedWeeks.length} week(s)`}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {clinicData?.students.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No students found</p>
-              ) : (
-                <div className="space-y-3">
-                  {clinicData?.students.map((student) => {
-                    const hasSubmitted = activityMetrics.studentsWithDebriefs.has(student.student_id)
-                    const perf = studentPerformance.find((s) => s.id === student.student_id)
+              <CardContent className="max-h-64 overflow-y-auto">
+                <div className="space-y-2">
+                  {clinicData.students.map((student) => {
+                    const { totalHours, debriefs: studentDebriefs } = getStudentDetails(student.student_id)
+                    const hasSubmitted = activityMetrics.submittedStudentIds.has(student.student_id)
                     return (
-                      <div key={student.student_id} className="flex items-center justify-between rounded-lg border p-4">
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarFallback>{getInitials(student.student_name)}</AvatarFallback>
+                      <div
+                        key={student.student_id}
+                        className="flex items-center justify-between p-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Avatar className={`h-8 w-8 ${hasSubmitted ? "ring-2 ring-green-500" : ""}`}>
+                            <AvatarFallback className="text-xs">
+                              {student.student_name
+                                ?.split(" ")
+                                .map((n) => n[0])
+                                .join("") || "?"}
+                            </AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="font-medium">{student.student_name}</p>
-                            <p className="text-sm text-muted-foreground">{student.student_email}</p>
+                            <p className="text-sm font-medium">{student.student_name}</p>
+                            <p className="text-xs text-muted-foreground">{student.client_name || "Unassigned"}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline">{student.client_name || "Unassigned"}</Badge>
-                          {perf && <Badge variant="secondary">{perf.totalHours.toFixed(1)} hrs</Badge>}
-                          {selectedWeeks.length > 0 &&
-                            (hasSubmitted ? (
-                              <Badge variant="default" className="bg-green-500">
-                                Submitted
-                              </Badge>
-                            ) : (
-                              <Badge variant="destructive">Missing</Badge>
-                            ))}
+                        <div className="text-right">
+                          <p className="text-sm font-semibold">{totalHours.toFixed(1)}h</p>
+                          <p className="text-xs text-muted-foreground">{studentDebriefs.length} debriefs</p>
                         </div>
                       </div>
                     )
                   })}
                 </div>
-              )}
+              </CardContent>
+            </Card>
+          </CollapsibleContent>
+        </Collapsible>
+
+        <Collapsible open={expandedCard === "active"} onOpenChange={(open) => setExpandedCard(open ? "active" : null)}>
+          <CollapsibleTrigger asChild>
+            <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 cursor-pointer hover:shadow-md transition-shadow">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-green-500 rounded-lg">
+                    <CheckCircle className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-2xl font-bold text-green-700">{activityMetrics.activeStudents}</p>
+                    <p className="text-xs text-green-600">Active This Period</p>
+                  </div>
+                  {expandedCard === "active" ? (
+                    <ChevronUp className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-green-600" />
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2">
+            <Card className="border-green-200">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Active Students ({activityMetrics.activeStudents})</CardTitle>
+              </CardHeader>
+              <CardContent className="max-h-64 overflow-y-auto">
+                <div className="space-y-2">
+                  {clinicData.students
+                    .filter((s) => activityMetrics.submittedStudentIds.has(s.student_id))
+                    .map((student) => {
+                      const { totalHours, lastDebrief } = getStudentDetails(student.student_id)
+                      return (
+                        <div
+                          key={student.student_id}
+                          className="flex items-center justify-between p-2 rounded-lg bg-green-50 border border-green-200"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-8 w-8 ring-2 ring-green-500">
+                              <AvatarFallback className="text-xs bg-green-100">
+                                {student.student_name
+                                  ?.split(" ")
+                                  .map((n) => n[0])
+                                  .join("") || "?"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="text-sm font-medium">{student.student_name}</p>
+                              <p className="text-xs text-muted-foreground">{student.client_name || "Unassigned"}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold text-green-700">{totalHours.toFixed(1)}h</p>
+                            {lastDebrief && (
+                              <p className="text-xs text-muted-foreground">
+                                Last: {new Date(lastDebrief.week_ending || lastDebrief.weekEnding).toLocaleDateString()}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                </div>
+              </CardContent>
+            </Card>
+          </CollapsibleContent>
+        </Collapsible>
+
+        <Collapsible open={expandedCard === "hours"} onOpenChange={(open) => setExpandedCard(open ? "hours" : null)}>
+          <CollapsibleTrigger asChild>
+            <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 cursor-pointer hover:shadow-md transition-shadow">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-500 rounded-lg">
+                    <Clock className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-2xl font-bold text-purple-700">{activityMetrics.totalHours.toFixed(1)}</p>
+                    <p className="text-xs text-purple-600">Hours Worked ({avgHoursPerStudent}/student)</p>
+                  </div>
+                  {expandedCard === "hours" ? (
+                    <ChevronUp className="h-4 w-4 text-purple-600" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-purple-600" />
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2">
+            <Card className="border-purple-200">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Hours by Student</CardTitle>
+              </CardHeader>
+              <CardContent className="max-h-64 overflow-y-auto">
+                <div className="space-y-2">
+                  {studentPerformance.map((student, idx) => (
+                    <div key={student.email} className="flex items-center gap-3 p-2 rounded-lg bg-muted/50">
+                      <span className="text-sm font-bold text-muted-foreground w-6">#{idx + 1}</span>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{student.name}</p>
+                        <p className="text-xs text-muted-foreground">{student.client}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-purple-700">{student.totalHours.toFixed(1)}h</p>
+                      </div>
+                    </div>
+                  ))}
+                  {studentPerformance.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">No hours recorded</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </CollapsibleContent>
+        </Collapsible>
+
+        <Collapsible
+          open={expandedCard === "debriefs"}
+          onOpenChange={(open) => setExpandedCard(open ? "debriefs" : null)}
+        >
+          <CollapsibleTrigger asChild>
+            <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 cursor-pointer hover:shadow-md transition-shadow">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-orange-500 rounded-lg">
+                    <FileText className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-2xl font-bold text-orange-700">{activityMetrics.debriefsSubmitted}</p>
+                    <p className="text-xs text-orange-600">Debriefs Submitted</p>
+                  </div>
+                  {expandedCard === "debriefs" ? (
+                    <ChevronUp className="h-4 w-4 text-orange-600" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-orange-600" />
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2">
+            <Card className="border-orange-200">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Recent Debriefs ({activityMetrics.debriefsSubmitted})</CardTitle>
+              </CardHeader>
+              <CardContent className="max-h-64 overflow-y-auto">
+                <div className="space-y-2">
+                  {filteredDebriefs
+                    .filter((d) => matchesSelectedWeek(d.week_ending || d.weekEnding, selectedWeeks))
+                    .sort(
+                      (a, b) =>
+                        new Date(b.week_ending || b.weekEnding || 0).getTime() -
+                        new Date(a.week_ending || a.weekEnding || 0).getTime(),
+                    )
+                    .slice(0, 20)
+                    .map((debrief, idx) => (
+                      <div
+                        key={`${debrief.id || idx}`}
+                        className="p-2 rounded-lg bg-orange-50 border border-orange-200"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium">
+                              {debrief.student_name || debrief.studentName || "Unknown"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {debrief.client_name || debrief.clientName || "Unknown Client"}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold text-orange-700">
+                              {debrief.hours_worked || debrief.hoursWorked || 0}h
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(debrief.week_ending || debrief.weekEnding).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  {activityMetrics.debriefsSubmitted === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">No debriefs submitted</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </CollapsibleContent>
+        </Collapsible>
+
+        <Collapsible
+          open={expandedCard === "clients"}
+          onOpenChange={(open) => setExpandedCard(open ? "clients" : null)}
+        >
+          <CollapsibleTrigger asChild>
+            <Card className="bg-gradient-to-br from-teal-50 to-teal-100 border-teal-200 cursor-pointer hover:shadow-md transition-shadow">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-teal-500 rounded-lg">
+                    <Building2 className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-2xl font-bold text-teal-700">{clientTeams.length}</p>
+                    <p className="text-xs text-teal-600">Active Clients</p>
+                  </div>
+                  {expandedCard === "clients" ? (
+                    <ChevronUp className="h-4 w-4 text-teal-600" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-teal-600" />
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2">
+            <Card className="border-teal-200">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Client Teams ({clientTeams.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="max-h-64 overflow-y-auto">
+                <div className="space-y-2">
+                  {clientTeams.map((client) => (
+                    <div key={client.name} className="p-2 rounded-lg bg-teal-50 border border-teal-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">{client.name}</p>
+                          <p className="text-xs text-muted-foreground">{client.students.length} team members</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-teal-700">{client.totalHours.toFixed(1)}h</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </CollapsibleContent>
+        </Collapsible>
+      </div>
+
+      <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="students">Students</TabsTrigger>
+          <TabsTrigger value="performance">Performance</TabsTrigger>
+          <TabsTrigger value="materials">Materials</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          {weeklyBreakdown.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Weekly Activity Trend
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {weeklyBreakdown.slice(0, 6).map((week) => (
+                    <div key={week.week} className="flex items-center gap-4">
+                      <div className="w-24 text-sm text-muted-foreground">
+                        {new Date(week.week).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </div>
+                      <div className="flex-1">
+                        <div className="h-6 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full"
+                            style={{
+                              width: `${Math.min((week.hours / Math.max(...weeklyBreakdown.map((w) => w.hours))) * 100, 100)}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="w-20 text-right text-sm font-medium">{week.hours.toFixed(1)}h</div>
+                      <div className="w-16 text-right text-xs text-muted-foreground">{week.submissions} debriefs</div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Client Teams
+              </CardTitle>
+              <CardDescription>Students assigned to each client - click to expand</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {clientTeams.map((client) => (
+                  <Collapsible
+                    key={client.name}
+                    open={expandedClient === client.name}
+                    onOpenChange={(open) => setExpandedClient(open ? client.name : null)}
+                  >
+                    <CollapsibleTrigger asChild>
+                      <Card className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-md transition-shadow">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="font-semibold">{client.name}</h4>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary">{client.students.length} members</Badge>
+                              <Badge variant="outline">{client.totalHours.toFixed(1)}h</Badge>
+                              {expandedClient === client.name ? (
+                                <ChevronUp className="h-4 w-4" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4" />
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {client.students.slice(0, 5).map((student) => {
+                              const hasSubmitted = activityMetrics.submittedStudentIds.has(student.student_id)
+                              return (
+                                <Avatar
+                                  key={student.student_id}
+                                  className={`h-8 w-8 border-2 ${hasSubmitted ? "border-green-500" : "border-orange-400"}`}
+                                >
+                                  <AvatarFallback className="text-xs">
+                                    {student.student_name
+                                      ?.split(" ")
+                                      .map((n) => n[0])
+                                      .join("") || "?"}
+                                  </AvatarFallback>
+                                </Avatar>
+                              )
+                            })}
+                            {client.students.length > 5 && (
+                              <Avatar className="h-8 w-8 border-2 border-muted">
+                                <AvatarFallback className="text-xs">+{client.students.length - 5}</AvatarFallback>
+                              </Avatar>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="mt-2">
+                      <Card className="border-blue-200 bg-blue-50/30">
+                        <CardContent className="p-4">
+                          <h5 className="font-medium mb-3 flex items-center gap-2">
+                            <Users className="h-4 w-4" />
+                            Team Members
+                          </h5>
+                          <div className="space-y-2">
+                            {client.students.map((student) => {
+                              const {
+                                totalHours,
+                                debriefs: studentDebriefs,
+                                lastDebrief,
+                              } = getStudentDetails(student.student_id)
+                              const hasSubmitted = activityMetrics.submittedStudentIds.has(student.student_id)
+                              const isStudentExpanded = expandedStudent === student.student_id
+
+                              return (
+                                <Collapsible
+                                  key={student.student_id}
+                                  open={isStudentExpanded}
+                                  onOpenChange={(open) => setExpandedStudent(open ? student.student_id : null)}
+                                >
+                                  <CollapsibleTrigger asChild>
+                                    <div
+                                      className={`p-3 rounded-lg border cursor-pointer hover:shadow-sm transition-all ${hasSubmitted ? "border-green-200 bg-green-50" : "border-orange-200 bg-orange-50"}`}
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <Avatar className={`h-10 w-10 ${hasSubmitted ? "ring-2 ring-green-500" : ""}`}>
+                                          <AvatarFallback>
+                                            {student.student_name
+                                              ?.split(" ")
+                                              .map((n) => n[0])
+                                              .join("") || "?"}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="font-medium">{student.student_name}</p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {student.student_role || "Team Member"}
+                                          </p>
+                                        </div>
+                                        <div className="text-right flex items-center gap-2">
+                                          <div>
+                                            <p className="font-bold text-sm">{totalHours.toFixed(1)}h</p>
+                                            <p className="text-xs text-muted-foreground">
+                                              {studentDebriefs.length} debriefs
+                                            </p>
+                                          </div>
+                                          {isStudentExpanded ? (
+                                            <ChevronUp className="h-4 w-4" />
+                                          ) : (
+                                            <ChevronDown className="h-4 w-4" />
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent>
+                                    <div className="mt-2 p-3 rounded-lg bg-background border space-y-3">
+                                      <div className="grid grid-cols-2 gap-3 text-sm">
+                                        <div className="flex items-center gap-2">
+                                          <Mail className="h-4 w-4 text-muted-foreground" />
+                                          <span className="truncate">{student.student_email}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <Briefcase className="h-4 w-4 text-muted-foreground" />
+                                          <span>{student.student_role || "Team Member"}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <Clock className="h-4 w-4 text-muted-foreground" />
+                                          <span>{totalHours.toFixed(1)} hours total</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                                          <span>
+                                            {lastDebrief
+                                              ? `Last: ${new Date(lastDebrief.week_ending || lastDebrief.weekEnding).toLocaleDateString()}`
+                                              : "No submissions"}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      {studentDebriefs.length > 0 && (
+                                        <div>
+                                          <h6 className="text-xs font-medium text-muted-foreground mb-2">
+                                            Recent Activity
+                                          </h6>
+                                          <div className="space-y-1">
+                                            {studentDebriefs.slice(0, 3).map((d, idx) => (
+                                              <div
+                                                key={idx}
+                                                className="flex justify-between text-xs p-2 bg-muted/50 rounded"
+                                              >
+                                                <span>
+                                                  {new Date(d.week_ending || d.weekEnding).toLocaleDateString()}
+                                                </span>
+                                                <span className="font-medium">
+                                                  {d.hours_worked || d.hoursWorked || 0}h
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </CollapsibleContent>
+                                </Collapsible>
+                              )
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </CollapsibleContent>
+                  </Collapsible>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="students">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <GraduationCap className="h-5 w-5" />
+                Student Roster
+              </CardTitle>
+              <CardDescription>All students in this clinic - click to expand details</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {clinicData.students.map((student) => {
+                  const hasSubmitted = activityMetrics.submittedStudentIds.has(student.student_id)
+                  const { totalHours, debriefs: studentDebriefs, lastDebrief } = getStudentDetails(student.student_id)
+                  const isExpanded = expandedStudent === student.student_id
+
+                  return (
+                    <Collapsible
+                      key={student.student_id}
+                      open={isExpanded}
+                      onOpenChange={(open) => setExpandedStudent(open ? student.student_id : null)}
+                    >
+                      <CollapsibleTrigger asChild>
+                        <div
+                          className={`p-3 rounded-lg border cursor-pointer hover:shadow-md transition-all ${hasSubmitted ? "border-green-200 bg-green-50" : "border-orange-200 bg-orange-50"}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <Avatar className={`h-10 w-10 ${hasSubmitted ? "ring-2 ring-green-500" : ""}`}>
+                              <AvatarFallback>
+                                {student.student_name
+                                  ?.split(" ")
+                                  .map((n) => n[0])
+                                  .join("") || "?"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium truncate">{student.student_name}</p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {student.client_name || "Unassigned"}
+                              </p>
+                            </div>
+                            <div className="text-right flex items-center gap-2">
+                              <div>
+                                <p className="font-bold text-sm">{totalHours.toFixed(1)}h</p>
+                                {hasSubmitted ? (
+                                  <CheckCircle className="h-4 w-4 text-green-500 ml-auto" />
+                                ) : (
+                                  <AlertCircle className="h-4 w-4 text-orange-500 ml-auto" />
+                                )}
+                              </div>
+                              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </div>
+                          </div>
+                        </div>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="mt-2 p-4 rounded-lg bg-background border space-y-4">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground">Email</p>
+                              <p className="text-sm flex items-center gap-2">
+                                <Mail className="h-4 w-4" />
+                                {student.student_email}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground">Role</p>
+                              <p className="text-sm flex items-center gap-2">
+                                <Briefcase className="h-4 w-4" />
+                                {student.student_role || "Team Member"}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground">Client</p>
+                              <p className="text-sm flex items-center gap-2">
+                                <Building2 className="h-4 w-4" />
+                                {student.client_name || "Unassigned"}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground">Clinic Director</p>
+                              <p className="text-sm flex items-center gap-2">
+                                <Users className="h-4 w-4" />
+                                {student.clinic_director_name || "N/A"}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="border-t pt-3">
+                            <h6 className="text-sm font-medium mb-2 flex items-center gap-2">
+                              <Clock className="h-4 w-4" />
+                              Activity Summary
+                            </h6>
+                            <div className="grid grid-cols-3 gap-3 text-center">
+                              <div className="p-2 bg-muted rounded-lg">
+                                <p className="text-lg font-bold">{totalHours.toFixed(1)}</p>
+                                <p className="text-xs text-muted-foreground">Total Hours</p>
+                              </div>
+                              <div className="p-2 bg-muted rounded-lg">
+                                <p className="text-lg font-bold">{studentDebriefs.length}</p>
+                                <p className="text-xs text-muted-foreground">Debriefs</p>
+                              </div>
+                              <div className="p-2 bg-muted rounded-lg">
+                                <p className="text-lg font-bold">
+                                  {studentDebriefs.length > 0 ? (totalHours / studentDebriefs.length).toFixed(1) : "0"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">Avg Hours</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {studentDebriefs.length > 0 && (
+                            <div className="border-t pt-3">
+                              <h6 className="text-sm font-medium mb-2 flex items-center gap-2">
+                                <FileText className="h-4 w-4" />
+                                Recent Debriefs
+                              </h6>
+                              <div className="space-y-2 max-h-32 overflow-y-auto">
+                                {studentDebriefs.slice(0, 5).map((d, idx) => {
+                                  const debriefId = d.id || `${student.student_id}-${idx}`
+                                  const isDebriefExpanded = expandedDebrief === debriefId
+                                  const weekDate = new Date(d.week_ending || d.weekEnding)
+
+                                  return (
+                                    <Collapsible
+                                      key={debriefId}
+                                      open={isDebriefExpanded}
+                                      onOpenChange={(open) => setExpandedDebrief(open ? debriefId : null)}
+                                    >
+                                      <CollapsibleTrigger asChild>
+                                        <div className="flex justify-between items-center p-2 bg-muted/50 rounded text-sm cursor-pointer hover:bg-muted transition-colors">
+                                          <div className="flex items-center gap-2">
+                                            <Calendar className="h-3 w-3 text-muted-foreground" />
+                                            <span>{weekDate.toLocaleDateString()}</span>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <Badge variant="secondary">{d.hours_worked || d.hoursWorked || 0}h</Badge>
+                                            <Badge
+                                              variant={d.status === "reviewed" ? "default" : "outline"}
+                                              className="text-xs"
+                                            >
+                                              {d.status || "submitted"}
+                                            </Badge>
+                                            {isDebriefExpanded ? (
+                                              <ChevronUp className="h-3 w-3" />
+                                            ) : (
+                                              <ChevronDown className="h-3 w-3" />
+                                            )}
+                                          </div>
+                                        </div>
+                                      </CollapsibleTrigger>
+                                      <CollapsibleContent>
+                                        <div className="mt-1 p-3 bg-background border rounded-lg space-y-3 text-sm">
+                                          {/* Debrief metadata */}
+                                          <div className="grid grid-cols-2 gap-2 text-xs">
+                                            <div className="flex items-center gap-1">
+                                              <Clock className="h-3 w-3 text-muted-foreground" />
+                                              <span className="text-muted-foreground">Hours:</span>
+                                              <span className="font-medium">
+                                                {d.hours_worked || d.hoursWorked || 0}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              <Calendar className="h-3 w-3 text-muted-foreground" />
+                                              <span className="text-muted-foreground">Week:</span>
+                                              <span className="font-medium">{d.week_number || "N/A"}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              <Building2 className="h-3 w-3 text-muted-foreground" />
+                                              <span className="text-muted-foreground">Client:</span>
+                                              <span className="font-medium truncate">
+                                                {d.client_name || d.clientName || "N/A"}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              <FileText className="h-3 w-3 text-muted-foreground" />
+                                              <span className="text-muted-foreground">Submitted:</span>
+                                              <span className="font-medium">
+                                                {d.date_submitted
+                                                  ? new Date(d.date_submitted).toLocaleDateString()
+                                                  : weekDate.toLocaleDateString()}
+                                              </span>
+                                            </div>
+                                          </div>
+
+                                          {/* Work Summary */}
+                                          {(d.work_summary || d.workSummary) && (
+                                            <div className="space-y-1">
+                                              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                                                <FileText className="h-3 w-3" />
+                                                Work Summary
+                                              </p>
+                                              <div className="p-2 bg-muted/30 rounded text-xs whitespace-pre-wrap max-h-24 overflow-y-auto">
+                                                {d.work_summary || d.workSummary}
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Questions */}
+                                          {d.questions && (
+                                            <div className="space-y-1">
+                                              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                                                <MessageSquare className="h-3 w-3" />
+                                                Questions / Notes
+                                                {d.question_type && (
+                                                  <Badge variant="outline" className="ml-1 text-[10px]">
+                                                    {d.question_type}
+                                                  </Badge>
+                                                )}
+                                              </p>
+                                              <div className="p-2 bg-blue-50 border border-blue-100 rounded text-xs whitespace-pre-wrap max-h-24 overflow-y-auto">
+                                                {d.questions}
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Review Status */}
+                                          {d.reviewed_by && (
+                                            <div className="flex items-center gap-2 pt-2 border-t text-xs">
+                                              <CheckCircle className="h-3 w-3 text-green-500" />
+                                              <span className="text-muted-foreground">Reviewed by</span>
+                                              <span className="font-medium">{d.reviewed_by}</span>
+                                              {d.reviewed_at && (
+                                                <span className="text-muted-foreground">
+                                                  on {new Date(d.reviewed_at).toLocaleDateString()}
+                                                </span>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </CollapsibleContent>
+                                    </Collapsible>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  )
+                })}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -584,138 +1181,95 @@ export function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
         <TabsContent value="performance">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="text-lg flex items-center gap-2">
                 <BarChart3 className="h-5 w-5" />
-                Student Performance
+                Student Performance Rankings
               </CardTitle>
-              <CardDescription>
-                Ranked by hours worked {selectedWeeks.length > 0 ? "for selected period" : "all time"}
-              </CardDescription>
+              <CardDescription>Based on hours worked during selected period</CardDescription>
             </CardHeader>
             <CardContent>
-              {studentPerformance.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No performance data available</p>
-              ) : (
-                <div className="space-y-3">
-                  {studentPerformance.map((student, index) => {
+              <div className="space-y-3">
+                {studentPerformance.length > 0 ? (
+                  studentPerformance.map((student, index) => {
                     const maxHours = studentPerformance[0]?.totalHours || 1
                     return (
-                      <div key={student.id} className="rounded-lg border p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm font-bold">
-                              {index + 1}
-                            </div>
-                            <div>
-                              <p className="font-medium">{student.name}</p>
-                              <p className="text-sm text-muted-foreground">{student.client}</p>
-                            </div>
+                      <div key={student.email} className="flex items-center gap-4">
+                        <div className="w-8 text-center font-bold text-muted-foreground">#{index + 1}</div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-medium">{student.name}</span>
+                            <span className="text-sm text-muted-foreground">{student.client}</span>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <div className="text-right">
-                              <p className="font-bold">{student.totalHours.toFixed(1)} hrs</p>
-                              <p className="text-xs text-muted-foreground">{student.submissions} debriefs</p>
-                            </div>
-                            {student.submissions === 0 && <AlertCircle className="h-5 w-5 text-orange-500" />}
+                          <div className="h-4 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full transition-all"
+                              style={{ width: `${(student.totalHours / maxHours) * 100}%` }}
+                            />
                           </div>
                         </div>
-                        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-primary transition-all"
-                            style={{ width: `${(student.totalHours / maxHours) * 100}%` }}
-                          />
+                        <div className="w-24 text-right">
+                          <p className="font-bold">{student.totalHours.toFixed(1)}h</p>
+                          <p className="text-xs text-muted-foreground">{student.submissions} debriefs</p>
                         </div>
-                        {student.lastSubmission && (
-                          <p className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            Last submission:{" "}
-                            {new Date(student.lastSubmission).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })}
-                          </p>
-                        )}
                       </div>
                     )
-                  })}
-                </div>
-              )}
+                  })
+                ) : (
+                  <p className="text-center text-muted-foreground py-8">
+                    No performance data available for selected period
+                  </p>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="schedule">
+        <TabsContent value="materials">
           <Card>
-            <CardHeader>
-              <CardTitle>Semester Schedule</CardTitle>
-              <CardDescription>Weekly schedule and assignments</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Course Materials
+                </CardTitle>
+                <CardDescription>Upload and manage course materials</CardDescription>
+              </div>
+              <DocumentUpload
+                clinic={clinicData.clinic}
+                onUploadComplete={fetchMaterials}
+                compact
+                submissionType="course_material"
+              />
             </CardHeader>
             <CardContent>
-              {schedule.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No schedule data available</p>
-              ) : (
-                <div className="space-y-3">
-                  {schedule.map((week) => (
-                    <div key={week.id} className="rounded-lg border p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="font-medium">{week.week_label || `Week ${week.week_number}`}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {week.week_start} - {week.week_end}
-                          </p>
-                        </div>
-                        {week.is_break && <Badge variant="secondary">Break</Badge>}
-                      </div>
-                      {week.session_focus && <p className="mt-2 text-sm text-muted-foreground">{week.session_focus}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="materials" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Course Materials</CardTitle>
-              <CardDescription>Resources and documents for the clinic</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <DocumentUpload
-                clinic={clinicData?.clinic || ""}
-                studentName="Director"
-                title="Upload Course Materials"
-                description="Upload resources, guides, or documents for students"
-                acceptedTypes=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls"
-                onUploadComplete={(files) => {
-                  fetchMaterials()
-                }}
-                compact
-              />
-
-              {materials.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No materials uploaded yet</p>
-              ) : (
-                <div className="space-y-3">
+              {materials.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {materials.map((material) => (
-                    <div key={material.id} className="flex items-center justify-between rounded-lg border p-4">
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-8 w-8 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium">{material.title}</p>
-                          <p className="text-sm text-muted-foreground">{material.description}</p>
+                    <div key={material.id} className="p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{material.title}</p>
+                          <p className="text-xs text-muted-foreground truncate">{material.description}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="outline" className="text-xs">
+                              {material.category || "General"}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(material.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
                         </div>
+                        <Button variant="ghost" size="sm" asChild>
+                          <a href={material.file_url} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </Button>
                       </div>
-                      <Button variant="ghost" size="sm" asChild>
-                        <a href={material.file_url} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
-                      </Button>
                     </div>
                   ))}
                 </div>
+              ) : (
+                <p className="text-center text-muted-foreground py-8">No course materials uploaded yet</p>
               )}
             </CardContent>
           </Card>

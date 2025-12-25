@@ -24,10 +24,32 @@ interface StudentDebrief {
   questions?: string
 }
 
+interface Director {
+  id: string
+  full_name: string
+  clinicName?: string
+}
+
 export function ActiveStudents({ selectedWeek, selectedClinic }: ActiveStudentsProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [activeStudents, setActiveStudents] = useState<StudentDebrief[]>([])
   const [loading, setLoading] = useState(true)
+  const [directors, setDirectors] = useState<Director[]>([])
+
+  useEffect(() => {
+    async function fetchDirectors() {
+      try {
+        const res = await fetch("/api/directors")
+        if (res.ok) {
+          const data = await res.json()
+          setDirectors(data.directors || [])
+        }
+      } catch (error) {
+        console.error("Error fetching directors:", error)
+      }
+    }
+    fetchDirectors()
+  }, [])
 
   useEffect(() => {
     async function fetchData() {
@@ -38,6 +60,17 @@ export function ActiveStudents({ selectedWeek, selectedClinic }: ActiveStudentsP
           const data = await res.json()
           const debriefs = data.debriefs || []
 
+          let filterClinicName = "all"
+          if (selectedClinic && selectedClinic !== "all") {
+            const isUUID = selectedClinic.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+            if (isUUID) {
+              const director = directors.find((d) => d.id === selectedClinic)
+              filterClinicName = director?.clinicName || "all"
+            } else {
+              filterClinicName = selectedClinic
+            }
+          }
+
           const filteredDebriefs = debriefs
             .filter((debrief: any) => {
               const weekEnding = debrief.week_ending || debrief.weekEnding
@@ -46,7 +79,9 @@ export function ActiveStudents({ selectedWeek, selectedClinic }: ActiveStudentsP
               const matchesWeek = !selectedWeek || weekEnding === selectedWeek
 
               const clinic = debrief.clinic || ""
-              const matchesClinic = selectedClinic === "all" || clinic === selectedClinic
+              const normalizedClinic = clinic.toLowerCase().replace(" clinic", "").trim()
+              const normalizedFilter = filterClinicName.toLowerCase().replace(" clinic", "").trim()
+              const matchesClinic = filterClinicName === "all" || normalizedClinic === normalizedFilter
 
               return matchesWeek && matchesClinic
             })
@@ -71,7 +106,7 @@ export function ActiveStudents({ selectedWeek, selectedClinic }: ActiveStudentsP
     }
 
     fetchData()
-  }, [selectedWeek, selectedClinic])
+  }, [selectedWeek, selectedClinic, directors])
 
   // Group debriefs by student
   const studentMap = new Map<string, StudentDebrief[]>()

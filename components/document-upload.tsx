@@ -20,7 +20,9 @@ interface UploadedFile {
 }
 
 interface DocumentUploadProps {
+  clientId?: string // Added clientId for proper Supabase mapping
   clientName?: string
+  studentId?: string // Added studentId for proper Supabase mapping
   studentName?: string
   clinic?: string
   submissionType?: string
@@ -34,10 +36,12 @@ interface DocumentUploadProps {
 }
 
 export function DocumentUpload({
+  clientId = "", // Added clientId
   clientName = "",
+  studentId = "", // Added studentId
   studentName = "",
   clinic = "",
-  submissionType = "Document",
+  submissionType = "document",
   title = "Upload Documents",
   description = "Upload files to share with your team",
   onUploadComplete,
@@ -88,7 +92,6 @@ export function DocumentUpload({
       setUploadProgress(progress)
     }
 
-    // Complete the upload and save to Supabase
     const completeResponse = await fetch("/api/upload-complete", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -96,7 +99,9 @@ export function DocumentUpload({
         uploadId,
         fileName: file.name,
         fileSize: file.size,
+        clientId, // Added clientId
         clientName: customClientName || clientName,
+        studentId, // Added studentId
         studentName,
         submissionType,
         chunkUrls,
@@ -107,13 +112,12 @@ export function DocumentUpload({
       throw new Error("Failed to complete upload")
     }
 
-    const completeData = await completeResponse.json()
-
-    // Also save to documents table for tracking
     await fetch("/api/documents", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        clientId,
+        studentId,
         studentName,
         clientName: customClientName || clientName,
         fileUrl: chunkUrls[0],
@@ -132,11 +136,12 @@ export function DocumentUpload({
     }
   }
 
-  // For smaller files, use direct upload
   const uploadFileDirect = async (file: File) => {
     const formData = new FormData()
     formData.append("file", file)
+    formData.append("clientId", clientId) // Added clientId
     formData.append("clientName", customClientName || clientName)
+    formData.append("studentId", studentId) // Added studentId
     formData.append("studentName", studentName)
     formData.append("submissionType", submissionType)
 
@@ -151,11 +156,12 @@ export function DocumentUpload({
 
     const data = await response.json()
 
-    // Save to documents table
     await fetch("/api/documents", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        clientId,
+        studentId,
         studentName,
         clientName: customClientName || clientName,
         fileUrl: data.url,
@@ -203,7 +209,6 @@ export function DocumentUpload({
       const results: UploadedFile[] = []
 
       for (const file of validFiles) {
-        // Use chunked upload for files over 4MB, direct for smaller
         const result = file.size > 4 * 1024 * 1024 ? await uploadFileInChunks(file) : await uploadFileDirect(file)
         results.push(result)
       }
@@ -246,7 +251,7 @@ export function DocumentUpload({
       <div className="space-y-3">
         <div className="flex items-center gap-3">
           <Button
-            onClick={() => document.getElementById("doc-upload-compact")?.click()}
+            onClick={() => document.getElementById(`doc-upload-compact-${clientId || "default"}`)?.click()}
             disabled={uploading}
             variant="outline"
             size="sm"
@@ -264,7 +269,7 @@ export function DocumentUpload({
             )}
           </Button>
           <input
-            id="doc-upload-compact"
+            id={`doc-upload-compact-${clientId || "default"}`}
             type="file"
             accept={acceptedTypes}
             multiple
@@ -332,7 +337,7 @@ export function DocumentUpload({
 
         <div className="flex items-center gap-4">
           <Button
-            onClick={() => document.getElementById("doc-upload")?.click()}
+            onClick={() => document.getElementById(`doc-upload-${clientId || "default"}`)?.click()}
             disabled={uploading}
             className="bg-[#003478] hover:bg-[#002557]"
           >
@@ -349,7 +354,7 @@ export function DocumentUpload({
             )}
           </Button>
           <input
-            id="doc-upload"
+            id={`doc-upload-${clientId || "default"}`}
             type="file"
             accept={acceptedTypes}
             multiple
