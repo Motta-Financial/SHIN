@@ -1,8 +1,8 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Geist, Geist_Mono, Inter } from "next/font/google"
+// import { ClerkProvider } from "@clerk/nextjs"
 import "./globals.css"
-import { ShinAssistantWrapper } from "@/components/shin-assistant-wrapper"
 
 const geistSans = Geist({
   subsets: ["latin"],
@@ -31,10 +31,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${inter.variable}`}>
-      <body className={`font-sans antialiased`}>
-        {children}
-        <ShinAssistantWrapper />
-      </body>
+      <body className={`font-sans antialiased`}>{children}</body>
     </html>
   )
 }

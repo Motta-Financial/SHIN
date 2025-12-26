@@ -8,9 +8,22 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Progress } from "@/components/ui/progress"
-import { Upload, FileText, File, ImageIcon, FileSpreadsheet, X, Download, ExternalLink, FolderOpen } from "lucide-react"
+import {
+  Upload,
+  FileText,
+  File,
+  ImageIcon,
+  FileSpreadsheet,
+  X,
+  Download,
+  ExternalLink,
+  FolderOpen,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { upload } from "@vercel/blob/client"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 
 interface Document {
   id: string
@@ -46,6 +59,8 @@ export function ClientDocumentUpload({
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [description, setDescription] = useState("")
   const [dragActive, setDragActive] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [expandedDoc, setExpandedDoc] = useState<string | null>(null)
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -80,7 +95,6 @@ export function ClientDocumentUpload({
     setUploadProgress(0)
 
     try {
-      // Upload to Vercel Blob
       const blob = await upload(selectedFile.name, selectedFile, {
         access: "public",
         handleUploadUrl: "/api/upload-blob",
@@ -88,7 +102,6 @@ export function ClientDocumentUpload({
 
       setUploadProgress(80)
 
-      // Save document record
       const response = await fetch("/api/client-portal/client-documents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -161,6 +174,10 @@ export function ClientDocumentUpload({
       </Card>
     )
   }
+
+  const previewCount = 3
+  const previewDocs = documents.slice(0, previewCount)
+  const remainingDocs = documents.slice(previewCount)
 
   return (
     <Card className="p-5 border-slate-200 bg-white">
@@ -249,7 +266,7 @@ export function ClientDocumentUpload({
         )}
       </div>
 
-      {/* Uploaded Documents List */}
+      {/* Uploaded Documents List - Expandable */}
       <div className="space-y-2">
         <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide">Your Uploads</h3>
         {documents.length === 0 ? (
@@ -258,40 +275,127 @@ export function ClientDocumentUpload({
             <p className="text-sm">No documents uploaded yet</p>
           </div>
         ) : (
-          documents.map((doc) => (
-            <div
-              key={doc.id}
-              className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-colors"
-            >
-              {getFileIcon(doc.file_type)}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-900 truncate">{doc.file_name}</p>
-                {doc.description && <p className="text-xs text-slate-500 truncate">{doc.description}</p>}
-                <p className="text-xs text-slate-400">
-                  {formatDistanceToNow(new Date(doc.uploaded_at), { addSuffix: true })}
-                </p>
-              </div>
-              <div className="flex items-center gap-1">
-                <a
-                  href={doc.file_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-2 rounded-full hover:bg-slate-200 transition-colors"
-                  title="Open in new tab"
-                >
-                  <ExternalLink className="h-4 w-4 text-slate-500" />
-                </a>
-                <a
-                  href={doc.file_url}
-                  download={doc.file_name}
-                  className="p-2 rounded-full hover:bg-slate-200 transition-colors"
-                  title="Download"
-                >
-                  <Download className="h-4 w-4 text-slate-500" />
-                </a>
-              </div>
+          <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+            <div className="space-y-2">
+              {previewDocs.map((doc) => {
+                const isOpen = expandedDoc === doc.id
+
+                return (
+                  <div key={doc.id} className="rounded-lg bg-slate-50 border border-slate-200 overflow-hidden">
+                    <div
+                      className="flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-100 transition-colors"
+                      onClick={() => setExpandedDoc(isOpen ? null : doc.id)}
+                    >
+                      {getFileIcon(doc.file_type)}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-900 truncate">{doc.file_name}</p>
+                        <p className="text-xs text-slate-400">
+                          {formatDistanceToNow(new Date(doc.uploaded_at), { addSuffix: true })}
+                        </p>
+                      </div>
+                      <ChevronDown
+                        className={`h-4 w-4 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                      />
+                    </div>
+
+                    {isOpen && (
+                      <div className="border-t border-slate-200 p-3 bg-white">
+                        {doc.description && <p className="text-sm text-slate-600 mb-3">{doc.description}</p>}
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={doc.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                            Open
+                          </a>
+                          <a
+                            href={doc.file_url}
+                            download={doc.file_name}
+                            className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                          >
+                            <Download className="h-4 w-4" />
+                            Download
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+
+              <CollapsibleContent className="space-y-2">
+                {remainingDocs.map((doc) => {
+                  const isOpen = expandedDoc === doc.id
+
+                  return (
+                    <div key={doc.id} className="rounded-lg bg-slate-50 border border-slate-200 overflow-hidden">
+                      <div
+                        className="flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-100 transition-colors"
+                        onClick={() => setExpandedDoc(isOpen ? null : doc.id)}
+                      >
+                        {getFileIcon(doc.file_type)}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-900 truncate">{doc.file_name}</p>
+                          <p className="text-xs text-slate-400">
+                            {formatDistanceToNow(new Date(doc.uploaded_at), { addSuffix: true })}
+                          </p>
+                        </div>
+                        <ChevronDown
+                          className={`h-4 w-4 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                        />
+                      </div>
+
+                      {isOpen && (
+                        <div className="border-t border-slate-200 p-3 bg-white">
+                          {doc.description && <p className="text-sm text-slate-600 mb-3">{doc.description}</p>}
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={doc.file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                              Open
+                            </a>
+                            <a
+                              href={doc.file_url}
+                              download={doc.file_name}
+                              className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                            >
+                              <Download className="h-4 w-4" />
+                              Download
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </CollapsibleContent>
             </div>
-          ))
+
+            {remainingDocs.length > 0 && (
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-full mt-3 text-slate-600">
+                  {isExpanded ? (
+                    <>
+                      <ChevronUp className="h-4 w-4 mr-1" />
+                      Show Less
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-4 w-4 mr-1" />
+                      Show {remainingDocs.length} More Documents
+                    </>
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+            )}
+          </Collapsible>
         )}
       </div>
     </Card>

@@ -2,6 +2,11 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
 
+function isValidUUID(str: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  return uuidRegex.test(str)
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -11,9 +16,9 @@ export async function GET(request: NextRequest) {
 
     let query = supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50)
 
-    if (directorId && directorId !== "all") {
+    if (directorId && directorId !== "all" && directorId !== "undefined" && isValidUUID(directorId)) {
       query = query.eq("director_id", directorId)
-    } else if (clinic && clinic !== "all") {
+    } else if (clinic && clinic !== "all" && clinic !== "undefined") {
       query = query.ilike("clinic", `%${clinic}%`)
     }
 

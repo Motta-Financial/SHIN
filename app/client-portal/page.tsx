@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { MainNavigation } from "@/components/main-navigation"
+import { ClientPortalHeader } from "@/components/client-portal-header"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Building2, Users, FileText, MessageSquare, TrendingUp, HelpCircle, AlertCircle } from "lucide-react"
+import { Triage } from "@/components/triage"
 
 import { ClientTeamCard } from "@/components/client-portal/client-team-card"
 import { ClientTasksCard } from "@/components/client-portal/client-tasks-card"
@@ -14,7 +16,6 @@ import { ClientQuestionsCard } from "@/components/client-portal/client-questions
 import { ClientDocumentUpload } from "@/components/client-portal/client-document-upload"
 import { ClientProgressCard } from "@/components/client-portal/client-progress-card"
 import { ClientDeliverablesCard } from "@/components/client-portal/client-deliverables-card"
-import { OnboardingAgreements } from "@/components/onboarding-agreements"
 
 interface ClientData {
   id: string
@@ -220,6 +221,7 @@ export default function ClientPortalPage() {
   return (
     <div className="min-h-screen bg-slate-50 pt-[48px] pl-12">
       <MainNavigation />
+      <ClientPortalHeader />
 
       <div className="container mx-auto px-4 py-6">
         <div className="mb-4 flex items-center gap-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
@@ -319,28 +321,11 @@ export default function ClientPortalPage() {
           </Card>
         </div>
 
-        {/* Onboarding & Administrative Tasks */}
-        {client && (
-          <div className="space-y-6">
-            <OnboardingAgreements
-              userType="client"
-              userName={client.contactName || client.name}
-              userEmail={client.email}
-              clientName={client.name}
-              programName="SEED Program"
-              signedAgreements={signedAgreements as any}
-              onAgreementSigned={(type) => {
-                setSignedAgreements((prev) => [...prev, type])
-              }}
-            />
-          </div>
-        )}
-
-        {/* Main Content Tabs */}
-        <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-6">
-            <TabsTrigger value="overview" className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
+        {/* Main Dashboard Content */}
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList className="bg-muted/50 p-1">
+            <TabsTrigger value="overview" className="data-[state=active]:bg-background">
+              <TrendingUp className="h-4 w-4 mr-2" />
               Overview
             </TabsTrigger>
             <TabsTrigger value="team" className="flex items-center gap-2">
@@ -357,8 +342,21 @@ export default function ClientPortalPage() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
+            <Triage
+              userType="client"
+              userName={client?.contactName || client?.name || ""}
+              userEmail={client?.email || ""}
+              clientId={client?.id}
+              programName="SEED Program"
+              tasks={tasks}
+              questions={questions}
+              signedAgreements={signedAgreements as any}
+              onAgreementSigned={(type) => {
+                setSignedAgreements((prev) => [...prev, type])
+              }}
+            />
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <ClientProgressCard
                 totalHours={progress.totalHours}

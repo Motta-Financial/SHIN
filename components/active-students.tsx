@@ -4,9 +4,10 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown, ChevronUp, Users } from "lucide-react"
+import { ChevronDown, ChevronRight, Users, Clock, FileText } from "lucide-react"
 import { getClinicColor } from "@/lib/clinic-colors"
 import { StakeholderContactCard } from "@/components/stakeholder"
+import { Button } from "@/components/ui/button"
 
 interface ActiveStudentsProps {
   selectedWeek: string
@@ -32,9 +33,22 @@ interface Director {
 
 export function ActiveStudents({ selectedWeek, selectedClinic }: ActiveStudentsProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
   const [activeStudents, setActiveStudents] = useState<StudentDebrief[]>([])
   const [loading, setLoading] = useState(true)
   const [directors, setDirectors] = useState<Director[]>([])
+
+  const toggleStudent = (studentName: string) => {
+    setExpandedStudents((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(studentName)) {
+        newSet.delete(studentName)
+      } else {
+        newSet.add(studentName)
+      }
+      return newSet
+    })
+  }
 
   useEffect(() => {
     async function fetchDirectors() {
@@ -108,7 +122,6 @@ export function ActiveStudents({ selectedWeek, selectedClinic }: ActiveStudentsP
     fetchData()
   }, [selectedWeek, selectedClinic, directors])
 
-  // Group debriefs by student
   const studentMap = new Map<string, StudentDebrief[]>()
   activeStudents.forEach((debrief) => {
     if (!studentMap.has(debrief.name)) {
@@ -144,19 +157,29 @@ export function ActiveStudents({ selectedWeek, selectedClinic }: ActiveStudentsP
   }
 
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CollapsibleTrigger className="w-full">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Active Students
-                <Badge variant="secondary" className="ml-2">
+                <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                  <Users className="h-5 w-5 text-green-600 dark:text-green-400" />
+                </div>
+                <span>Active Students</span>
+                <Badge
+                  variant="secondary"
+                  className="ml-2 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                >
                   {uniqueStudents.length}
                 </Badge>
               </CardTitle>
-              {isOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+              <div className="flex items-center gap-2">
+                {!isOpen && uniqueStudents.length > 3 && (
+                  <span className="text-sm text-muted-foreground">+{uniqueStudents.length - 3} more</span>
+                )}
+                <ChevronDown className={`h-5 w-5 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+              </div>
             </div>
           </CollapsibleTrigger>
         </CardHeader>
@@ -167,95 +190,25 @@ export function ActiveStudents({ selectedWeek, selectedClinic }: ActiveStudentsP
             <>
               <div className="space-y-2">
                 {previewStudents.map((student, index) => (
-                  <div key={index} className="flex items-center justify-between text-sm">
-                    {student.id ? (
-                      <StakeholderContactCard type="student" id={student.id} name={student.name} variant="compact" />
-                    ) : (
-                      <span className="font-medium">{student.name}</span>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant="outline"
-                        style={{
-                          borderColor: getClinicColor(student.clinic).hex,
-                          color: getClinicColor(student.clinic).hex,
-                        }}
-                      >
-                        {student.clinic}
-                      </Badge>
-                      <span className="text-muted-foreground">{student.totalHours}h</span>
-                    </div>
-                  </div>
+                  <StudentCard
+                    key={index}
+                    student={student}
+                    isExpanded={expandedStudents.has(student.name)}
+                    onToggle={() => toggleStudent(student.name)}
+                  />
                 ))}
-                {uniqueStudents.length > 3 && !isOpen && (
-                  <p className="text-sm text-muted-foreground">+{uniqueStudents.length - 3} more students</p>
-                )}
               </div>
 
               <CollapsibleContent>
-                <div className="mt-4 space-y-4 border-t pt-4">
+                <div className="mt-2 space-y-2">
                   {uniqueStudents.slice(3).map((student, index) => (
-                    <div key={index} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        {student.id ? (
-                          <StakeholderContactCard
-                            type="student"
-                            id={student.id}
-                            name={student.name}
-                            variant="compact"
-                          />
-                        ) : (
-                          <span className="font-medium">{student.name}</span>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant="outline"
-                            style={{
-                              borderColor: getClinicColor(student.clinic).hex,
-                              color: getClinicColor(student.clinic).hex,
-                            }}
-                          >
-                            {student.clinic}
-                          </Badge>
-                          <span className="text-muted-foreground">{student.totalHours}h</span>
-                        </div>
-                      </div>
-                    </div>
+                    <StudentCard
+                      key={index + 3}
+                      student={student}
+                      isExpanded={expandedStudents.has(student.name)}
+                      onToggle={() => toggleStudent(student.name)}
+                    />
                   ))}
-
-                  <div className="mt-6 space-y-6">
-                    <h4 className="font-semibold text-sm">Debrief Details</h4>
-                    {uniqueStudents.map((student, studentIndex) => (
-                      <div
-                        key={studentIndex}
-                        className="space-y-3 border-l-2 pl-4"
-                        style={{ borderColor: getClinicColor(student.clinic).hex }}
-                      >
-                        {student.id ? (
-                          <StakeholderContactCard
-                            type="student"
-                            id={student.id}
-                            name={student.name}
-                            variant="compact"
-                          />
-                        ) : (
-                          <div className="font-medium">{student.name}</div>
-                        )}
-                        {student.debriefs.map((debrief, debriefIndex) => (
-                          <div key={debriefIndex} className="space-y-2 text-sm">
-                            <div className="flex items-center gap-2">
-                              <Badge variant="secondary">{debrief.client}</Badge>
-                              <span className="text-muted-foreground">{debrief.hours}h</span>
-                              <span className="text-muted-foreground text-xs">
-                                {new Date(debrief.dateSubmitted).toLocaleDateString()}
-                              </span>
-                            </div>
-                            <p className="text-muted-foreground">{debrief.summary}</p>
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
                 </div>
               </CollapsibleContent>
             </>
@@ -263,5 +216,72 @@ export function ActiveStudents({ selectedWeek, selectedClinic }: ActiveStudentsP
         </CardContent>
       </Collapsible>
     </Card>
+  )
+}
+
+interface StudentCardProps {
+  student: {
+    name: string
+    id?: string
+    totalHours: number
+    clinic: string
+    debriefs: StudentDebrief[]
+  }
+  isExpanded: boolean
+  onToggle: () => void
+}
+
+function StudentCard({ student, isExpanded, onToggle }: StudentCardProps) {
+  const clinicColor = getClinicColor(student.clinic)
+
+  return (
+    <div
+      className="rounded-lg border bg-card transition-all duration-200 hover:shadow-sm"
+      style={{ borderLeftWidth: "3px", borderLeftColor: clinicColor.hex }}
+    >
+      <Button variant="ghost" className="w-full justify-between p-3 h-auto" onClick={onToggle}>
+        <div className="flex items-center gap-3">
+          <ChevronRight className={`h-4 w-4 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`} />
+          {student.id ? (
+            <StakeholderContactCard type="student" id={student.id} name={student.name} variant="compact" />
+          ) : (
+            <span className="font-medium">{student.name}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <Badge variant="outline" className="text-xs" style={{ borderColor: clinicColor.hex, color: clinicColor.hex }}>
+            {student.clinic}
+          </Badge>
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+            <Clock className="h-3.5 w-3.5" />
+            {student.totalHours}h
+          </div>
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+            <FileText className="h-3.5 w-3.5" />
+            {student.debriefs.length}
+          </div>
+        </div>
+      </Button>
+
+      {isExpanded && (
+        <div className="px-4 pb-3 pt-0 space-y-3 border-t bg-muted/30">
+          <div className="text-xs font-medium text-muted-foreground pt-3">Debrief Details</div>
+          {student.debriefs.map((debrief, idx) => (
+            <div key={idx} className="space-y-1.5 p-2 rounded bg-background">
+              <div className="flex items-center justify-between">
+                <Badge variant="secondary" className="text-xs">
+                  {debrief.client}
+                </Badge>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>{debrief.hours}h</span>
+                  <span>{new Date(debrief.dateSubmitted).toLocaleDateString()}</span>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground line-clamp-3">{debrief.summary}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

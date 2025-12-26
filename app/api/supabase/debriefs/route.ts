@@ -13,7 +13,6 @@ export async function GET(request: Request) {
       .select(`
         id,
         student_id,
-        student_name,
         student_email,
         client_name,
         clinic,
@@ -62,7 +61,7 @@ export async function GET(request: Request) {
         id: debrief.id,
         studentId: debrief.student_id,
         // Use v_student_overview data if available, fallback to debrief text fields
-        studentName: studentData?.student_name || debrief.student_name,
+        studentName: studentData?.student_name || null,
         studentEmail: studentData?.student_email || debrief.student_email,
         clientName: studentData?.client_name || debrief.client_name,
         clinic: studentData?.clinic || debrief.clinic,
@@ -113,7 +112,6 @@ export async function POST(request: Request) {
     const insertData: Record<string, any> = {
       student_id: body.studentId || studentData?.student_id,
       // Use v_student_overview data for text fields if available
-      student_name: studentData?.student_name || body.studentName,
       student_email: studentData?.student_email || body.studentEmail,
       client_name: studentData?.client_name || body.clientName,
       clinic: studentData?.clinic || body.clinic,

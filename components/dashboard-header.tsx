@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Calendar, Download, User, ChevronDown, X } from "lucide-react"
+import { Calendar, Download, ChevronDown, X, Building2, Briefcase } from "lucide-react"
 import Image from "next/image"
 import { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
@@ -25,12 +25,25 @@ interface Director {
   role?: string
 }
 
+interface Clinic {
+  id: string
+  name: string
+}
+
+interface Client {
+  id: string
+  company_name: string
+  clinic?: string
+}
+
 interface DashboardHeaderProps {
   selectedWeeks: string[]
   onWeeksChange: (weeks: string[]) => void
   availableWeeks: string[]
   selectedClinic: string
   onClinicChange: (clinic: string) => void
+  selectedClient?: string
+  onClientChange?: (client: string) => void
 }
 
 export function DashboardHeader({
@@ -39,15 +52,25 @@ export function DashboardHeader({
   availableWeeks,
   selectedClinic,
   onClinicChange,
+  selectedClient = "all",
+  onClientChange,
 }: DashboardHeaderProps) {
   const [schedule, setSchedule] = useState<WeekSchedule[]>([])
   const [directors, setDirectors] = useState<Director[]>([])
+  const [clinics, setClinics] = useState<Clinic[]>([])
+  const [clients, setClients] = useState<Client[]>([])
+  const [filteredClients, setFilteredClients] = useState<Client[]>([])
   const [weekPickerOpen, setWeekPickerOpen] = useState(false)
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [scheduleRes, directorsRes] = await Promise.all([fetch("/api/supabase/weeks"), fetch("/api/directors")])
+        const [scheduleRes, directorsRes, clinicsRes, clientsRes] = await Promise.all([
+          fetch("/api/supabase/weeks"),
+          fetch("/api/directors"),
+          fetch("/api/supabase/clinics"),
+          fetch("/api/clients"),
+        ])
 
         const scheduleData = await scheduleRes.json()
         if (scheduleData.success && scheduleData.schedule) {
@@ -55,16 +78,19 @@ export function DashboardHeader({
         }
 
         const directorsData = await directorsRes.json()
-        console.log(
-          "[v0] DashboardHeader - Raw directors response:",
-          JSON.stringify(directorsData.directors?.slice(0, 2)),
-        )
-        console.log(
-          "[v0] DashboardHeader - Directors loaded:",
-          directorsData.directors?.map((d: Director) => ({ id: d.id, name: d.full_name })),
-        )
         if (directorsData.directors) {
           setDirectors(directorsData.directors)
+        }
+
+        const clinicsData = await clinicsRes.json()
+        if (clinicsData.success && clinicsData.clinics) {
+          setClinics(clinicsData.clinics)
+        }
+
+        const clientsData = await clientsRes.json()
+        if (clientsData.clients) {
+          setClients(clientsData.clients)
+          setFilteredClients(clientsData.clients)
         }
       } catch (error) {
         console.error("Error fetching data:", error)
@@ -72,6 +98,22 @@ export function DashboardHeader({
     }
     fetchData()
   }, [])
+
+  useEffect(() => {
+    if (selectedClinic === "all") {
+      setFilteredClients(clients)
+    } else {
+      const clinic = clinics.find((c) => c.id === selectedClinic)
+      if (clinic) {
+        setFilteredClients(clients.filter((c) => c.clinic === clinic.name))
+      } else {
+        setFilteredClients(clients)
+      }
+    }
+    if (onClientChange && selectedClient !== "all") {
+      onClientChange("all")
+    }
+  }, [selectedClinic, clients, clinics])
 
   const formatWeekLabel = (weekEnding: string) => {
     const week = schedule.find((s) => s.value === weekEnding)
@@ -132,22 +174,31 @@ export function DashboardHeader({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={selectedClinic}
-            onValueChange={(value) => {
-              console.log("[v0] DashboardHeader - Select onValueChange called with:", value)
-              onClinicChange(value)
-            }}
-          >
-            <SelectTrigger className="w-[200px] border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-sm h-8">
-              <User className="mr-2 h-3 w-3" />
-              <SelectValue placeholder="Select director" />
+          <Select value={selectedClinic} onValueChange={onClinicChange}>
+            <SelectTrigger className="w-[180px] border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-sm h-8">
+              <Building2 className="mr-2 h-3 w-3" />
+              <SelectValue placeholder="Select clinic" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Directors</SelectItem>
-              {directors.map((director) => (
-                <SelectItem key={director.id} value={director.id}>
-                  {director.full_name} ({director.clinic})
+              <SelectItem value="all">All Clinics</SelectItem>
+              {clinics.map((clinic) => (
+                <SelectItem key={clinic.id} value={clinic.id}>
+                  {clinic.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={selectedClient} onValueChange={(value) => onClientChange?.(value)}>
+            <SelectTrigger className="w-[200px] border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-sm h-8">
+              <Briefcase className="mr-2 h-3 w-3" />
+              <SelectValue placeholder="Select client" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Clients</SelectItem>
+              {filteredClients.map((client) => (
+                <SelectItem key={client.id} value={client.id}>
+                  {client.company_name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -157,7 +208,7 @@ export function DashboardHeader({
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
-                className="w-[240px] border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-sm h-8 justify-between"
+                className="w-[200px] border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-sm h-8 justify-between"
               >
                 <div className="flex items-center">
                   <Calendar className="mr-2 h-3 w-3" />

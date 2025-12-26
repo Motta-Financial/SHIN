@@ -1,9 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle, ChevronDown, ChevronUp } from "lucide-react"
+import { AlertCircle, ChevronDown, ChevronRight, Mail } from "lucide-react"
 import { getClinicColor } from "@/lib/clinic-colors"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -22,6 +22,7 @@ interface Student {
 export function InactiveStudents({ selectedWeek, selectedClinic }: InactiveStudentsProps) {
   const [inactiveStudents, setInactiveStudents] = useState<Student[]>([])
   const [isOpen, setIsOpen] = useState(false)
+  const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -84,6 +85,18 @@ export function InactiveStudents({ selectedWeek, selectedClinic }: InactiveStude
     fetchData()
   }, [selectedWeek, selectedClinic])
 
+  const toggleStudent = (studentName: string) => {
+    setExpandedStudents((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(studentName)) {
+        newSet.delete(studentName)
+      } else {
+        newSet.add(studentName)
+      }
+      return newSet
+    })
+  }
+
   if (loading) {
     return (
       <Card>
@@ -99,71 +112,108 @@ export function InactiveStudents({ selectedWeek, selectedClinic }: InactiveStude
   const remainingCount = Math.max(0, inactiveStudents.length - previewCount)
 
   return (
-    <Card>
-      <CardContent className="py-4">
-        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="h-5 w-5 text-orange-500" />
-              <div>
-                <div className="font-semibold text-sm">
-                  {inactiveStudents.length} Inactive Student{inactiveStudents.length !== 1 ? "s" : ""}
+    <Card className="overflow-hidden">
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <CardHeader className="pb-3">
+          <CollapsibleTrigger className="w-full">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
+                  <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                 </div>
-                {inactiveStudents.length > 0 && (
-                  <div className="text-xs text-muted-foreground">
-                    {previewStudents.map((s) => s.name).join(", ")}
-                    {remainingCount > 0 && ` +${remainingCount} more`}
-                  </div>
+                <span>Inactive Students</span>
+                <Badge
+                  variant="secondary"
+                  className="ml-2 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                >
+                  {inactiveStudents.length}
+                </Badge>
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                {!isOpen && remainingCount > 0 && (
+                  <span className="text-sm text-muted-foreground">+{remainingCount} more</span>
                 )}
+                <ChevronDown className={`h-5 w-5 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
               </div>
             </div>
-            {inactiveStudents.length > 0 && (
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </Button>
-              </CollapsibleTrigger>
-            )}
-          </div>
-
-          <CollapsibleContent className="mt-4">
-            {inactiveStudents.length === 0 ? (
-              <div className="text-sm text-muted-foreground">All students have submitted their debriefs!</div>
-            ) : (
+          </CollapsibleTrigger>
+        </CardHeader>
+        <CardContent>
+          {inactiveStudents.length === 0 ? (
+            <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+              <span>All students have submitted their debriefs!</span>
+            </div>
+          ) : (
+            <>
               <div className="space-y-2">
-                {inactiveStudents.map((student, index) => {
-                  const clinicColor = getClinicColor(student.clinic)
-                  return (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-2 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: clinicColor.hex }}
-                          title={student.clinic}
-                        />
-                        <div>
-                          <div className="text-sm font-medium">{student.name}</div>
-                          <div className="text-xs text-muted-foreground">{student.role}</div>
-                        </div>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className="text-xs"
-                        style={{ borderColor: clinicColor.hex, color: clinicColor.hex }}
-                      >
-                        {student.clinic}
-                      </Badge>
-                    </div>
-                  )
-                })}
+                {previewStudents.map((student, index) => (
+                  <InactiveStudentCard
+                    key={index}
+                    student={student}
+                    isExpanded={expandedStudents.has(student.name)}
+                    onToggle={() => toggleStudent(student.name)}
+                  />
+                ))}
               </div>
-            )}
-          </CollapsibleContent>
-        </Collapsible>
-      </CardContent>
+
+              <CollapsibleContent>
+                <div className="mt-2 space-y-2">
+                  {inactiveStudents.slice(3).map((student, index) => (
+                    <InactiveStudentCard
+                      key={index + 3}
+                      student={student}
+                      isExpanded={expandedStudents.has(student.name)}
+                      onToggle={() => toggleStudent(student.name)}
+                    />
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </>
+          )}
+        </CardContent>
+      </Collapsible>
     </Card>
+  )
+}
+
+interface InactiveStudentCardProps {
+  student: Student
+  isExpanded: boolean
+  onToggle: () => void
+}
+
+function InactiveStudentCard({ student, isExpanded, onToggle }: InactiveStudentCardProps) {
+  const clinicColor = getClinicColor(student.clinic)
+
+  return (
+    <div
+      className="rounded-lg border bg-card transition-all duration-200 hover:shadow-sm"
+      style={{ borderLeftWidth: "3px", borderLeftColor: clinicColor.hex }}
+    >
+      <Button variant="ghost" className="w-full justify-between p-3 h-auto" onClick={onToggle}>
+        <div className="flex items-center gap-3">
+          <ChevronRight className={`h-4 w-4 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`} />
+          <div className="text-left">
+            <div className="font-medium">{student.name}</div>
+            <div className="text-xs text-muted-foreground">{student.role}</div>
+          </div>
+        </div>
+        <Badge variant="outline" className="text-xs" style={{ borderColor: clinicColor.hex, color: clinicColor.hex }}>
+          {student.clinic}
+        </Badge>
+      </Button>
+
+      {isExpanded && (
+        <div className="px-4 pb-3 pt-0 space-y-2 border-t bg-muted/30">
+          <div className="text-xs font-medium text-muted-foreground pt-3">No debrief submitted this week</div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="text-xs bg-transparent">
+              <Mail className="h-3.5 w-3.5 mr-1.5" />
+              Send Reminder
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

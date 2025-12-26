@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { MainNavigation } from "@/components/main-navigation"
+import { StudentPortalHeader } from "@/components/student-portal-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -18,29 +19,21 @@ import {
   CheckCircle2,
   Clock,
   FileText,
-  GraduationCap,
   HelpCircle,
   Send,
   Upload,
   Building2,
   AlertCircle,
   Bell,
-  AlertTriangle,
-  ChevronRight,
   Presentation,
   FileCheck,
-  Target,
   Award,
-  ExternalLink,
-  Star,
   Users,
   Lock,
   CalendarClock,
   ChevronDown,
-  Download,
 } from "lucide-react"
 import { upload } from "@vercel/blob/client"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import {
   Dialog,
   DialogContent,
@@ -53,7 +46,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ClientServiceTab } from "@/components/client-service-tab"
 import { StudentClinicView } from "@/components/student-clinic-view"
-import { OnboardingAgreements } from "@/components/onboarding-agreements"
+import { Triage } from "@/components/triage"
 
 interface Student {
   id: string
@@ -469,6 +462,18 @@ export default function StudentPortal() {
 
   // Add state for signed agreements
   const [signedAgreements, setSignedAgreements] = useState<string[]>([])
+
+  const [expandedStats, setExpandedStats] = useState<{
+    hours: boolean
+    debriefs: boolean
+    pending: boolean
+    attendance: boolean
+  }>({
+    hours: false,
+    debriefs: false,
+    pending: false,
+    attendance: false,
+  })
 
   const toggleSection = (section: keyof typeof expandedSections) => {
     // Keep this function
@@ -1059,90 +1064,469 @@ export default function StudentPortal() {
         </div>
 
         {/* Header */}
-        <div className="mb-6 bg-gradient-to-r from-blue-600 to-blue-500 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <GraduationCap className="h-8 w-8" />
-                <div>
-                  <h1 className="text-2xl font-bold">
-                    {loading ? "Loading..." : currentStudent?.fullName || "Student Portal"}
-                  </h1>
-                  <p className="text-blue-100 text-sm">
-                    {currentStudent?.clinic || "Business Clinic"} - {currentStudent?.semester || "Fall 2025"}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 mt-2">
-                {currentStudent?.isTeamLeader && <Badge className="bg-amber-500 text-white">Team Leader</Badge>}
-                {currentStudent?.clientName && (
-                  <Badge className="bg-white text-blue-600">
-                    <Building2 className="h-3 w-3 mr-1" />
-                    {currentStudent.clientName}
-                  </Badge>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-4 text-sm">
-              <div className="text-right">
-                <p className="text-blue-100">Total Hours</p>
-                <p className="text-2xl font-bold">{totalHours.toFixed(1)}</p>
-              </div>
-              <div className="h-10 w-px bg-blue-400" />
-              <div className="text-right">
-                <p className="text-blue-100">Attendance</p>
-                <p className="text-2xl font-bold">{totalAttendance}</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <StudentPortalHeader
+          loading={loading}
+          currentStudent={currentStudent}
+          totalHours={totalHours}
+          totalAttendance={totalAttendance}
+        />
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          <Card className="p-4 border-blue-200 bg-white">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-100">
-                <Clock className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Hours Logged</p>
-                <p className="text-xl font-bold text-slate-900">{totalHours.toFixed(1)}</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4 border-green-200 bg-white">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-100">
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Completed Debriefs</p>
-                <p className="text-xl font-bold text-slate-900">{completedDebriefs}</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4 border-amber-200 bg-white">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-amber-100">
-                <FileText className="h-5 w-5 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Pending Debriefs</p>
-                <p className="text-xl font-bold text-slate-900">{pendingDebriefs}</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4 border-purple-200 bg-white">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-100">
-                <Calendar className="h-5 w-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Classes Attended</p>
-                <p className="text-xl font-bold text-slate-900">{totalAttendance}</p>
-              </div>
-            </div>
-          </Card>
+        {/* Quick Stats - Now Expandable with Semester Schedule */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {/* Hours Logged Card - Expandable */}
+          <Collapsible
+            open={expandedStats.hours}
+            onOpenChange={(open) => setExpandedStats((prev) => ({ ...prev, hours: open }))}
+          >
+            <Card className="border-blue-200 bg-white overflow-hidden">
+              <CollapsibleTrigger asChild>
+                <div className="p-4 cursor-pointer hover:bg-blue-50/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-blue-100">
+                        <Clock className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Hours Logged</p>
+                        <p className="text-xl font-bold text-slate-900">{totalHours.toFixed(1)}</p>
+                      </div>
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 text-slate-400 transition-transform ${expandedStats.hours ? "rotate-180" : ""}`}
+                    />
+                  </div>
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="px-4 pb-4 border-t border-blue-100">
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mt-3 mb-2">
+                    Semester Schedule - Hours by Week
+                  </p>
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {semesterSchedule.length > 0 ? (
+                      semesterSchedule
+                        .sort((a, b) => a.week_number - b.week_number)
+                        .map((week) => {
+                          const weekDebrief = debriefs.find((d) => d.weekNumber === week.week_number)
+                          const hasHours = !!weekDebrief
+                          const isPast = new Date(week.week_end) < new Date()
+
+                          return (
+                            <div
+                              key={week.id}
+                              className={`flex items-center justify-between p-2 rounded-lg ${
+                                week.is_break
+                                  ? "bg-slate-100 opacity-60"
+                                  : hasHours
+                                    ? "bg-blue-50 border border-blue-200"
+                                    : isPast
+                                      ? "bg-red-50 border border-red-200"
+                                      : "bg-slate-50 border border-slate-200"
+                              }`}
+                            >
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-medium text-slate-700">
+                                    Week {week.week_number}
+                                    {week.is_break && <span className="text-slate-500 ml-1">(Break)</span>}
+                                  </p>
+                                  {hasHours && <CheckCircle2 className="h-3.5 w-3.5 text-blue-600" />}
+                                  {!hasHours && isPast && !week.is_break && (
+                                    <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-500">
+                                  {new Date(week.week_start).toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                  })}{" "}
+                                  -{" "}
+                                  {new Date(week.week_end).toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                  })}
+                                </p>
+                                {week.session_focus && (
+                                  <p className="text-xs text-slate-400 truncate">{week.session_focus}</p>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                {week.is_break ? (
+                                  <Badge variant="outline" className="text-slate-400">
+                                    N/A
+                                  </Badge>
+                                ) : hasHours ? (
+                                  <Badge className="bg-blue-100 text-blue-700">{weekDebrief?.hoursWorked} hrs</Badge>
+                                ) : isPast ? (
+                                  <Badge variant="outline" className="text-red-500 border-red-300">
+                                    Missing
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-slate-400">
+                                    Upcoming
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })
+                    ) : (
+                      <p className="text-sm text-slate-500 text-center py-2">Loading schedule...</p>
+                    )}
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-blue-100 flex justify-between items-center">
+                    <span className="text-sm font-medium text-slate-600">Total Hours</span>
+                    <span className="text-lg font-bold text-blue-600">{totalHours.toFixed(1)}</span>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Completed Debriefs Card - Expandable */}
+          <Collapsible
+            open={expandedStats.debriefs}
+            onOpenChange={(open) => setExpandedStats((prev) => ({ ...prev, debriefs: open }))}
+          >
+            <Card className="border-green-200 bg-white overflow-hidden">
+              <CollapsibleTrigger asChild>
+                <div className="p-4 cursor-pointer hover:bg-green-50/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-green-100">
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Completed Debriefs</p>
+                        <p className="text-xl font-bold text-slate-900">{completedDebriefs}</p>
+                      </div>
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 text-slate-400 transition-transform ${expandedStats.debriefs ? "rotate-180" : ""}`}
+                    />
+                  </div>
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="px-4 pb-4 border-t border-green-100">
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mt-3 mb-2">
+                    Semester Schedule - Debriefs by Week
+                  </p>
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {semesterSchedule.length > 0 ? (
+                      semesterSchedule
+                        .sort((a, b) => a.week_number - b.week_number)
+                        .map((week) => {
+                          const weekDebrief = debriefs.find((d) => d.weekNumber === week.week_number)
+                          const hasDebrief = !!weekDebrief
+                          const isReviewed = weekDebrief?.status === "reviewed"
+                          const isPending = weekDebrief?.status === "pending"
+                          const isPast = new Date(week.week_end) < new Date()
+
+                          return (
+                            <div
+                              key={week.id}
+                              className={`p-2 rounded-lg ${
+                                week.is_break
+                                  ? "bg-slate-100 opacity-60"
+                                  : isReviewed
+                                    ? "bg-green-50 border border-green-200"
+                                    : isPending
+                                      ? "bg-amber-50 border border-amber-200"
+                                      : isPast && !hasDebrief
+                                        ? "bg-red-50 border border-red-200"
+                                        : "bg-slate-50 border border-slate-200"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-medium text-slate-700">
+                                    Week {week.week_number}
+                                    {week.is_break && <span className="text-slate-500 ml-1">(Break)</span>}
+                                  </p>
+                                  {isReviewed && <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />}
+                                  {isPending && <Clock className="h-3.5 w-3.5 text-amber-600" />}
+                                  {!hasDebrief && isPast && !week.is_break && (
+                                    <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                                  )}
+                                </div>
+                                {week.is_break ? (
+                                  <Badge variant="outline" className="text-slate-400 text-xs">
+                                    N/A
+                                  </Badge>
+                                ) : isReviewed ? (
+                                  <Badge className="bg-green-100 text-green-700 text-xs">Reviewed</Badge>
+                                ) : isPending ? (
+                                  <Badge className="bg-amber-100 text-amber-700 text-xs">Pending</Badge>
+                                ) : isPast ? (
+                                  <Badge variant="outline" className="text-red-500 border-red-300 text-xs">
+                                    Missing
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-slate-400 text-xs">
+                                    Upcoming
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-500">
+                                {new Date(week.week_start).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                })}{" "}
+                                -{" "}
+                                {new Date(week.week_end).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                })}
+                              </p>
+                              {hasDebrief && (
+                                <p className="text-xs text-slate-600 line-clamp-1 mt-1">{weekDebrief.workSummary}</p>
+                              )}
+                            </div>
+                          )
+                        })
+                    ) : (
+                      <p className="text-sm text-slate-500 text-center py-2">Loading schedule...</p>
+                    )}
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-green-100 flex justify-between items-center">
+                    <span className="text-sm font-medium text-slate-600">Completed</span>
+                    <span className="text-lg font-bold text-green-600">
+                      {completedDebriefs}/{semesterSchedule.filter((w) => !w.is_break).length}
+                    </span>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Pending Debriefs Card - Expandable */}
+          <Collapsible
+            open={expandedStats.pending}
+            onOpenChange={(open) => setExpandedStats((prev) => ({ ...prev, pending: open }))}
+          >
+            <Card className="border-amber-200 bg-white overflow-hidden">
+              <CollapsibleTrigger asChild>
+                <div className="p-4 cursor-pointer hover:bg-amber-50/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-amber-100">
+                        <FileText className="h-5 w-5 text-amber-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Pending Debriefs</p>
+                        <p className="text-xl font-bold text-slate-900">{pendingDebriefs}</p>
+                      </div>
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 text-slate-400 transition-transform ${expandedStats.pending ? "rotate-180" : ""}`}
+                    />
+                  </div>
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="px-4 pb-4 border-t border-amber-100">
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mt-3 mb-2">
+                    Awaiting Review & Missing Submissions
+                  </p>
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {semesterSchedule.length > 0 ? (
+                      semesterSchedule
+                        .filter((week) => !week.is_break)
+                        .sort((a, b) => a.week_number - b.week_number)
+                        .map((week) => {
+                          const weekDebrief = debriefs.find((d) => d.weekNumber === week.week_number)
+                          const isPending = weekDebrief?.status === "pending"
+                          const isReviewed = weekDebrief?.status === "reviewed"
+                          const isPast = new Date(week.week_end) < new Date()
+                          const isMissing = !weekDebrief && isPast
+
+                          if (!isPending && !isMissing) return null
+
+                          return (
+                            <div
+                              key={week.id}
+                              className={`p-2 rounded-lg ${
+                                isPending ? "bg-amber-50 border border-amber-200" : "bg-red-50 border border-red-200"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-medium text-slate-700">Week {week.week_number}</p>
+                                  {isPending ? (
+                                    <Clock className="h-3.5 w-3.5 text-amber-600" />
+                                  ) : (
+                                    <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                                  )}
+                                </div>
+                                {isPending ? (
+                                  <Badge className="bg-amber-100 text-amber-700 text-xs">Pending Review</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-red-500 border-red-300 text-xs">
+                                    Not Submitted
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-500">
+                                {new Date(week.week_start).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                })}{" "}
+                                -{" "}
+                                {new Date(week.week_end).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                })}
+                              </p>
+                              {isPending && weekDebrief && (
+                                <>
+                                  <p className="text-xs text-slate-600 line-clamp-1 mt-1">{weekDebrief.workSummary}</p>
+                                  <p className="text-xs text-slate-400">
+                                    {weekDebrief.hoursWorked} hours - {weekDebrief.clientName}
+                                  </p>
+                                </>
+                              )}
+                              {isMissing && week.session_focus && (
+                                <p className="text-xs text-slate-400 mt-1">{week.session_focus}</p>
+                              )}
+                            </div>
+                          )
+                        })
+                        .filter(Boolean)
+                    ) : (
+                      <p className="text-sm text-slate-500 text-center py-2">Loading schedule...</p>
+                    )}
+                    {semesterSchedule.length > 0 &&
+                      semesterSchedule
+                        .filter((week) => !week.is_break)
+                        .every((week) => {
+                          const weekDebrief = debriefs.find((d) => d.weekNumber === week.week_number)
+                          const isPast = new Date(week.week_end) < new Date()
+                          return weekDebrief?.status === "reviewed" || !isPast
+                        }) && (
+                        <p className="text-sm text-green-600 text-center py-2">All debriefs submitted and reviewed!</p>
+                      )}
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+
+          {/* Classes Attended Card - Expandable */}
+          <Collapsible
+            open={expandedStats.attendance}
+            onOpenChange={(open) => setExpandedStats((prev) => ({ ...prev, attendance: open }))}
+          >
+            <Card className="border-purple-200 bg-white overflow-hidden">
+              <CollapsibleTrigger asChild>
+                <div className="p-4 cursor-pointer hover:bg-purple-50/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-purple-100">
+                        <Calendar className="h-5 w-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500">Classes Attended</p>
+                        <p className="text-xl font-bold text-slate-900">{totalAttendance}</p>
+                      </div>
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 text-slate-400 transition-transform ${expandedStats.attendance ? "rotate-180" : ""}`}
+                    />
+                  </div>
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="px-4 pb-4 border-t border-purple-100">
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mt-3 mb-2">
+                    Semester Schedule - Attendance by Week
+                  </p>
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {semesterSchedule.length > 0 ? (
+                      semesterSchedule
+                        .sort((a, b) => a.week_number - b.week_number)
+                        .map((week) => {
+                          const weekAttendance = attendanceRecords.find((a) => a.weekNumber === week.week_number)
+                          const hasAttendance = !!weekAttendance
+                          const isPast = new Date(week.week_end) < new Date()
+
+                          return (
+                            <div
+                              key={week.id}
+                              className={`flex items-center justify-between p-2 rounded-lg ${
+                                week.is_break
+                                  ? "bg-slate-100 opacity-60"
+                                  : hasAttendance
+                                    ? "bg-purple-50 border border-purple-200"
+                                    : isPast
+                                      ? "bg-red-50 border border-red-200"
+                                      : "bg-slate-50 border border-slate-200"
+                              }`}
+                            >
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-medium text-slate-700">
+                                    Week {week.week_number}
+                                    {week.is_break && <span className="text-slate-500 ml-1">(Break)</span>}
+                                  </p>
+                                  {hasAttendance && <CheckCircle2 className="h-3.5 w-3.5 text-purple-600" />}
+                                  {!hasAttendance && isPast && !week.is_break && (
+                                    <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-500">
+                                  {new Date(week.week_start).toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                  })}{" "}
+                                  -{" "}
+                                  {new Date(week.week_end).toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                  })}
+                                </p>
+                                {week.session_focus && (
+                                  <p className="text-xs text-slate-400 truncate">{week.session_focus}</p>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                {week.is_break ? (
+                                  <Badge variant="outline" className="text-slate-400">
+                                    N/A
+                                  </Badge>
+                                ) : hasAttendance ? (
+                                  <Badge className="bg-purple-100 text-purple-700">
+                                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                                    Present
+                                  </Badge>
+                                ) : isPast ? (
+                                  <Badge variant="outline" className="text-red-500 border-red-300">
+                                    Missing
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-slate-400">
+                                    Upcoming
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })
+                    ) : (
+                      <p className="text-sm text-slate-500 text-center py-2">Loading schedule...</p>
+                    )}
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-purple-100 flex justify-between items-center">
+                    <span className="text-sm font-medium text-slate-600">Attendance Rate</span>
+                    <span className="text-lg font-bold text-purple-600">
+                      {totalAttendance}/
+                      {semesterSchedule.filter((w) => !w.is_break && new Date(w.week_end) < new Date()).length || 0}
+                    </span>
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
         </div>
 
         {/* Main Content Tabs */}
@@ -1152,10 +1536,6 @@ export default function StudentPortal() {
               <Bell className="h-4 w-4" />
               Dashboard
             </TabsTrigger>
-            <TabsTrigger value="deliverables" className="flex items-center gap-2">
-              <Target className="h-4 w-4" />
-              Deliverables
-            </TabsTrigger>
             <TabsTrigger value="attendance" className="flex items-center gap-2">
               <Calendar className="h-4 w-4" />
               Attendance & Debriefs
@@ -1164,18 +1544,10 @@ export default function StudentPortal() {
               <HelpCircle className="h-4 w-4" />
               Questions & Meetings
             </TabsTrigger>
-            {/* In the TabsList, replace documents and materials triggers with merged version, add client-service and clinic tabs */}
-            <TabsTrigger value="documents" className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Documents & Materials
-            </TabsTrigger>
-            {/* Removed the separate materials TabsTrigger */}
-
-            {/* Add new TabsTriggers for client-service and clinic */}
-            <TabsTrigger value="client-service" className="flex items-center gap-2">
+            <TabsContent value="client-service" className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />
               Client Service
-            </TabsTrigger>
+            </TabsContent>
             <TabsTrigger value="clinic" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               My Clinic
@@ -1185,213 +1557,31 @@ export default function StudentPortal() {
           {/* Dashboard Tab - Reminders & Notifications */}
           <TabsContent value="dashboard" className="space-y-6">
             <div className="space-y-6">
-              {/* Onboarding Section */}
-              <OnboardingAgreements
+              {/* CHANGE: Replace separate Onboarding, Action Items, and Notifications with unified Triage */}
+              <Triage
                 userType="student"
                 userName={currentStudent?.fullName || ""}
                 userEmail={currentStudent?.email || ""}
+                userId={currentStudent?.id}
+                clinicId={currentStudent?.clinicId}
                 programName="SEED Program"
+                debriefs={debriefs}
+                meetingRequests={meetingRequests}
+                recentCourseMaterials={recentCourseMaterials}
+                studentNotifications={studentNotifications}
+                hasSubmittedThisWeek={hasSubmittedThisWeek}
+                hasSubmittedLastWeek={hasSubmittedLastWeek}
+                currentWeekEnding={currentWeekEnding}
+                lastWeekEnding={lastWeekEnding}
                 signedAgreements={signedAgreements as any}
                 onAgreementSigned={(type) => {
                   setSignedAgreements((prev) => [...prev, type])
                 }}
+                onNavigate={(tab) => {
+                  const tabsEl = document.querySelector(`[value="${tab}"]`) as HTMLElement
+                  tabsEl?.click()
+                }}
               />
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Action Items / Reminders */}
-                <Card className="border-amber-200">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-amber-700">
-                      <AlertTriangle className="h-5 w-5" />
-                      Action Items
-                    </CardTitle>
-                    <CardDescription>Tasks that need your attention</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {!hasSubmittedThisWeek && (
-                      <div
-                        className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200 cursor-pointer hover:bg-red-100 transition-colors"
-                        onClick={() => {
-                          const tabsEl = document.querySelector('[value="attendance"]') as HTMLElement
-                          tabsEl?.click()
-                        }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-red-100 rounded-full">
-                            <AlertTriangle className="h-4 w-4 text-red-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-red-900">Submit Weekly Debrief</p>
-                            <p className="text-xs text-red-600">
-                              Week ending{" "}
-                              {new Date(currentWeekEnding).toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                              })}{" "}
-                              - Log your hours and work summary
-                            </p>
-                          </div>
-                        </div>
-                        <ChevronRight className="h-5 w-5 text-red-400" />
-                      </div>
-                    )}
-
-                    {!hasSubmittedLastWeek && (
-                      <div
-                        className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-amber-200 cursor-pointer hover:bg-amber-100 transition-colors"
-                        onClick={() => {
-                          const tabsEl = document.querySelector('[value="attendance"]') as HTMLElement
-                          tabsEl?.click()
-                        }}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-amber-100 rounded-full">
-                            <Clock className="h-4 w-4 text-amber-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-amber-900">Overdue: Last Week's Debrief</p>
-                            <p className="text-xs text-amber-600">
-                              Week ending{" "}
-                              {new Date(lastWeekEnding).toLocaleDateString("en-US", { month: "short", day: "numeric" })}{" "}
-                              - Please submit ASAP
-                            </p>
-                          </div>
-                        </div>
-                        <ChevronRight className="h-5 w-5 text-amber-400" />
-                      </div>
-                    )}
-
-                    {hasSubmittedThisWeek && hasSubmittedLastWeek && (
-                      <div className="flex items-center justify-center p-4 text-center text-green-700 bg-green-50 rounded-lg border border-green-200">
-                        <CheckCircle2 className="h-5 w-5 mr-2 text-green-500" />
-                        <span>All debriefs submitted - You're all caught up!</span>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Notifications */}
-                <Card className="border-blue-200">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-blue-700">
-                      <Bell className="h-5 w-5" />
-                      Notifications
-                    </CardTitle>
-                    <CardDescription>Updates from your directors</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {debriefs
-                      .filter((d) => d.questions && d.status === "reviewed")
-                      .slice(0, 2)
-                      .map((debrief) => (
-                        <div
-                          key={debrief.id}
-                          className="flex items-start gap-3 p-3 bg-green-50 rounded-lg border border-green-200 cursor-pointer hover:bg-green-100 transition-colors"
-                          onClick={() => {
-                            const tabsEl = document.querySelector('[value="questions"]') as HTMLElement
-                            tabsEl?.click()
-                          }}
-                        >
-                          <div className="p-2 bg-green-100 rounded-full flex-shrink-0">
-                            <CheckCircle2 className="h-4 w-4 text-green-600" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-green-900 text-sm">Question Answered</p>
-                            <p className="text-xs text-green-600 truncate">{debrief.questions}</p>
-                          </div>
-                          <ChevronRight className="h-4 w-4 text-green-400 flex-shrink-0" />
-                        </div>
-                      ))}
-
-                    {meetingRequests
-                      .filter((m) => m.status === "pending")
-                      .slice(0, 2)
-                      .map((meeting) => (
-                        <div
-                          key={meeting.id}
-                          className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg border border-amber-200"
-                        >
-                          <div className="p-2 bg-amber-100 rounded-full flex-shrink-0">
-                            <Clock className="h-4 w-4 text-amber-600" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-amber-900 text-sm">Meeting Request Pending</p>
-                            <p className="text-xs text-amber-600 truncate">{meeting.subject}</p>
-                          </div>
-                        </div>
-                      ))}
-
-                    {meetingRequests
-                      .filter((m) => m.status === "scheduled")
-                      .slice(0, 1)
-                      .map((meeting) => (
-                        <div
-                          key={meeting.id}
-                          className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200"
-                        >
-                          <div className="p-2 bg-blue-100 rounded-full flex-shrink-0">
-                            <Calendar className="h-4 w-4 text-blue-600" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-blue-900 text-sm">Meeting Scheduled</p>
-                            <p className="text-xs text-blue-600 truncate">{meeting.subject}</p>
-                          </div>
-                        </div>
-                      ))}
-
-                    {recentCourseMaterials.slice(0, 2).map((material) => (
-                      <div
-                        key={material.id}
-                        className="flex items-start gap-3 p-3 bg-purple-50 rounded-lg border border-purple-200 cursor-pointer hover:bg-purple-100 transition-colors"
-                        onClick={() => window.open(material.file_url, "_blank")}
-                      >
-                        <div className="p-2 bg-purple-100 rounded-full flex-shrink-0">
-                          <BookOpen className="h-4 w-4 text-purple-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-purple-900 text-sm">New Course Material</p>
-                          <p className="text-xs text-purple-600 truncate">{material.title}</p>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-purple-400 flex-shrink-0" />
-                      </div>
-                    ))}
-
-                    {/* In the Notifications section of dashboard tab, add director announcements */}
-                    {studentNotifications.length > 0 && (
-                      <div className="mt-4 space-y-2">
-                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Announcements</p>
-                        {studentNotifications.slice(0, 3).map((notif) => (
-                          <div key={notif.id} className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                            <div className="flex items-center gap-2 mb-1">
-                              <Badge className="bg-purple-100 text-purple-700 text-xs">
-                                {notif.type === "announcement" ? "Announcement" : notif.type}
-                              </Badge>
-                              <span className="text-xs text-slate-500">
-                                {new Date(notif.created_at).toLocaleDateString()}
-                              </span>
-                            </div>
-                            <p className="font-medium text-sm text-slate-900">{notif.title}</p>
-                            <p className="text-sm text-slate-600">{notif.message}</p>
-                            {notif.created_by && (
-                              <p className="text-xs text-slate-500 mt-1">From: {notif.created_by}</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {debriefs.filter((d) => d.questions && d.status === "reviewed").length === 0 &&
-                      meetingRequests.length === 0 &&
-                      recentCourseMaterials.length === 0 &&
-                      studentNotifications.length === 0 && ( // Added condition for studentNotifications
-                        <div className="flex items-center justify-center p-4 text-center text-slate-500 bg-slate-50 rounded-lg border border-slate-200">
-                          <Bell className="h-5 w-5 mr-2 text-slate-400" />
-                          <span>No new notifications</span>
-                        </div>
-                      )}
-                  </CardContent>
-                </Card>
-              </div>
 
               {/* Quick Actions */}
               <Card>
@@ -1432,7 +1622,7 @@ export default function StudentPortal() {
                       className="h-auto py-4 flex flex-col items-center gap-2 bg-transparent"
                       onClick={() =>
                         document
-                          .querySelector('[value="documents"]')
+                          .querySelector('[value="clinic"]') // Changed to clinic as documents is removed
                           ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
                       }
                     >
@@ -1468,7 +1658,7 @@ export default function StudentPortal() {
                       className="h-auto py-4 flex flex-col items-center gap-2 bg-transparent"
                       onClick={() =>
                         document
-                          .querySelector('[value="materials"]')
+                          .querySelector('[value="clinic"]') // Changed to clinic as materials is removed
                           ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
                       }
                     >
@@ -1502,430 +1692,6 @@ export default function StudentPortal() {
                 </CardContent>
               </Card>
             </div>
-          </TabsContent>
-
-          <TabsContent value="deliverables" className="space-y-6">
-            {/* Grading Reference Card */}
-            <Card className="border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-blue-800">
-                  <Award className="h-5 w-5" />
-                  Grading Breakdown
-                </CardTitle>
-                <CardDescription>Total Potential Grade - 100%</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-5 gap-3">
-                  {Object.entries(GRADING_BREAKDOWN).map(([key, item]) => (
-                    <div key={key} className="p-3 bg-white rounded-lg border border-blue-100">
-                      <div className="flex items-center justify-between mb-2">
-                        <Badge
-                          variant="outline"
-                          className={
-                            item.type === "Individual"
-                              ? "bg-purple-50 text-purple-700 border-purple-200"
-                              : "bg-green-50 text-green-700 border-green-200"
-                          }
-                        >
-                          {item.type}
-                        </Badge>
-                        <span className="text-lg font-bold text-blue-700">{item.weight}%</span>
-                      </div>
-                      <p className="text-xs font-medium text-slate-700">{item.label}</p>
-                      <p className="text-xs text-slate-500 mt-1 line-clamp-2">{item.description}</p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Deliverables Progress Overview */}
-            <div className="grid grid-cols-3 gap-4">
-              {(["sow", "midterm", "final"] as const).map((type) => {
-                const info = DELIVERABLE_INSTRUCTIONS[type]
-                const status = getDeliverableStatus(type)
-                const Icon = info.icon
-                return (
-                  <Card
-                    key={type}
-                    className={`cursor-pointer transition-all hover:shadow-md ${expandedDeliverable === type ? "ring-2 ring-blue-500" : ""}`}
-                    onClick={() => setExpandedDeliverable(expandedDeliverable === type ? null : type)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`p-2 rounded-lg ${status.status === "graded" ? "bg-green-100" : status.status === "submitted" ? "bg-blue-100" : "bg-slate-100"}`}
-                          >
-                            <Icon
-                              className={`h-5 w-5 ${status.status === "graded" ? "text-green-600" : status.status === "submitted" ? "text-blue-600" : "text-slate-500"}`}
-                            />
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-sm">{info.title}</h3>
-                            <p className="text-xs text-slate-500">{info.weight}</p>
-                          </div>
-                        </div>
-                        <Badge className={status.color}>{status.label}</Badge>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-3">{info.dueInfo}</p>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
-
-            {/* Expanded Deliverable Details */}
-            {expandedDeliverable && (
-              <Card className="border-blue-200">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {(() => {
-                        const info =
-                          DELIVERABLE_INSTRUCTIONS[expandedDeliverable as keyof typeof DELIVERABLE_INSTRUCTIONS]
-                        const Icon = info.icon
-                        return (
-                          <>
-                            <div className="p-3 bg-blue-100 rounded-lg">
-                              <Icon className="h-6 w-6 text-blue-600" />
-                            </div>
-                            <div>
-                              <CardTitle>{info.title}</CardTitle>
-                              <CardDescription>
-                                {info.weight} - {info.dueInfo}
-                              </CardDescription>
-                            </div>
-                          </>
-                        )
-                      })()}
-                    </div>
-                    <Badge className={getDeliverableStatus(expandedDeliverable).color}>
-                      {getDeliverableStatus(expandedDeliverable).label}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Description */}
-                  <div>
-                    <h4 className="font-medium text-sm mb-2">Description</h4>
-                    <p className="text-sm text-slate-600">
-                      {
-                        DELIVERABLE_INSTRUCTIONS[expandedDeliverable as keyof typeof DELIVERABLE_INSTRUCTIONS]
-                          .description
-                      }
-                    </p>
-                  </div>
-
-                  {/* Instructions */}
-                  <div>
-                    <h4 className="font-medium text-sm mb-2">Requirements & Instructions</h4>
-                    <ul className="space-y-2">
-                      {DELIVERABLE_INSTRUCTIONS[
-                        expandedDeliverable as keyof typeof DELIVERABLE_INSTRUCTIONS
-                      ].instructions.map((instruction, idx) => (
-                        <li key={idx} className="flex items-start gap-2 text-sm text-slate-600">
-                          <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                          {instruction}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {expandedDeliverable === "sow" && DELIVERABLE_INSTRUCTIONS.sow.templateSections && (
-                    <div className="space-y-4">
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <h4 className="font-semibold text-blue-900 flex items-center gap-2 mb-2">
-                          <FileText className="h-5 w-5" />
-                          SOW Template Guide
-                        </h4>
-                        <p className="text-sm text-blue-800">
-                          Use the sections below as a template for your Statement of Work. Each section includes
-                          guidance on what to include and examples where applicable. Customize the content to match your
-                          specific client and project.
-                        </p>
-                      </div>
-
-                      {DELIVERABLE_INSTRUCTIONS.sow.templateSections.map((section, sectionIdx) => (
-                        <Accordion key={sectionIdx} type="single" collapsible className="w-full">
-                          <AccordionItem value={`section-${sectionIdx}`} className="border rounded-lg">
-                            <AccordionTrigger className="px-4 hover:no-underline">
-                              <span className="flex items-center gap-2 text-sm font-medium">
-                                <FileCheck className="h-4 w-4 text-emerald-600" />
-                                {section.title}
-                              </span>
-                            </AccordionTrigger>
-                            <AccordionContent className="px-4 pb-4 space-y-4">
-                              <p className="text-sm text-slate-600 italic">{section.description}</p>
-
-                              {/* Content bullets */}
-                              {section.content && (
-                                <ul className="space-y-2">
-                                  {section.content.map((item, idx) => (
-                                    <li key={idx} className="flex items-start gap-2 text-sm text-slate-700">
-                                      <span className="text-emerald-600 font-bold">•</span>
-                                      {item}
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-
-                              {/* Example text */}
-                              {section.example && (
-                                <div className="bg-slate-50 border border-slate-200 rounded-md p-3 mt-3">
-                                  <p className="text-xs font-medium text-slate-500 mb-1">Example:</p>
-                                  <p className="text-sm text-slate-600 italic">{section.example}</p>
-                                </div>
-                              )}
-
-                              {/* Workstreams for Project Scope */}
-                              {section.workstreams && (
-                                <div className="space-y-3 mt-3">
-                                  <p className="text-xs font-medium text-slate-500">Example Workstreams:</p>
-                                  {section.workstreams.map((ws, wsIdx) => (
-                                    <div key={wsIdx} className="bg-slate-50 border border-slate-200 rounded-md p-3">
-                                      <h5 className="font-medium text-sm text-slate-800 mb-2">{ws.name}</h5>
-                                      <div className="space-y-1 text-sm">
-                                        <p>
-                                          <span className="font-medium text-slate-600">Activities:</span>{" "}
-                                          <span className="text-slate-500">{ws.activities}</span>
-                                        </p>
-                                        <p>
-                                          <span className="font-medium text-slate-600">Deliverables:</span>{" "}
-                                          <span className="text-slate-500">{ws.deliverables}</span>
-                                        </p>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-
-                              {/* Team Roles */}
-                              {section.roles && (
-                                <div className="space-y-2 mt-3">
-                                  <p className="text-xs font-medium text-slate-500">Example Team Roles:</p>
-                                  <div className="grid gap-2">
-                                    {section.roles.map((roleItem, roleIdx) => (
-                                      <div key={roleIdx} className="bg-slate-50 border border-slate-200 rounded-md p-3">
-                                        <p className="font-medium text-sm text-slate-800">{roleItem.role}</p>
-                                        <p className="text-sm text-slate-500">{roleItem.responsibilities}</p>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </AccordionContent>
-                          </AccordionItem>
-                        </Accordion>
-                      ))}
-
-                      {/* Download Template Button */}
-                      <div className="flex justify-center pt-4">
-                        <Button variant="outline" className="gap-2 bg-transparent">
-                          <Download className="h-4 w-4" />
-                          Download SOW Template (Word)
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Presentation Tips for Final */}
-                  {expandedDeliverable === "final" && DELIVERABLE_INSTRUCTIONS.final.presentationTips && (
-                    <Accordion type="single" collapsible className="w-full">
-                      <AccordionItem value="tips" className="border rounded-lg">
-                        <AccordionTrigger className="px-4 hover:no-underline">
-                          <span className="flex items-center gap-2 text-sm font-medium">
-                            <Presentation className="h-4 w-4" />
-                            Presentation Tips & Best Practices
-                          </span>
-                        </AccordionTrigger>
-                        <AccordionContent className="px-4 pb-4">
-                          <ul className="space-y-2">
-                            {DELIVERABLE_INSTRUCTIONS.final.presentationTips.map((tip, idx) => (
-                              <li key={idx} className="flex items-start gap-2 text-sm text-slate-600">
-                                <span className="text-blue-500 font-bold">{idx + 1}.</span>
-                                {tip}
-                              </li>
-                            ))}
-                          </ul>
-                        </AccordionContent>
-                      </AccordionItem>
-                    </Accordion>
-                  )}
-
-                  {/* Midterm Specific Info */}
-                  {expandedDeliverable === "midterm" && DELIVERABLE_INSTRUCTIONS.midterm.planningGuidelines && (
-                    <>
-                      <Accordion type="single" collapsible className="w-full">
-                        <AccordionItem value="planning" className="border rounded-lg">
-                          <AccordionTrigger className="px-4 hover:no-underline">
-                            <span className="flex items-center gap-2 text-sm font-medium">
-                              <Presentation className="h-4 w-4" />
-                              Planning Guidelines & Schedule
-                            </span>
-                          </AccordionTrigger>
-                          <AccordionContent className="px-4 pb-4">
-                            <ul className="space-y-2">
-                              {DELIVERABLE_INSTRUCTIONS.midterm.planningGuidelines.map((guideline, idx) => (
-                                <li key={idx} className="flex items-start gap-2 text-sm text-slate-600">
-                                  <span className="text-blue-500 font-bold">{idx + 1}.</span>
-                                  {guideline}
-                                </li>
-                              ))}
-                            </ul>
-                          </AccordionContent>
-                        </AccordionItem>
-                      </Accordion>
-
-                      <Accordion type="single" collapsible className="w-full">
-                        <AccordionItem value="teams" className="border rounded-lg">
-                          <AccordionTrigger className="px-4 hover:no-underline">
-                            <span className="flex items-center gap-2 text-sm font-medium">
-                              <Presentation className="h-4 w-4" />
-                              Presentation Teams
-                            </span>
-                          </AccordionTrigger>
-                          <AccordionContent className="px-4 pb-4">
-                            <ul className="space-y-2">
-                              {DELIVERABLE_INSTRUCTIONS.midterm.presentationTeams.map((team, idx) => (
-                                <li key={idx} className="flex items-start gap-2 text-sm text-slate-600">
-                                  <span className="text-blue-500 font-bold">{idx + 1}.</span>
-                                  {team}
-                                </li>
-                              ))}
-                            </ul>
-                          </AccordionContent>
-                        </AccordionItem>
-                      </Accordion>
-
-                      <Accordion type="single" collapsible className="w-full">
-                        <AccordionItem value="objectives" className="border rounded-lg">
-                          <AccordionTrigger className="px-4 hover:no-underline">
-                            <span className="flex items-center gap-2 text-sm font-medium">
-                              <Presentation className="h-4 w-4" />
-                              Learning Objectives
-                            </span>
-                          </AccordionTrigger>
-                          <AccordionContent className="px-4 pb-4">
-                            <ul className="space-y-2">
-                              {DELIVERABLE_INSTRUCTIONS.midterm.learningObjectives.map((objective, idx) => (
-                                <li key={idx} className="flex items-start gap-2 text-sm text-slate-600">
-                                  <span className="text-blue-500 font-bold">{idx + 1}.</span>
-                                  {objective}
-                                </li>
-                              ))}
-                            </ul>
-                          </AccordionContent>
-                        </AccordionItem>
-                      </Accordion>
-                    </>
-                  )}
-
-                  {/* Previous Submissions */}
-                  {deliverableDocuments.filter((d) => d.submissionType === expandedDeliverable).length > 0 && (
-                    <div>
-                      <h4 className="font-medium text-sm mb-2">Your Submissions</h4>
-                      <div className="space-y-2">
-                        {deliverableDocuments
-                          .filter((d) => d.submissionType === expandedDeliverable)
-                          .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
-                          .map((doc) => (
-                            <div
-                              key={doc.id}
-                              className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border"
-                            >
-                              <div className="flex items-center gap-3">
-                                <FileText className="h-4 w-4 text-slate-500" />
-                                <div>
-                                  <p className="text-sm font-medium">{doc.fileName}</p>
-                                  <p className="text-xs text-slate-500">
-                                    Submitted {new Date(doc.uploadedAt).toLocaleDateString()}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {doc.grade && (
-                                  <Badge className="bg-green-100 text-green-700">Grade: {doc.grade}%</Badge>
-                                )}
-                                <Button variant="ghost" size="sm" asChild>
-                                  <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
-                                    <ExternalLink className="h-4 w-4" />
-                                  </a>
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Team Grade Display Section */}
-                  {(() => {
-                    const status = getDeliverableStatus(expandedDeliverable)
-                    const teamGrade = teamGrades.find((g) => g.deliverableType === expandedDeliverable)
-                    if (status.status === "graded" && (teamGrade || status.grade)) {
-                      return (
-                        <div className="border-t pt-4">
-                          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <h4 className="font-medium text-green-800 flex items-center gap-2">
-                                <Award className="h-5 w-5" />
-                                Team Grade Finalized
-                              </h4>
-                              <div className="flex items-center gap-1">
-                                <Star className="h-5 w-5 text-yellow-500 fill-yellow-500" />
-                                <span className="text-2xl font-bold text-green-700">
-                                  {teamGrade?.grade || status.grade}%
-                                </span>
-                              </div>
-                            </div>
-                            {(teamGrade?.feedback || status.feedback) && (
-                              <div className="mt-3 pt-3 border-t border-green-200">
-                                <p className="text-xs font-medium text-green-700 mb-1">Feedback from Nick Vadala:</p>
-                                <p className="text-sm text-green-800">{teamGrade?.feedback || status.feedback}</p>
-                              </div>
-                            )}
-                            {teamGrade?.finalizedAt && (
-                              <p className="text-xs text-green-600 mt-2">
-                                Graded on {new Date(teamGrade.finalizedAt).toLocaleDateString()}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    }
-                    return null
-                  })()}
-
-                  {/* Upload Section */}
-                  <div className="border-t pt-4">
-                    <h4 className="font-medium text-sm mb-3">
-                      Upload{" "}
-                      {DELIVERABLE_INSTRUCTIONS[expandedDeliverable as keyof typeof DELIVERABLE_INSTRUCTIONS].title}
-                    </h4>
-                    <div className="flex items-center gap-4">
-                      <Input
-                        type="file"
-                        accept=".pdf,.pptx,.ppt,.doc,.docx,.xlsx,.xls"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) handleDeliverableUpload(expandedDeliverable, file)
-                        }}
-                        disabled={uploadingDeliverable === expandedDeliverable}
-                        className="flex-1"
-                      />
-                      {uploadingDeliverable === expandedDeliverable && (
-                        <div className="flex items-center gap-2 text-sm text-blue-600">
-                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent" />
-                          Uploading...
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-500 mt-2">Accepted formats: PDF, PowerPoint, Word, Excel</p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </TabsContent>
 
           {/* attendance & Debriefs Tab - Merged Content */}
@@ -2005,9 +1771,8 @@ export default function StudentPortal() {
                       semesterSchedule.map((week) => {
                         const hasAttendance = attendanceRecords.some((r) => r.weekNumber === week.week_number)
                         const weekDebrief = debriefs.find((d) => {
-                          const debriefDate = new Date(d.weekEnding)
-                          const weekEnd = new Date(week.week_end)
-                          return Math.abs(debriefDate.getTime() - weekEnd.getTime()) < 7 * 24 * 60 * 60 * 1000
+                          const debriefWeekNumber = d.weekNumber // Assuming debrief has weekNumber
+                          return debriefWeekNumber === week.week_number
                         })
                         const hasDebrief = !!weekDebrief
                         const isPast = new Date(week.week_end) < new Date()
@@ -2521,94 +2286,6 @@ export default function StudentPortal() {
             </div>
           </TabsContent>
 
-          {/* Merged Documents & Materials Tab */}
-          <TabsContent value="documents">
-            <div className="space-y-6">
-              {/* Document Upload Section */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Upload Document</CardTitle>
-                  <CardDescription>Submit presentations, reports, and other materials</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label>Submission Type</Label>
-                    <Select value={submissionType} onValueChange={setSubmissionType}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="debrief">Weekly Debrief</SelectItem>
-                        <SelectItem value="presentation">Presentation</SelectItem>
-                        <SelectItem value="report">Report</SelectItem>
-                        <SelectItem value="sow">Statement of Work</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Client</Label>
-                    <Input
-                      value={documentClient}
-                      onChange={(e) => setDocumentClient(e.target.value)}
-                      placeholder="Enter client name"
-                    />
-                  </div>
-                  <div>
-                    <Label>Description</Label>
-                    <Textarea
-                      value={documentDescription}
-                      onChange={(e) => setDocumentDescription(e.target.value)}
-                      placeholder="Describe this document..."
-                      rows={3}
-                    />
-                  </div>
-                  <div>
-                    <Label>File</Label>
-                    <Input type="file" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)} />
-                  </div>
-                  <Button onClick={handleSubmitDocument} disabled={uploading || !selectedFile}>
-                    <Upload className="h-4 w-4 mr-2" />
-                    {uploading ? "Uploading..." : "Upload Document"}
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Course Materials Section */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Course Materials</CardTitle>
-                  <CardDescription>Materials shared by your instructors and directors</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {recentCourseMaterials.length === 0 ? (
-                      <p className="text-sm text-slate-500 text-center py-8">No course materials yet</p>
-                    ) : (
-                      recentCourseMaterials.map((material) => (
-                        <div key={material.id} className="p-4 bg-white border border-slate-200 rounded-lg">
-                          <p className="font-medium text-sm">{material.title}</p>
-                          <p className="text-xs text-slate-500">
-                            Uploaded: {new Date(material.uploadedDate).toLocaleDateString()}
-                          </p>
-                          {material.fileUrl && (
-                            <a
-                              href={material.fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-blue-600 hover:underline mt-1 inline-block"
-                            >
-                              Download
-                            </a>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
           {/* Client Service Tab */}
           <TabsContent value="client-service">
             {currentStudent?.clientId ? (
@@ -2630,7 +2307,6 @@ export default function StudentPortal() {
             )}
           </TabsContent>
 
-          {/* Clinic Tab */}
           <TabsContent value="clinic">
             {currentStudent ? (
               <StudentClinicView
@@ -2643,6 +2319,43 @@ export default function StudentPortal() {
                   clientId: currentStudent.clientId || "",
                   clientName: currentStudent.clientName || "",
                 }}
+                deliverableDocuments={deliverableDocuments}
+                teamGrades={teamGrades}
+                onDeliverableUpload={handleDeliverableUpload}
+                uploadingDeliverable={uploadingDeliverable}
+                courseMaterials={recentCourseMaterials}
+                onDocumentSubmit={async (data) => {
+                  setSubmittingDocument(true)
+                  try {
+                    const blob = await upload(data.file.name, data.file, {
+                      access: "public",
+                      handleUploadUrl: "/api/upload-blob",
+                    })
+                    await fetch("/api/documents", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        fileName: data.file.name,
+                        fileUrl: blob.url,
+                        fileType: data.file.type,
+                        studentId: currentStudent.id,
+                        studentName: currentStudent.fullName,
+                        clientId: currentStudent.clientId,
+                        clientName: data.client,
+                        clinic: currentStudent.clinic,
+                        submissionType: data.type,
+                        description: data.description,
+                      }),
+                    })
+                    alert("Document submitted successfully!")
+                  } catch (error) {
+                    console.error("Error submitting document:", error)
+                    alert("An error occurred. Please try again.")
+                  } finally {
+                    setSubmittingDocument(false)
+                  }
+                }}
+                submittingDocument={submittingDocument}
               />
             ) : (
               <Card className="p-8 text-center">

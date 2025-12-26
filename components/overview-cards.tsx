@@ -78,14 +78,14 @@ export function OverviewCards({ selectedWeeks, selectedClinic, weekSchedule = []
             .from("clinic_directors")
             .select("clinic_id")
             .eq("director_id", selectedClinic)
-            .single()
 
-          if (clinicDirectorData?.clinic_id) {
+          // Handle case where director may not be in clinic_directors table
+          if (clinicDirectorData && clinicDirectorData.length > 0 && clinicDirectorData[0]?.clinic_id) {
             // Get students from director's clinic via clinic_students
             const { data: clinicStudents } = await supabase
               .from("clinic_students")
               .select("student_id")
-              .eq("clinic_id", clinicDirectorData.clinic_id)
+              .eq("clinic_id", clinicDirectorData[0].clinic_id)
 
             if (clinicStudents) {
               studentIdsForDirector.push(...clinicStudents.map((s: { student_id: string }) => s.student_id))

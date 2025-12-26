@@ -1,11 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { MainNavigation } from "@/components/main-navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Calendar,
   Video,
@@ -21,8 +23,21 @@ import {
   Presentation,
   Users,
   Building,
+  CalendarDays,
+  AlertCircle,
 } from "lucide-react"
 import { createBrowserClient } from "@supabase/ssr"
+
+interface SemesterSchedule {
+  id: string
+  week_number: number
+  week_start: string
+  week_end: string
+  session_focus: string
+  is_break: boolean
+  notes: string
+  semester_id: string
+}
 
 interface PublishedAgenda {
   id: string
@@ -32,6 +47,7 @@ interface PublishedAgenda {
   schedule_data: any
   notes: string
   published_at: string
+  semester_id: string
 }
 
 interface ClassRecording {
@@ -41,10 +57,10 @@ interface ClassRecording {
   video_url: string
   thumbnail_url: string
   week_number: number
-  semester: string
   duration_minutes: number
   recorded_at: string
   created_at: string
+  semester_id: string
 }
 
 interface CourseMaterial {
@@ -58,269 +74,156 @@ interface CourseMaterial {
   category: string
   target_clinic: string
   uploaded_by: string
-  uploaded_by_name: string
+  uploader_name: string
   created_at: string
 }
 
-// Mock data for class recordings
-const mockRecordings: ClassRecording[] = [
-  {
-    id: "1",
-    title: "Week 1 - Program Orientation",
-    description: "Introduction to the SEED program, expectations, and team formation",
-    video_url: "https://zoom.us/rec/share/example1",
-    thumbnail_url: "/zoom-recording-thumbnail.jpg",
-    week_number: 1,
-    semester: "Spring 2025",
-    duration_minutes: 90,
-    recorded_at: "2025-01-13T17:00:00Z",
-    created_at: "2025-01-13T19:00:00Z",
-  },
-  {
-    id: "2",
-    title: "Week 2 - Client Kickoff Meetings",
-    description: "Meeting with clients for the first time, project scope discussions",
-    video_url: "https://zoom.us/rec/share/example2",
-    thumbnail_url: "/zoom-meeting-thumbnail.png",
-    week_number: 2,
-    semester: "Spring 2025",
-    duration_minutes: 95,
-    recorded_at: "2025-01-20T17:00:00Z",
-    created_at: "2025-01-20T19:00:00Z",
-  },
-  {
-    id: "3",
-    title: "Week 3 - Project Planning Workshop",
-    description: "SOW development, timeline creation, and deliverable planning",
-    video_url: "https://zoom.us/rec/share/example3",
-    thumbnail_url: "/workshop-recording-thumbnail.jpg",
-    week_number: 3,
-    semester: "Spring 2025",
-    duration_minutes: 85,
-    recorded_at: "2025-01-27T17:00:00Z",
-    created_at: "2025-01-27T19:00:00Z",
-  },
-]
-
-// Mock published agenda
-const mockPublishedAgenda: PublishedAgenda = {
-  id: "1",
-  schedule_date: "2025-01-27",
-  director_name: "Nick Vadala",
-  zoom_link: "https://zoom.us/j/123456789",
-  notes: "Please prepare your project updates for today's session",
-  published_at: "2025-01-26T10:00:00Z",
-  schedule_data: [
-    {
-      id: "1",
-      activity: "All Hands",
-      startTime: "5:00 PM",
-      endTime: "5:15 PM",
-      duration: 15,
-      color: "blue",
-      sessions: [
-        {
-          id: "1-1",
-          team: "All Teams",
-          directorInitials: "NV",
-          room: "Main",
-          roomNumber: "101",
-          notes: "Announcements",
-        },
-      ],
-    },
-    {
-      id: "2",
-      activity: "Clinic Sessions",
-      startTime: "5:15 PM",
-      endTime: "6:00 PM",
-      duration: 45,
-      color: "teal",
-      sessions: [
-        {
-          id: "2-1",
-          team: "Accounting Clinic",
-          directorInitials: "KM",
-          room: "Room",
-          roomNumber: "201",
-          notes: "Tax review",
-        },
-        { id: "2-2", team: "Marketing Clinic", directorInitials: "CH", room: "Room", roomNumber: "202", notes: "" },
-        { id: "2-3", team: "Consulting Clinic", directorInitials: "NV", room: "Room", roomNumber: "203", notes: "" },
-        { id: "2-4", team: "Funding Clinic", directorInitials: "MD", room: "Room", roomNumber: "204", notes: "" },
-      ],
-    },
-    {
-      id: "3",
-      activity: "Client Work Time",
-      startTime: "6:00 PM",
-      endTime: "7:30 PM",
-      duration: 90,
-      color: "amber",
-      sessions: [
-        {
-          id: "3-1",
-          team: "All Teams",
-          directorInitials: "All",
-          room: "Various",
-          roomNumber: "",
-          notes: "Work with clients",
-        },
-      ],
-    },
-  ],
+interface StudentInfo {
+  id: string
+  full_name: string
+  email: string
+  clinic: string
+  clinic_id: string
+  semester_id: string
 }
-
-const CURRENT_STUDENT_CLINIC = "Accounting Clinic"
-
-const mockCourseMaterials: CourseMaterial[] = [
-  {
-    id: "1",
-    title: "Spring 2025 Syllabus",
-    description: "Complete course syllabus with schedule, grading, and policies",
-    file_name: "SEED_Syllabus_Spring2025.pdf",
-    file_url: "/files/syllabus.pdf",
-    file_type: "application/pdf",
-    file_size: 245000,
-    category: "syllabus",
-    target_clinic: "all",
-    uploaded_by: "director-1",
-    uploaded_by_name: "Nick Vadala",
-    created_at: "2025-01-10T10:00:00Z",
-  },
-  {
-    id: "2",
-    title: "Tax Preparation Guidelines",
-    description: "Step-by-step guide for preparing client tax returns",
-    file_name: "Tax_Prep_Guidelines.pdf",
-    file_url: "/files/tax-prep.pdf",
-    file_type: "application/pdf",
-    file_size: 180000,
-    category: "resource",
-    target_clinic: "Accounting Clinic",
-    uploaded_by: "director-2",
-    uploaded_by_name: "Mark Dwyer",
-    created_at: "2025-01-15T14:30:00Z",
-  },
-  {
-    id: "3",
-    title: "Client Communication Template",
-    description: "Email templates for professional client communication",
-    file_name: "Client_Communication_Templates.docx",
-    file_url: "/files/templates.docx",
-    file_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    file_size: 52000,
-    category: "template",
-    target_clinic: "all",
-    uploaded_by: "director-1",
-    uploaded_by_name: "Nick Vadala",
-    created_at: "2025-01-12T09:00:00Z",
-  },
-  {
-    id: "4",
-    title: "QuickBooks Training Guide",
-    description: "Complete guide for using QuickBooks with SEED clients",
-    file_name: "QuickBooks_Training.pdf",
-    file_url: "/files/quickbooks.pdf",
-    file_type: "application/pdf",
-    file_size: 320000,
-    category: "lecture",
-    target_clinic: "Accounting Clinic",
-    uploaded_by: "director-2",
-    uploaded_by_name: "Mark Dwyer",
-    created_at: "2025-01-18T11:00:00Z",
-  },
-  {
-    id: "5",
-    title: "Week 3 Assignment - Financial Analysis",
-    description: "Complete financial analysis for your assigned client",
-    file_name: "Week3_Assignment.pdf",
-    file_url: "/files/week3-assignment.pdf",
-    file_type: "application/pdf",
-    file_size: 85000,
-    category: "assignment",
-    target_clinic: "Accounting Clinic",
-    uploaded_by: "director-2",
-    uploaded_by_name: "Mark Dwyer",
-    created_at: "2025-01-20T08:00:00Z",
-  },
-  {
-    id: "6",
-    title: "Professional Ethics Guidelines",
-    description: "Ethics guidelines for working with small business clients",
-    file_name: "Ethics_Guidelines.pdf",
-    file_url: "/files/ethics.pdf",
-    file_type: "application/pdf",
-    file_size: 125000,
-    category: "resource",
-    target_clinic: "all",
-    uploaded_by: "director-1",
-    uploaded_by_name: "Nick Vadala",
-    created_at: "2025-01-11T16:00:00Z",
-  },
-  {
-    id: "7",
-    title: "Marketing Strategy Framework",
-    description: "Framework for developing client marketing strategies",
-    file_name: "Marketing_Framework.pptx",
-    file_url: "/files/marketing-framework.pptx",
-    file_type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    file_size: 450000,
-    category: "lecture",
-    target_clinic: "Marketing Clinic",
-    uploaded_by: "director-3",
-    uploaded_by_name: "Charlene Howell",
-    created_at: "2025-01-17T13:00:00Z",
-  },
-  {
-    id: "8",
-    title: "SOW Template",
-    description: "Statement of Work template for client projects",
-    file_name: "SOW_Template.docx",
-    file_url: "/files/sow-template.docx",
-    file_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    file_size: 48000,
-    category: "template",
-    target_clinic: "all",
-    uploaded_by: "director-1",
-    uploaded_by_name: "Nick Vadala",
-    created_at: "2025-01-13T10:30:00Z",
-  },
-]
 
 export default function StudentClassCoursePage() {
   const [activeTab, setActiveTab] = useState("agenda")
-  const [agenda, setAgenda] = useState<PublishedAgenda | null>(mockPublishedAgenda)
-  const [recordings, setRecordings] = useState<ClassRecording[]>(mockRecordings)
-  const [materials, setMaterials] = useState<CourseMaterial[]>(mockCourseMaterials)
-  const [loadingMaterials, setLoadingMaterials] = useState(false)
-  const [filterCategory, setFilterCategory] = useState("all")
-  const [studentClinic] = useState(CURRENT_STUDENT_CLINIC)
+  const [mounted, setMounted] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  const [semesterSchedule, setSemesterSchedule] = useState<SemesterSchedule[]>([])
+  const [selectedWeek, setSelectedWeek] = useState<string>("current")
+
+  const [agenda, setAgenda] = useState<PublishedAgenda | null>(null)
+  const [recordings, setRecordings] = useState<ClassRecording[]>([])
+  const [materials, setMaterials] = useState<CourseMaterial[]>([])
+  const [studentInfo, setStudentInfo] = useState<StudentInfo | null>(null)
+  const [currentSemesterId, setCurrentSemesterId] = useState<string | null>(null)
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   )
 
-  // useEffect(() => {
-  //   fetchMaterials()
-  // }, [])
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
-  // const fetchMaterials = async () => {
-  //   try {
-  //     const { data, error } = await supabase
-  //       .from("course_materials")
-  //       .select("*")
-  //       .order("created_at", { ascending: false })
-  //
-  //     if (error) throw error
-  //     setMaterials(data || [])
-  //   } catch (error) {
-  //     console.error("Error fetching materials:", error)
-  //   } finally {
-  //     setLoadingMaterials(false)
-  //   }
-  // }
+  useEffect(() => {
+    if (mounted) {
+      fetchAllData()
+    }
+  }, [mounted])
+
+  useEffect(() => {
+    if (selectedWeek && semesterSchedule.length > 0) {
+      fetchAgendaForWeek()
+    }
+  }, [selectedWeek, semesterSchedule])
+
+  const fetchAllData = async () => {
+    setLoading(true)
+    try {
+      // First get current semester
+      const { data: semesterData } = await supabase
+        .from("semester_config")
+        .select("id, semester")
+        .eq("is_active", true)
+        .single()
+
+      if (semesterData) {
+        setCurrentSemesterId(semesterData.id)
+      }
+
+      // Fetch student info from v_student_overview
+      const { data: studentData } = await supabase.from("v_student_overview").select("*").limit(1).single()
+
+      if (studentData) {
+        // Get clinic_id from clinics table
+        const { data: clinicData } = await supabase.from("clinics").select("id").eq("name", studentData.clinic).single()
+
+        setStudentInfo({
+          id: studentData.student_id,
+          full_name: studentData.student_name,
+          email: studentData.student_email,
+          clinic: studentData.clinic,
+          clinic_id: clinicData?.id || "",
+          semester_id: semesterData?.id || "",
+        })
+      }
+
+      const { data: scheduleData } = await supabase
+        .from("semester_schedule")
+        .select("*")
+        .order("week_number", { ascending: true })
+
+      if (scheduleData) {
+        setSemesterSchedule(scheduleData)
+
+        // Find current week based on date
+        const today = new Date()
+        const currentWeek = scheduleData.find((week) => {
+          const weekStart = new Date(week.week_start)
+          const weekEnd = new Date(week.week_end)
+          return today >= weekStart && today <= weekEnd
+        })
+
+        if (currentWeek) {
+          setSelectedWeek(currentWeek.id)
+        } else if (scheduleData.length > 0) {
+          setSelectedWeek(scheduleData[0].id)
+        }
+      }
+
+      // Fetch class recordings
+      const { data: recordingsData } = await supabase
+        .from("class_recordings")
+        .select("*")
+        .order("week_number", { ascending: false })
+
+      if (recordingsData) {
+        setRecordings(recordingsData)
+      }
+
+      // Fetch course materials
+      const { data: materialsData } = await supabase
+        .from("course_materials")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      if (materialsData) {
+        setMaterials(materialsData)
+      }
+    } catch (error) {
+      console.error("[v0] Error fetching data:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchAgendaForWeek = async () => {
+    try {
+      const selectedSchedule = semesterSchedule.find((s) => s.id === selectedWeek)
+      if (!selectedSchedule) return
+
+      // Find agenda published for this week
+      const { data: agendaData } = await supabase
+        .from("published_agendas")
+        .select("*")
+        .gte("schedule_date", selectedSchedule.week_start)
+        .lte("schedule_date", selectedSchedule.week_end)
+        .eq("is_current", true)
+        .order("published_at", { ascending: false })
+        .limit(1)
+        .single()
+
+      setAgenda(agendaData)
+    } catch (error) {
+      // No agenda for this week is fine
+      setAgenda(null)
+    }
+  }
 
   const getBlockHeaderColor = (color: string) => {
     switch (color) {
@@ -330,12 +233,17 @@ export default function StudentClassCoursePage() {
         return "bg-teal-800"
       case "amber":
         return "bg-amber-800"
+      case "green":
+        return "bg-emerald-800"
+      case "purple":
+        return "bg-purple-800"
       default:
         return "bg-slate-700"
     }
   }
 
   const formatDuration = (minutes: number) => {
+    if (!minutes) return ""
     const hours = Math.floor(minutes / 60)
     const mins = minutes % 60
     if (hours > 0) {
@@ -377,12 +285,36 @@ export default function StudentClassCoursePage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  const getFilteredMaterials = () => {
+  const getFilteredMaterials = (targetClinic: string) => {
     return materials.filter((m) => {
-      const clinicMatch = m.target_clinic === "all" || m.target_clinic === studentClinic
-      const categoryMatch = filterCategory === "all" || m.category === filterCategory
-      return clinicMatch && categoryMatch
+      if (targetClinic === "all") {
+        return m.target_clinic === "all"
+      }
+      return m.target_clinic === targetClinic || m.target_clinic === studentInfo?.clinic
     })
+  }
+
+  // Get current week info
+  const getCurrentWeekInfo = () => {
+    const selected = semesterSchedule.find((s) => s.id === selectedWeek)
+    if (!selected) return null
+    return selected
+  }
+
+  const currentWeekInfo = getCurrentWeekInfo()
+
+  if (!mounted) return null
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 pt-[48px] pl-12">
+        <MainNavigation />
+        <div className="container mx-auto p-6 space-y-6">
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-[400px] w-full" />
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -390,13 +322,87 @@ export default function StudentClassCoursePage() {
       <MainNavigation />
 
       <div className="container mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between">
+        {/* Header with Semester Schedule Dropdown */}
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Class Course</h1>
-            <p className="text-sm text-slate-500 mt-1">Weekly agenda, recordings, and course materials</p>
+            <p className="text-sm text-slate-500 mt-1">
+              Weekly agenda, recordings, and course materials
+              {studentInfo && <span className="text-blue-600 ml-1">• {studentInfo.clinic}</span>}
+            </p>
           </div>
-          <Badge className="bg-blue-600 text-white">Spring 2025</Badge>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-sm text-slate-600">
+              <CalendarDays className="h-4 w-4" />
+              <span>Week:</span>
+            </div>
+            <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+              <SelectTrigger className="w-[280px] bg-white">
+                <SelectValue placeholder="Select week" />
+              </SelectTrigger>
+              <SelectContent>
+                {semesterSchedule.map((week) => {
+                  const today = new Date()
+                  const weekStart = new Date(week.week_start)
+                  const weekEnd = new Date(week.week_end)
+                  const isCurrent = today >= weekStart && today <= weekEnd
+                  const isPast = today > weekEnd
+
+                  return (
+                    <SelectItem key={week.id} value={week.id} className={week.is_break ? "text-amber-600" : ""}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Week {week.week_number}</span>
+                        {isCurrent && <Badge className="bg-green-100 text-green-700 text-xs">Current</Badge>}
+                        {week.is_break && <Badge className="bg-amber-100 text-amber-700 text-xs">Break</Badge>}
+                        {isPast && !isCurrent && <span className="text-slate-400 text-xs">Past</span>}
+                        <span className="text-slate-500 text-xs">
+                          {new Date(week.week_start).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
+
+        {/* Current Week Info Card */}
+        {currentWeekInfo && (
+          <Card className="border-l-4 border-l-blue-600 bg-blue-50/50">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-slate-900">
+                      Week {currentWeekInfo.week_number}: {currentWeekInfo.session_focus || "Class Session"}
+                    </h3>
+                    {currentWeekInfo.is_break && <Badge className="bg-amber-100 text-amber-700">Break Week</Badge>}
+                  </div>
+                  <p className="text-sm text-slate-600 mt-1">
+                    {new Date(currentWeekInfo.week_start).toLocaleDateString("en-US", {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                    })}{" "}
+                    -{" "}
+                    {new Date(currentWeekInfo.week_end).toLocaleDateString("en-US", {
+                      weekday: "long",
+                      month: "long",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </p>
+                  {currentWeekInfo.notes && (
+                    <p className="text-sm text-slate-500 mt-2 italic">{currentWeekInfo.notes}</p>
+                  )}
+                </div>
+                <Calendar className="h-8 w-8 text-blue-600" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList className="bg-slate-100 p-1">
@@ -412,9 +418,13 @@ export default function StudentClassCoursePage() {
               <BookOpen className="h-4 w-4" />
               Course Materials
             </TabsTrigger>
+            <TabsTrigger value="schedule" className="gap-2 data-[state=active]:bg-white">
+              <CalendarDays className="h-4 w-4" />
+              Full Schedule
+            </TabsTrigger>
           </TabsList>
 
-          {/* Weekly Agenda Tab - View Only for Students */}
+          {/* Weekly Agenda Tab */}
           <TabsContent value="agenda" className="space-y-4">
             {agenda ? (
               <Card className="overflow-hidden border-0 shadow-sm">
@@ -428,8 +438,8 @@ export default function StudentClassCoursePage() {
                           year: "numeric",
                           month: "long",
                           day: "numeric",
-                        })}{" "}
-                        • Director: {agenda.director_name}
+                        })}
+                        {agenda.director_name && ` • Director: ${agenda.director_name}`}
                       </p>
                     </div>
                     {agenda.zoom_link && (
@@ -447,43 +457,61 @@ export default function StudentClassCoursePage() {
                 </div>
 
                 <CardContent className="p-0">
-                  <div className="grid grid-cols-12 gap-0 bg-slate-100 border-b text-xs font-bold text-slate-600 uppercase tracking-wider">
-                    <div className="col-span-3 p-4">Team</div>
-                    <div className="col-span-4 p-4">Director</div>
-                    <div className="col-span-2 p-4">Location</div>
-                    <div className="col-span-3 p-4">Notes</div>
-                  </div>
-
-                  {agenda.schedule_data.map((block: any) => (
-                    <div key={block.id}>
-                      <div
-                        className={`${getBlockHeaderColor(block.color)} px-4 py-3 flex items-center justify-between`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <span className="text-lg font-bold text-white">{block.startTime}</span>
-                          <span className="text-white/90 font-medium">{block.activity}</span>
-                        </div>
-                        <Badge className="bg-white/20 text-white border-0 font-semibold">{block.duration} min</Badge>
+                  {agenda.schedule_data && Array.isArray(agenda.schedule_data) && agenda.schedule_data.length > 0 ? (
+                    <>
+                      <div className="grid grid-cols-12 gap-0 bg-slate-100 border-b text-xs font-bold text-slate-600 uppercase tracking-wider">
+                        <div className="col-span-3 p-4">Team</div>
+                        <div className="col-span-4 p-4">Director</div>
+                        <div className="col-span-2 p-4">Location</div>
+                        <div className="col-span-3 p-4">Notes</div>
                       </div>
 
-                      {block.sessions.map((session: any, idx: number) => (
-                        <div
-                          key={session.id}
-                          className={`grid grid-cols-12 gap-0 items-center text-sm border-b last:border-b-0 ${
-                            idx % 2 === 0 ? "bg-white" : "bg-slate-50"
-                          }`}
-                        >
-                          <div className="col-span-3 p-4 font-medium text-slate-800">{session.team}</div>
-                          <div className="col-span-4 p-4 text-slate-600">{session.directorInitials}</div>
-                          <div className="col-span-2 p-4">
-                            <span className="text-slate-600">{session.room}</span>
-                            {session.roomNumber && <span className="text-slate-400 ml-1">#{session.roomNumber}</span>}
+                      {agenda.schedule_data.map((block: any) => (
+                        <div key={block.id}>
+                          <div
+                            className={`${getBlockHeaderColor(block.color)} px-4 py-3 flex items-center justify-between`}
+                          >
+                            <div className="flex items-center gap-4">
+                              <span className="text-lg font-bold text-white">{block.startTime}</span>
+                              <span className="text-white/90 font-medium">{block.activity}</span>
+                            </div>
+                            <Badge className="bg-white/20 text-white border-0 font-semibold">
+                              {block.duration} min
+                            </Badge>
                           </div>
-                          <div className="col-span-3 p-4 text-slate-500 text-xs italic">{session.notes || "—"}</div>
+
+                          {block.sessions?.map((session: any, idx: number) => (
+                            <div
+                              key={session.id}
+                              className={`grid grid-cols-12 gap-0 items-center text-sm border-b last:border-b-0 ${
+                                idx % 2 === 0 ? "bg-white" : "bg-slate-50"
+                              } ${session.team === studentInfo?.clinic ? "bg-blue-50 border-l-4 border-l-blue-500" : ""}`}
+                            >
+                              <div className="col-span-3 p-4 font-medium text-slate-800">
+                                {session.team}
+                                {session.team === studentInfo?.clinic && (
+                                  <Badge className="ml-2 bg-blue-100 text-blue-700 text-xs">Your Clinic</Badge>
+                                )}
+                              </div>
+                              <div className="col-span-4 p-4 text-slate-600">{session.directorInitials}</div>
+                              <div className="col-span-2 p-4">
+                                <span className="text-slate-600">{session.room}</span>
+                                {session.roomNumber && (
+                                  <span className="text-slate-400 ml-1">#{session.roomNumber}</span>
+                                )}
+                              </div>
+                              <div className="col-span-3 p-4 text-slate-500 text-xs italic">{session.notes || "—"}</div>
+                            </div>
+                          ))}
                         </div>
                       ))}
+                    </>
+                  ) : (
+                    <div className="p-8 text-center">
+                      <AlertCircle className="h-8 w-8 mx-auto text-slate-300 mb-2" />
+                      <p className="text-slate-500">Schedule data not available</p>
                     </div>
-                  ))}
+                  )}
 
                   {agenda.notes && (
                     <div className="p-4 bg-amber-50 border-t">
@@ -496,8 +524,8 @@ export default function StudentClassCoursePage() {
             ) : (
               <Card className="p-8 text-center">
                 <Calendar className="h-12 w-12 mx-auto text-slate-300 mb-3" />
-                <p className="text-slate-500">No agenda posted yet for this week</p>
-                <p className="text-sm text-slate-400 mt-1">Check back later for the weekly schedule</p>
+                <p className="text-slate-500">No agenda posted for Week {currentWeekInfo?.week_number || "selected"}</p>
+                <p className="text-sm text-slate-400 mt-1">Check back later or select a different week</p>
               </Card>
             )}
           </TabsContent>
@@ -524,10 +552,12 @@ export default function StudentClassCoursePage() {
                         key={recording.id}
                         className="border border-slate-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow group"
                       >
-                        {/* Thumbnail */}
                         <div className="relative aspect-video bg-slate-100">
                           <img
-                            src={recording.thumbnail_url || "/placeholder.svg"}
+                            src={
+                              recording.thumbnail_url ||
+                              "/placeholder.svg?height=180&width=320&query=video recording thumbnail"
+                            }
                             alt={recording.title}
                             className="w-full h-full object-cover"
                           />
@@ -544,12 +574,13 @@ export default function StudentClassCoursePage() {
                           <Badge className="absolute top-2 left-2 bg-slate-900/80 text-white text-xs">
                             Week {recording.week_number}
                           </Badge>
-                          <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                            {formatDuration(recording.duration_minutes)}
-                          </div>
+                          {recording.duration_minutes && (
+                            <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                              {formatDuration(recording.duration_minutes)}
+                            </div>
+                          )}
                         </div>
 
-                        {/* Info */}
                         <div className="p-3">
                           <h3 className="font-medium text-slate-800 line-clamp-1">{recording.title}</h3>
                           <p className="text-xs text-slate-500 mt-1 line-clamp-2">{recording.description}</p>
@@ -572,7 +603,7 @@ export default function StudentClassCoursePage() {
             </Card>
           </TabsContent>
 
-          {/* Course Materials Tab - View Only */}
+          {/* Course Materials Tab */}
           <TabsContent value="materials" className="space-y-4">
             {/* Program-Wide Materials Section */}
             <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
@@ -592,7 +623,6 @@ export default function StudentClassCoursePage() {
               </div>
 
               <div className="divide-y divide-slate-100">
-                {/* Group by category */}
                 {["syllabus", "lecture", "resource", "template"].map((category) => {
                   const categoryMaterials = materials.filter(
                     (m) => m.target_clinic === "all" && m.category === category,
@@ -618,7 +648,7 @@ export default function StudentClassCoursePage() {
                               <p className="text-sm text-slate-500 truncate">{material.description}</p>
                             )}
                           </div>
-                          <div className="text-xs text-slate-400 whitespace-nowrap">{material.uploaded_by_name}</div>
+                          <div className="text-xs text-slate-400 whitespace-nowrap">{material.uploader_name}</div>
                           <div className="text-xs text-slate-400 whitespace-nowrap">
                             {new Date(material.created_at).toLocaleDateString()}
                           </div>
@@ -626,6 +656,7 @@ export default function StudentClassCoursePage() {
                             size="sm"
                             variant="ghost"
                             className="h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            onClick={() => window.open(material.file_url, "_blank")}
                           >
                             <Download className="h-4 w-4" />
                           </Button>
@@ -645,74 +676,173 @@ export default function StudentClassCoursePage() {
             </div>
 
             {/* Clinic-Specific Materials Section */}
-            <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-              <div className="bg-emerald-900 text-white px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Building className="h-5 w-5" />
-                    <div>
-                      <h2 className="font-bold">{studentClinic} Materials</h2>
-                      <p className="text-emerald-200 text-xs">Resources specific to your clinic</p>
+            {studentInfo?.clinic && (
+              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                <div className="bg-emerald-900 text-white px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Building className="h-5 w-5" />
+                      <div>
+                        <h2 className="font-bold">{studentInfo.clinic} Materials</h2>
+                        <p className="text-emerald-200 text-xs">Resources specific to your clinic</p>
+                      </div>
                     </div>
+                    <span className="text-sm bg-emerald-800 px-2 py-1 rounded">
+                      {materials.filter((m) => m.target_clinic === studentInfo.clinic).length} files
+                    </span>
                   </div>
-                  <span className="text-sm bg-emerald-800 px-2 py-1 rounded">
-                    {materials.filter((m) => m.target_clinic === studentClinic).length} files
-                  </span>
+                </div>
+
+                <div className="divide-y divide-slate-100">
+                  {["syllabus", "lecture", "assignment", "resource", "template"].map((category) => {
+                    const categoryMaterials = materials.filter(
+                      (m) => m.target_clinic === studentInfo.clinic && m.category === category,
+                    )
+                    if (categoryMaterials.length === 0) return null
+
+                    return (
+                      <div key={category}>
+                        <div className="bg-slate-50 px-4 py-2 border-b border-slate-100">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {getCategoryLabel(category)}s
+                          </span>
+                        </div>
+                        {categoryMaterials.map((material) => (
+                          <div
+                            key={material.id}
+                            className="px-4 py-3 hover:bg-slate-50 transition-colors flex items-center gap-4"
+                          >
+                            <div className="text-emerald-600">{getFileIcon(material.file_type)}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-slate-900">{material.title}</div>
+                              {material.description && (
+                                <p className="text-sm text-slate-500 truncate">{material.description}</p>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-400 whitespace-nowrap">{material.uploader_name}</div>
+                            <div className="text-xs text-slate-400 whitespace-nowrap">
+                              {new Date(material.created_at).toLocaleDateString()}
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                              onClick={() => window.open(material.file_url, "_blank")}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+
+                  {materials.filter((m) => m.target_clinic === studentInfo.clinic).length === 0 && (
+                    <div className="px-4 py-8 text-center text-slate-400">
+                      <FolderOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No clinic-specific materials available yet</p>
+                    </div>
+                  )}
                 </div>
               </div>
+            )}
+          </TabsContent>
 
-              <div className="divide-y divide-slate-100">
-                {/* Group by category */}
-                {["syllabus", "lecture", "assignment", "resource", "template"].map((category) => {
-                  const categoryMaterials = materials.filter(
-                    (m) => m.target_clinic === studentClinic && m.category === category,
-                  )
-                  if (categoryMaterials.length === 0) return null
-
-                  return (
-                    <div key={category}>
-                      <div className="bg-slate-50 px-4 py-2 border-b border-slate-100">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          {getCategoryLabel(category)}s
-                        </span>
-                      </div>
-                      {categoryMaterials.map((material) => (
-                        <div
-                          key={material.id}
-                          className="px-4 py-3 hover:bg-slate-50 transition-colors flex items-center gap-4"
-                        >
-                          <div className="text-emerald-600">{getFileIcon(material.file_type)}</div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-slate-900">{material.title}</div>
-                            {material.description && (
-                              <p className="text-sm text-slate-500 truncate">{material.description}</p>
-                            )}
-                          </div>
-                          <div className="text-xs text-slate-400 whitespace-nowrap">{material.uploaded_by_name}</div>
-                          <div className="text-xs text-slate-400 whitespace-nowrap">
-                            {new Date(material.created_at).toLocaleDateString()}
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  )
-                })}
-
-                {materials.filter((m) => m.target_clinic === studentClinic).length === 0 && (
-                  <div className="px-4 py-8 text-center text-slate-400">
-                    <FolderOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No clinic-specific materials available yet</p>
-                  </div>
-                )}
+          <TabsContent value="schedule" className="space-y-4">
+            <Card className="overflow-hidden border-0 shadow-sm">
+              <div className="bg-slate-800 text-white p-4">
+                <h2 className="text-lg font-semibold">Full Semester Schedule</h2>
+                <p className="text-slate-300 text-sm">Complete overview of all weeks in the semester</p>
               </div>
-            </div>
+
+              <CardContent className="p-0">
+                <div className="divide-y divide-slate-200">
+                  {semesterSchedule.map((week) => {
+                    const today = new Date()
+                    const weekStart = new Date(week.week_start)
+                    const weekEnd = new Date(week.week_end)
+                    const isCurrent = today >= weekStart && today <= weekEnd
+                    const isPast = today > weekEnd
+                    const weekRecording = recordings.find((r) => r.week_number === week.week_number)
+
+                    return (
+                      <div
+                        key={week.id}
+                        className={`p-4 ${isCurrent ? "bg-blue-50 border-l-4 border-l-blue-500" : ""} ${
+                          week.is_break ? "bg-amber-50" : ""
+                        } ${isPast && !isCurrent ? "opacity-60" : ""}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <div
+                              className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
+                                isCurrent
+                                  ? "bg-blue-600 text-white"
+                                  : week.is_break
+                                    ? "bg-amber-200 text-amber-800"
+                                    : isPast
+                                      ? "bg-slate-200 text-slate-600"
+                                      : "bg-slate-100 text-slate-700"
+                              }`}
+                            >
+                              {week.week_number}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-medium text-slate-900">
+                                  {week.session_focus || `Week ${week.week_number}`}
+                                </h3>
+                                {isCurrent && <Badge className="bg-blue-100 text-blue-700 text-xs">Current Week</Badge>}
+                                {week.is_break && <Badge className="bg-amber-100 text-amber-700 text-xs">Break</Badge>}
+                              </div>
+                              <p className="text-sm text-slate-500">
+                                {new Date(week.week_start).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                })}{" "}
+                                -{" "}
+                                {new Date(week.week_end).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </p>
+                              {week.notes && <p className="text-xs text-slate-400 mt-1 italic">{week.notes}</p>}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {weekRecording && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1 text-xs bg-transparent"
+                                onClick={() => window.open(weekRecording.video_url, "_blank")}
+                              >
+                                <Video className="h-3 w-3" />
+                                Recording
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant={isCurrent ? "default" : "ghost"}
+                              className="gap-1 text-xs"
+                              onClick={() => {
+                                setSelectedWeek(week.id)
+                                setActiveTab("agenda")
+                              }}
+                            >
+                              <Calendar className="h-3 w-3" />
+                              View Agenda
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
