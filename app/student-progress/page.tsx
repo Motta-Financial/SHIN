@@ -9,14 +9,6 @@ import { StudentPerformance } from "@/components/student-performance"
 import { DetailedDebriefs } from "@/components/detailed-debriefs"
 import { Badge } from "@/components/ui/badge"
 
-function getWeekEnding(date: Date): string {
-  const day = date.getDay()
-  const diff = 6 - day
-  const weekEnding = new Date(date)
-  weekEnding.setDate(date.getDate() + diff)
-  return weekEnding.toISOString().split("T")[0]
-}
-
 async function getAvailableWeeks(): Promise<string[]> {
   try {
     const response = await fetch("/api/supabase/weeks")
@@ -35,7 +27,8 @@ async function getAvailableWeeks(): Promise<string[]> {
 export default function StudentProgressPage() {
   const [availableWeeks, setAvailableWeeks] = useState<string[]>([])
   const [selectedWeeks, setSelectedWeeks] = useState<string[]>(["2025-09-14"])
-  const [selectedClinic, setSelectedClinic] = useState<string>("all")
+  const [selectedClinics, setSelectedClinics] = useState<string[]>([])
+  const [selectedClients, setSelectedClients] = useState<string[]>([])
 
   useEffect(() => {
     getAvailableWeeks().then((weeks) => {
@@ -46,27 +39,31 @@ export default function StudentProgressPage() {
     })
   }, [])
 
+  const selectedClinic = selectedClinics.length > 0 ? selectedClinics[0] : "all"
+
   return (
-    <div className="min-h-screen bg-background pt-[48px] pl-12">
-      <MainNavigation />
+    <div className="min-h-screen bg-background">
+      <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+        <MainNavigation />
+      </aside>
 
-      <div className="bg-gradient-to-br from-blue-50/40 via-background to-blue-100/30">
-        <div className="container mx-auto px-4 pt-4">
-          <div className="flex items-center gap-2">
-            <Badge className="bg-primary text-primary-foreground">Student Progress</Badge>
-            <span className="text-xs text-muted-foreground">Track student performance and activity</span>
-          </div>
-        </div>
-
+      <div className="pl-52 pt-14">
         <DashboardHeader
           selectedWeeks={selectedWeeks}
           onWeeksChange={setSelectedWeeks}
           availableWeeks={availableWeeks}
-          selectedClinic={selectedClinic}
-          onClinicChange={setSelectedClinic}
+          selectedClinics={selectedClinics}
+          onClinicsChange={setSelectedClinics}
+          selectedClients={selectedClients}
+          onClientsChange={setSelectedClients}
         />
 
-        <main className="container mx-auto px-4 py-8 space-y-8">
+        <main className="p-4 space-y-4">
+          <div className="flex items-center gap-2">
+            <Badge className="bg-primary text-primary-foreground">Student Progress</Badge>
+            <span className="text-xs text-muted-foreground">Track student performance and activity</span>
+          </div>
+
           {selectedWeeks.length > 0 && (
             <>
               <Suspense fallback={<div>Loading student hours...</div>}>

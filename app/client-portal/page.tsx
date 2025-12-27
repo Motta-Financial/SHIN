@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { MainNavigation } from "@/components/main-navigation"
 import { ClientPortalHeader } from "@/components/client-portal-header"
 import { Card } from "@/components/ui/card"
@@ -58,6 +59,26 @@ interface AvailableClient {
 }
 
 export default function ClientPortalPage() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
+  const tabFromUrl = searchParams.get("tab") || "overview"
+  const [activeTab, setActiveTab] = useState(tabFromUrl)
+
+  useEffect(() => {
+    const tab = searchParams.get("tab") || "overview"
+    setActiveTab(tab)
+  }, [searchParams])
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value)
+    if (value === "overview") {
+      router.push("/client-portal", { scroll: false })
+    } else {
+      router.push(`/client-portal?tab=${value}`, { scroll: false })
+    }
+  }
+
   const [availableClients, setAvailableClients] = useState<AvailableClient[]>([])
   const [selectedClientId, setSelectedClientId] = useState<string>("")
 
@@ -207,210 +228,213 @@ export default function ClientPortalPage() {
 
   if (availableClients.length === 0 && loading) {
     return (
-      <div className="min-h-screen bg-slate-50 pt-[48px] pl-12">
-        <MainNavigation />
-        <div className="container mx-auto px-4 py-6">
-          <Card className="p-8 text-center">
-            <p className="text-slate-500">Loading clients...</p>
-          </Card>
+      <div className="min-h-screen bg-slate-50">
+        <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+          <MainNavigation />
+        </aside>
+        <div className="pl-52 pt-14">
+          <div className="p-4">
+            <Card className="p-6 text-center">
+              <p className="text-slate-500">Loading clients...</p>
+            </Card>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pt-[48px] pl-12">
-      <MainNavigation />
-      <ClientPortalHeader />
+    <div className="min-h-screen bg-slate-50">
+      <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+        <MainNavigation />
+      </aside>
 
-      <div className="container mx-auto px-4 py-6">
-        <div className="mb-4 flex items-center gap-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
-          <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm text-amber-800 font-medium">Demo Mode</p>
-            <p className="text-xs text-amber-600">
-              In production, clients will be authenticated and see only their own portal.
-            </p>
+      <div className="pl-52 pt-14">
+        <ClientPortalHeader />
+
+        <div className="p-4">
+          <div className="mb-4 flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm text-amber-800 font-medium">Demo Mode</p>
+              <p className="text-xs text-amber-600">
+                In production, clients will be authenticated and see only their own portal.
+              </p>
+            </div>
+            <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+              <SelectTrigger className="w-[240px] bg-white">
+                <SelectValue placeholder="Select a client to preview" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableClients.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-            <SelectTrigger className="w-[280px] bg-white">
-              <SelectValue placeholder="Select a client to preview" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableClients.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
 
-        {/* Header */}
-        <div className="mb-6 bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <Building2 className="h-8 w-8 text-slate-300" />
-                <div>
-                  <h1 className="text-2xl font-bold">{loading ? "Loading..." : client?.name || "Client Portal"}</h1>
-                  <p className="text-slate-300 text-sm">{client?.projectType || "Business Consulting Engagement"}</p>
+          <div className="mb-4 bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl p-4 text-white shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Building2 className="h-6 w-6 text-slate-300" />
+                  <div>
+                    <h1 className="text-xl font-bold">{loading ? "Loading..." : client?.name || "Client Portal"}</h1>
+                    <p className="text-slate-300 text-sm">{client?.projectType || "Business Consulting Engagement"}</p>
+                  </div>
+                </div>
+                {client?.semester && <Badge className="bg-slate-600 text-slate-200 mt-1">{client.semester}</Badge>}
+              </div>
+              <div className="flex items-center gap-4 text-sm">
+                <div className="text-right">
+                  <p className="text-slate-400 text-xs">Team Size</p>
+                  <p className="text-lg font-semibold">{teamMembers.length + directors.length}</p>
+                </div>
+                <div className="h-10 w-px bg-slate-600" />
+                <div className="text-right">
+                  <p className="text-slate-400 text-xs">Hours Logged</p>
+                  <p className="text-lg font-semibold">{progress.totalHours.toFixed(1)}</p>
                 </div>
               </div>
-              {client?.semester && <Badge className="bg-slate-600 text-slate-200 mt-2">{client.semester}</Badge>}
-            </div>
-            <div className="flex items-center gap-4 text-sm">
-              <div className="text-right">
-                <p className="text-slate-400">Team Size</p>
-                <p className="text-lg font-semibold">{teamMembers.length + directors.length}</p>
-              </div>
-              <div className="h-10 w-px bg-slate-600" />
-              <div className="text-right">
-                <p className="text-slate-400">Hours Logged</p>
-                <p className="text-lg font-semibold">{progress.totalHours.toFixed(1)}</p>
-              </div>
             </div>
           </div>
-        </div>
 
-        {/* Quick Stats */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          <Card className="p-4 border-slate-200 bg-white">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-100">
-                <Users className="h-5 w-5 text-blue-600" />
+          <div className="grid grid-cols-4 gap-6 mb-6">
+            <Card className="p-5 border-slate-200 bg-white">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-blue-100">
+                  <Users className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Team Members</p>
+                  <p className="text-xl font-bold text-slate-900">{teamMembers.length + directors.length}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-slate-500">Team Members</p>
-                <p className="text-xl font-bold text-slate-900">{teamMembers.length + directors.length}</p>
+            </Card>
+            <Card className="p-5 border-slate-200 bg-white">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-amber-100">
+                  <MessageSquare className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Active Tasks</p>
+                  <p className="text-xl font-bold text-slate-900">{pendingTasks.length}</p>
+                </div>
               </div>
-            </div>
-          </Card>
-          <Card className="p-4 border-slate-200 bg-white">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-amber-100">
-                <MessageSquare className="h-5 w-5 text-amber-600" />
+            </Card>
+            <Card className="p-5 border-slate-200 bg-white">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-purple-100">
+                  <HelpCircle className="h-5 w-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Open Questions</p>
+                  <p className="text-xl font-bold text-slate-900">{openQuestions.length}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-slate-500">Active Tasks</p>
-                <p className="text-xl font-bold text-slate-900">{pendingTasks.length}</p>
+            </Card>
+            <Card className="p-5 border-slate-200 bg-white">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-emerald-100">
+                  <FileText className="h-5 w-5 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Deliverables</p>
+                  <p className="text-xl font-bold text-slate-900">{deliverables.length}</p>
+                </div>
               </div>
-            </div>
-          </Card>
-          <Card className="p-4 border-slate-200 bg-white">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-100">
-                <HelpCircle className="h-5 w-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Open Questions</p>
-                <p className="text-xl font-bold text-slate-900">{openQuestions.length}</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4 border-slate-200 bg-white">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-emerald-100">
-                <FileText className="h-5 w-5 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-xs text-slate-500">Deliverables</p>
-                <p className="text-xl font-bold text-slate-900">{deliverables.length}</p>
-              </div>
-            </div>
-          </Card>
-        </div>
+            </Card>
+          </div>
 
-        {/* Main Dashboard Content */}
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="bg-muted/50 p-1">
-            <TabsTrigger value="overview" className="data-[state=active]:bg-background">
-              <TrendingUp className="h-4 w-4 mr-2" />
-              Overview
-            </TabsTrigger>
-            <TabsTrigger value="team" className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Your Team
-            </TabsTrigger>
-            <TabsTrigger value="tasks" className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4" />
-              Tasks & Q&A
-            </TabsTrigger>
-            <TabsTrigger value="documents" className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Documents
-            </TabsTrigger>
-          </TabsList>
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
+            <TabsList className="bg-muted/50 p-1">
+              <TabsTrigger value="overview" className="data-[state=active]:bg-background">
+                <TrendingUp className="h-4 w-4 mr-2" />
+                Overview
+              </TabsTrigger>
+              <TabsTrigger value="team" className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Your Team
+              </TabsTrigger>
+              <TabsTrigger value="tasks" className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" />
+                Tasks & Q&A
+              </TabsTrigger>
+              <TabsTrigger value="documents" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Documents
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="overview" className="space-y-6">
-            <Triage
-              userType="client"
-              userName={client?.contactName || client?.name || ""}
-              userEmail={client?.email || ""}
-              clientId={client?.id}
-              programName="SEED Program"
-              tasks={tasks}
-              questions={questions}
-              signedAgreements={signedAgreements as any}
-              onAgreementSigned={(type) => {
-                setSignedAgreements((prev) => [...prev, type])
-              }}
-            />
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <ClientProgressCard
-                totalHours={progress.totalHours}
-                uniqueStudents={progress.uniqueStudents}
-                weeklyProgress={progress.weeklyProgress}
-                loading={loading}
-              />
-              <ClientTeamCard teamMembers={teamMembers} directors={directors} loading={loading} />
-            </div>
-            <ClientDeliverablesCard deliverables={deliverables} loading={loading} />
-          </TabsContent>
-
-          {/* Team Tab */}
-          <TabsContent value="team">
-            <ClientTeamCard teamMembers={teamMembers} directors={directors} loading={loading} />
-          </TabsContent>
-
-          {/* Tasks & Q&A Tab */}
-          <TabsContent value="tasks" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <ClientTasksCard
+            <TabsContent value="overview" className="space-y-6">
+              <Triage
+                userType="client"
+                userName={client?.contactName || client?.name || ""}
+                userEmail={client?.email || ""}
+                clientId={client?.id}
+                programName="SEED Program"
                 tasks={tasks}
-                clientId={client?.id || ""}
-                clientName={client?.contactName || client?.name || "Client"}
-                clientEmail={client?.email || ""}
-                onCommentAdded={refreshTasks}
-                loading={loading}
-              />
-              <ClientQuestionsCard
                 questions={questions}
-                clientId={client?.id || ""}
-                clientName={client?.contactName || client?.name || "Client"}
-                clientEmail={client?.email || ""}
-                onQuestionAdded={refreshQuestions}
-                loading={loading}
+                signedAgreements={signedAgreements as any}
+                onAgreementSigned={(type) => {
+                  setSignedAgreements((prev) => [...prev, type])
+                }}
               />
-            </div>
-          </TabsContent>
 
-          {/* Documents Tab */}
-          <TabsContent value="documents" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <ClientDocumentUpload
-                documents={clientDocuments}
-                clientId={client?.id || ""}
-                clientName={client?.contactName || client?.name || "Client"}
-                clientEmail={client?.email || ""}
-                onDocumentUploaded={refreshDocuments}
-                loading={loading}
-              />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <ClientProgressCard
+                  totalHours={progress.totalHours}
+                  uniqueStudents={progress.uniqueStudents}
+                  weeklyProgress={progress.weeklyProgress}
+                  loading={loading}
+                />
+                <ClientTeamCard teamMembers={teamMembers} directors={directors} loading={loading} />
+              </div>
               <ClientDeliverablesCard deliverables={deliverables} loading={loading} />
-            </div>
-          </TabsContent>
-        </Tabs>
+            </TabsContent>
+
+            <TabsContent value="team">
+              <ClientTeamCard teamMembers={teamMembers} directors={directors} loading={loading} />
+            </TabsContent>
+
+            <TabsContent value="tasks" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <ClientTasksCard
+                  tasks={tasks}
+                  clientId={client?.id || ""}
+                  clientName={client?.contactName || client?.name || "Client"}
+                  clientEmail={client?.email || ""}
+                  onCommentAdded={refreshTasks}
+                  loading={loading}
+                />
+                <ClientQuestionsCard
+                  questions={questions}
+                  clientId={client?.id || ""}
+                  clientName={client?.contactName || client?.name || "Client"}
+                  clientEmail={client?.email || ""}
+                  onQuestionAdded={refreshQuestions}
+                  loading={loading}
+                />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="documents" className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <ClientDocumentUpload
+                  documents={clientDocuments}
+                  clientId={client?.id || ""}
+                  clientName={client?.contactName || client?.name || "Client"}
+                  clientEmail={client?.email || ""}
+                  onDocumentUploaded={refreshDocuments}
+                  loading={loading}
+                />
+                <ClientDeliverablesCard deliverables={deliverables} loading={loading} />
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
     </div>
   )

@@ -233,178 +233,181 @@ export default function DirectorPortal() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
-      <MainNavigation activePortal="director" />
+      <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+        <MainNavigation />
+      </aside>
+      <div className="pl-52 pt-14">
+        <DashboardHeader
+          selectedClinic={selectedDirectorId}
+          onClinicChange={handleDirectorChange}
+          selectedWeeks={selectedWeeks}
+          onWeeksChange={setSelectedWeeks}
+          availableWeeks={availableWeeks}
+        />
 
-      <DashboardHeader
-        selectedClinic={selectedDirectorId}
-        onClinicChange={handleDirectorChange}
-        selectedWeeks={selectedWeeks}
-        onWeeksChange={setSelectedWeeks}
-        availableWeeks={availableWeeks}
-      />
+        <main className="p-4 space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">Director Dashboard</h1>
+              </div>
+              <p className="text-muted-foreground flex items-center gap-2 text-sm">
+                <Calendar className="h-4 w-4" />
+                {selectedWeeks.length === 0
+                  ? "Select Week"
+                  : selectedWeeks.length === 1
+                    ? getWeekLabel(selectedWeeks[0])
+                    : `${selectedWeeks.length} weeks`}
+              </p>
+            </div>
 
-      <main className="container mx-auto px-6 py-6 space-y-6">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div className="space-y-1">
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold tracking-tight text-foreground">Director Dashboard</h1>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="gap-2 bg-transparent">
+                    <Download className="h-4 w-4" />
+                    Export
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuItem onClick={() => alert("Export as PDF coming soon!")}>Export as PDF</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => alert("Export as CSV coming soon!")}>Export as CSV</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => alert("Export as Excel coming soon!")}>
+                    Export as Excel
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isLoading}>
+                <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+              </Button>
             </div>
-            <p className="text-muted-foreground flex items-center gap-2 text-sm">
-              <Calendar className="h-4 w-4" />
-              {selectedWeeks.length === 0
-                ? "Select Week"
-                : selectedWeeks.length === 1
-                  ? getWeekLabel(selectedWeeks[0])
-                  : `${selectedWeeks.length} weeks`}
-            </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-2 bg-transparent">
-                  <Download className="h-4 w-4" />
-                  Export
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuItem onClick={() => alert("Export as PDF coming soon!")}>Export as PDF</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => alert("Export as CSV coming soon!")}>Export as CSV</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => alert("Export as Excel coming soon!")}>
-                  Export as Excel
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <TabsList>
+              <TabsTrigger value="overview" className="gap-2">
+                <BarChart3 className="h-4 w-4" />
+                Overview
+              </TabsTrigger>
+              <TabsTrigger value="my-clinic" className="gap-2">
+                <Building2 className="h-4 w-4" />
+                My Clinic
+              </TabsTrigger>
+              <TabsTrigger value="debriefs" className="gap-2">
+                <FileText className="h-4 w-4" />
+                Debriefs
+              </TabsTrigger>
+              <TabsTrigger value="schedule" className="gap-2">
+                <Calendar className="h-4 w-4" />
+                Schedule
+              </TabsTrigger>
+            </TabsList>
 
-            <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isLoading}>
-              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-            </Button>
-          </div>
-        </div>
+            <TabsContent value="overview" className="space-y-6">
+              {/* Onboarding & Administrative Tasks */}
+              {currentDirector && (
+                <OnboardingAgreements
+                  userType="director"
+                  userName={currentDirector.name}
+                  userEmail={currentDirector.email}
+                  programName="SEED Program"
+                  signedAgreements={signedAgreements as any}
+                  onAgreementSigned={(type) => {
+                    setSignedAgreements((prev) => [...prev, type])
+                  }}
+                />
+              )}
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="overview" className="gap-2">
-              <BarChart3 className="h-4 w-4" />
-              Overview
-            </TabsTrigger>
-            <TabsTrigger value="my-clinic" className="gap-2">
-              <Building2 className="h-4 w-4" />
-              My Clinic
-            </TabsTrigger>
-            <TabsTrigger value="debriefs" className="gap-2">
-              <FileText className="h-4 w-4" />
-              Debriefs
-            </TabsTrigger>
-            <TabsTrigger value="schedule" className="gap-2">
-              <Calendar className="h-4 w-4" />
-              Schedule
-            </TabsTrigger>
-          </TabsList>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Hours</CardTitle>
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{quickStats.totalHours}</div>
+                    <p className="text-xs text-muted-foreground">This period</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Active Students</CardTitle>
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{quickStats.activeStudents}</div>
+                    <p className="text-xs text-muted-foreground">Submitted debriefs</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Active Clients</CardTitle>
+                    <Briefcase className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{quickStats.activeClients}</div>
+                    <p className="text-xs text-muted-foreground">With activity</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Debriefs</CardTitle>
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{quickStats.debriefsSubmitted}</div>
+                    <p className="text-xs text-muted-foreground">This period</p>
+                  </CardContent>
+                </Card>
+              </div>
 
-          <TabsContent value="overview" className="space-y-6">
-            {/* Onboarding & Administrative Tasks */}
-            {currentDirector && (
-              <OnboardingAgreements
-                userType="director"
-                userName={currentDirector.name}
-                userEmail={currentDirector.email}
-                programName="SEED Program"
-                signedAgreements={signedAgreements as any}
-                onAgreementSigned={(type) => {
-                  setSignedAgreements((prev) => [...prev, type])
-                }}
-              />
-            )}
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Suspense fallback={<div>Loading performance...</div>}>
+                  <ClinicPerformance selectedClinic={selectedDirectorId} selectedWeeks={selectedWeeks} />
+                </Suspense>
+                <Suspense fallback={<div>Loading notifications...</div>}>
+                  <DirectorNotifications />
+                </Suspense>
+              </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Suspense fallback={<div>Loading summary...</div>}>
+                  <WeeklyProgramSummary selectedClinic={selectedDirectorId} selectedWeeks={selectedWeeks} />
+                </Suspense>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="my-clinic" className="space-y-6">
+              {console.log("[v0] DirectorPortal - Passing to ClinicView:", selectedDirectorId)}
+              <ClinicView selectedClinic={selectedDirectorId} selectedWeeks={selectedWeeks} />
+            </TabsContent>
+
+            <TabsContent value="debriefs">
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Hours</CardTitle>
-                  <Clock className="h-4 w-4 text-muted-foreground" />
+                <CardHeader>
+                  <CardTitle>Debrief Management</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{quickStats.totalHours}</div>
-                  <p className="text-xs text-muted-foreground">This period</p>
+                  <p className="text-muted-foreground">Debrief review and management coming soon...</p>
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="schedule">
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Active Students</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
+                <CardHeader>
+                  <CardTitle>Schedule Management</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{quickStats.activeStudents}</div>
-                  <p className="text-xs text-muted-foreground">Submitted debriefs</p>
+                  <p className="text-muted-foreground">Schedule management coming soon...</p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Active Clients</CardTitle>
-                  <Briefcase className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{quickStats.activeClients}</div>
-                  <p className="text-xs text-muted-foreground">With activity</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Debriefs</CardTitle>
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{quickStats.debriefsSubmitted}</div>
-                  <p className="text-xs text-muted-foreground">This period</p>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Suspense fallback={<div>Loading performance...</div>}>
-                <ClinicPerformance selectedClinic={selectedDirectorId} selectedWeeks={selectedWeeks} />
-              </Suspense>
-              <Suspense fallback={<div>Loading notifications...</div>}>
-                <DirectorNotifications />
-              </Suspense>
-            </div>
-
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Suspense fallback={<div>Loading summary...</div>}>
-                <WeeklyProgramSummary selectedClinic={selectedDirectorId} selectedWeeks={selectedWeeks} />
-              </Suspense>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="my-clinic" className="space-y-6">
-            {console.log("[v0] DirectorPortal - Passing to ClinicView:", selectedDirectorId)}
-            <ClinicView selectedClinic={selectedDirectorId} selectedWeeks={selectedWeeks} />
-          </TabsContent>
-
-          <TabsContent value="debriefs">
-            <Card>
-              <CardHeader>
-                <CardTitle>Debrief Management</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">Debrief review and management coming soon...</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="schedule">
-            <Card>
-              <CardHeader>
-                <CardTitle>Schedule Management</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">Schedule management coming soon...</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </main>
+            </TabsContent>
+          </Tabs>
+        </main>
+      </div>
     </div>
   )
 }

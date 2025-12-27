@@ -1,13 +1,13 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Calendar, Download, ChevronDown, X, Building2, Briefcase } from "lucide-react"
-import Image from "next/image"
 import { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface WeekSchedule {
   value: string
@@ -32,35 +32,44 @@ interface Clinic {
 
 interface Client {
   id: string
-  company_name: string
+  company_name?: string
+  name?: string
   clinic?: string
+  clinic_id?: string
 }
 
 interface DashboardHeaderProps {
   selectedWeeks: string[]
   onWeeksChange: (weeks: string[]) => void
   availableWeeks: string[]
-  selectedClinic: string
-  onClinicChange: (clinic: string) => void
-  selectedClient?: string
-  onClientChange?: (client: string) => void
+  selectedClinics: string[]
+  onClinicsChange: (clinics: string[]) => void
+  selectedClients: string[]
+  onClientsChange: (clients: string[]) => void
 }
 
 export function DashboardHeader({
   selectedWeeks,
   onWeeksChange,
   availableWeeks,
-  selectedClinic,
-  onClinicChange,
-  selectedClient = "all",
-  onClientChange,
+  selectedClinics,
+  onClinicsChange,
+  selectedClients,
+  onClientsChange,
 }: DashboardHeaderProps) {
+  const [mounted, setMounted] = useState(false)
   const [schedule, setSchedule] = useState<WeekSchedule[]>([])
   const [directors, setDirectors] = useState<Director[]>([])
   const [clinics, setClinics] = useState<Clinic[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [filteredClients, setFilteredClients] = useState<Client[]>([])
   const [weekPickerOpen, setWeekPickerOpen] = useState(false)
+  const [clinicPickerOpen, setClinicPickerOpen] = useState(false)
+  const [clientPickerOpen, setClientPickerOpen] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     async function fetchData() {
@@ -83,8 +92,16 @@ export function DashboardHeader({
         }
 
         const clinicsData = await clinicsRes.json()
-        if (clinicsData.success && clinicsData.clinics) {
+        if (clinicsData.clinics && clinicsData.clinics.length > 0) {
           setClinics(clinicsData.clinics)
+        } else {
+          // Fallback to hardcoded clinics if database is empty
+          setClinics([
+            { id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", name: "Accounting" },
+            { id: "b2c3d4e5-f6a7-8901-bcde-f12345678901", name: "Marketing" },
+            { id: "c3d4e5f6-a7b8-9012-cdef-123456789012", name: "Consulting" },
+            { id: "d4e5f6a7-b8c9-0123-def1-234567890123", name: "Resource Acquisition" },
+          ])
         }
 
         const clientsData = await clientsRes.json()
@@ -94,26 +111,37 @@ export function DashboardHeader({
         }
       } catch (error) {
         console.error("Error fetching data:", error)
+        setClinics([
+          { id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890", name: "Accounting" },
+          { id: "b2c3d4e5-f6a7-8901-bcde-f12345678901", name: "Marketing" },
+          { id: "c3d4e5f6-a7b8-9012-cdef-123456789012", name: "Consulting" },
+          { id: "d4e5f6a7-b8c9-0123-def1-234567890123", name: "Resource Acquisition" },
+        ])
       }
     }
     fetchData()
   }, [])
 
   useEffect(() => {
-    if (selectedClinic === "all") {
+    if (selectedClinics.length === 0) {
       setFilteredClients(clients)
     } else {
-      const clinic = clinics.find((c) => c.id === selectedClinic)
-      if (clinic) {
-        setFilteredClients(clients.filter((c) => c.clinic === clinic.name))
-      } else {
-        setFilteredClients(clients)
-      }
+      // Get selected clinic names for matching
+      const selectedClinicNames = clinics.filter((c) => selectedClinics.includes(c.id)).map((c) => c.name.toLowerCase())
+
+      setFilteredClients(
+        clients.filter((c) => {
+          // Check by clinic_id first if available
+          if (c.clinic_id && selectedClinics.includes(c.clinic_id)) {
+            return true
+          }
+          // Fallback to clinic name matching
+          const clientClinic = (c.clinic || "").toLowerCase()
+          return selectedClinicNames.some((name) => clientClinic.includes(name) || name.includes(clientClinic))
+        }),
+      )
     }
-    if (onClientChange && selectedClient !== "all") {
-      onClientChange("all")
-    }
-  }, [selectedClinic, clients, clinics])
+  }, [selectedClinics, clients, clinics])
 
   const formatWeekLabel = (weekEnding: string) => {
     const week = schedule.find((s) => s.value === weekEnding)
@@ -137,8 +165,40 @@ export function DashboardHeader({
     onWeeksChange([...availableWeeks])
   }
 
-  const clearSelection = () => {
+  const clearWeekSelection = () => {
     onWeeksChange([])
+  }
+
+  const toggleClinic = (clinicId: string) => {
+    if (selectedClinics.includes(clinicId)) {
+      onClinicsChange(selectedClinics.filter((c) => c !== clinicId))
+    } else {
+      onClinicsChange([...selectedClinics, clinicId])
+    }
+  }
+
+  const selectAllClinics = () => {
+    onClinicsChange(clinics.map((c) => c.id))
+  }
+
+  const clearClinicSelection = () => {
+    onClinicsChange([])
+  }
+
+  const toggleClient = (clientId: string) => {
+    if (selectedClients.includes(clientId)) {
+      onClientsChange(selectedClients.filter((c) => c !== clientId))
+    } else {
+      onClientsChange([...selectedClients, clientId])
+    }
+  }
+
+  const selectAllClients = () => {
+    onClientsChange(filteredClients.map((c) => c.id))
+  }
+
+  const clearClientSelection = () => {
+    onClientsChange([])
   }
 
   const getWeekSelectorDisplay = () => {
@@ -154,135 +214,340 @@ export function DashboardHeader({
     return `${selectedWeeks.length} weeks selected`
   }
 
-  return (
-    <div className="bg-white/80 backdrop-blur-sm border-b border-slate-200 py-3 px-6 sticky top-0 z-40">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center">
-          <Image
-            src="/images/shin-logo-cropped.png"
-            alt="SHIN - SEED Hub & Information Nexus"
-            width={160}
-            height={56}
-            className="h-14 w-auto flex-shrink-0 ml-2"
-            priority
-            unoptimized
-          />
-          <div className="border-l border-slate-200 pl-4 ml-4">
-            <h1 className="text-xl font-bold text-slate-800">Clinic Director Dashboard</h1>
-            <p className="text-sm text-slate-500">Real-time overview of SEED program progress</p>
+  const getClinicSelectorDisplay = () => {
+    if (selectedClinics.length === 0) {
+      return "All Clinics"
+    }
+    if (selectedClinics.length === 1) {
+      const clinic = clinics.find((c) => c.id === selectedClinics[0])
+      return clinic?.name || "1 clinic"
+    }
+    if (selectedClinics.length === clinics.length) {
+      return "All Clinics Selected"
+    }
+    return `${selectedClinics.length} clinics selected`
+  }
+
+  const getClientSelectorDisplay = () => {
+    if (selectedClients.length === 0) {
+      return "All Clients"
+    }
+    if (selectedClients.length === 1) {
+      const client = clients.find((c) => c.id === selectedClients[0])
+      return client?.name || client?.company_name || "1 client"
+    }
+    if (selectedClients.length === filteredClients.length && filteredClients.length > 0) {
+      return "All Clients Selected"
+    }
+    return `${selectedClients.length} clients selected`
+  }
+
+  if (!mounted) {
+    return (
+      <header className="sticky top-0 z-30 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-10 w-32" />
+            <Skeleton className="h-10 w-40" />
+            <Skeleton className="h-10 w-40" />
           </div>
         </div>
+      </header>
+    )
+  }
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={selectedClinic} onValueChange={onClinicChange}>
-            <SelectTrigger className="w-[180px] border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-sm h-8">
-              <Building2 className="mr-2 h-3 w-3" />
-              <SelectValue placeholder="Select clinic" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Clinics</SelectItem>
-              {clinics.map((clinic) => (
-                <SelectItem key={clinic.id} value={clinic.id}>
-                  {clinic.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={selectedClient} onValueChange={(value) => onClientChange?.(value)}>
-            <SelectTrigger className="w-[200px] border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-sm h-8">
-              <Briefcase className="mr-2 h-3 w-3" />
-              <SelectValue placeholder="Select client" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Clients</SelectItem>
-              {filteredClients.map((client) => (
-                <SelectItem key={client.id} value={client.id}>
-                  {client.company_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
+  return (
+    <header className="sticky top-0 z-30 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+      <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Week Selector */}
           <Popover open={weekPickerOpen} onOpenChange={setWeekPickerOpen}>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
-                className="w-[200px] border-slate-200 bg-white text-slate-700 hover:bg-slate-50 text-sm h-8 justify-between"
+                className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700 min-w-[160px] justify-between"
               >
-                <div className="flex items-center">
-                  <Calendar className="mr-2 h-3 w-3" />
-                  <span className="truncate">{getWeekSelectorDisplay()}</span>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-amber-400" />
+                  <span className="truncate max-w-[100px]">{getWeekSelectorDisplay()}</span>
                 </div>
-                <ChevronDown className="h-3 w-3 opacity-50" />
+                <ChevronDown className="h-4 w-4 ml-2 shrink-0" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[280px] p-0" align="end">
-              <div className="p-2 border-b border-slate-100">
-                <div className="flex items-center justify-between gap-2">
-                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={clearSelection}>
-                    All Periods
-                  </Button>
-                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={selectAllWeeks}>
-                    Select All Weeks
-                  </Button>
+            <PopoverContent className="w-72 p-0" align="end">
+              <div className="p-3 border-b">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-sm">Filter by Week</span>
+                  {selectedWeeks.length > 0 && (
+                    <Button variant="ghost" size="sm" onClick={clearWeekSelection} className="h-6 px-2 text-xs">
+                      <X className="h-3 w-3 mr-1" />
+                      Clear
+                    </Button>
+                  )}
                 </div>
               </div>
-              <div className="max-h-[300px] overflow-y-auto p-2">
-                {availableWeeks.map((week) => {
-                  const isSelected = selectedWeeks.includes(week)
-                  const weekInfo = schedule.find((s) => s.value === week)
-                  return (
+              <ScrollArea className="h-[300px]">
+                <div className="p-2 space-y-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={selectAllWeeks}
+                    className="w-full justify-start text-sm h-8"
+                  >
+                    Select All ({availableWeeks.length})
+                  </Button>
+                  <div className="border-t my-2" />
+                  {schedule.map((week) => (
                     <div
-                      key={week}
-                      className={`flex items-center space-x-2 p-2 rounded cursor-pointer hover:bg-slate-50 ${
-                        isSelected ? "bg-slate-100" : ""
-                      }`}
-                      onClick={() => toggleWeek(week)}
+                      key={week.value}
+                      className={`flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer ${week.isBreak ? "opacity-60" : ""}`}
+                      onClick={() => toggleWeek(week.value)}
                     >
-                      <Checkbox checked={isSelected} onCheckedChange={() => toggleWeek(week)} />
-                      <div className="flex-1">
-                        <span className="text-sm">{weekInfo ? weekInfo.label : `Week of ${week}`}</span>
-                        <span className="text-xs text-slate-500 ml-2">
-                          {new Date(week).toLocaleDateString("en-US", {
+                      <Checkbox
+                        checked={selectedWeeks.includes(week.value)}
+                        onCheckedChange={() => toggleWeek(week.value)}
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-sm">
+                          {week.label}
+                          {week.isBreak && (
+                            <Badge variant="outline" className="ml-2 text-xs">
+                              Break
+                            </Badge>
+                          )}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(week.value).toLocaleDateString("en-US", {
                             month: "short",
                             day: "numeric",
+                            year: "numeric",
                           })}
                         </span>
                       </div>
-                      {weekInfo?.isBreak && (
-                        <Badge variant="secondary" className="text-xs">
-                          Break
-                        </Badge>
-                      )}
                     </div>
-                  )
-                })}
+                  ))}
+                </div>
+              </ScrollArea>
+            </PopoverContent>
+          </Popover>
+
+          {/* Clinic Filter */}
+          <Popover open={clinicPickerOpen} onOpenChange={setClinicPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700 min-w-[160px] justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-cyan-400" />
+                  <span className="truncate max-w-[100px]">{getClinicSelectorDisplay()}</span>
+                </div>
+                <ChevronDown className="h-4 w-4 ml-2 shrink-0" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-0" align="end">
+              <div className="p-3 border-b">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-sm">Filter by Clinic</span>
+                  {selectedClinics.length > 0 && (
+                    <Button variant="ghost" size="sm" onClick={clearClinicSelection} className="h-6 px-2 text-xs">
+                      <X className="h-3 w-3 mr-1" />
+                      Clear
+                    </Button>
+                  )}
+                </div>
               </div>
-              {selectedWeeks.length > 0 && (
-                <div className="p-2 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-xs text-slate-500">
-                    {selectedWeeks.length} week{selectedWeeks.length !== 1 ? "s" : ""} selected
-                  </span>
-                  <Button variant="ghost" size="sm" className="h-6 text-xs text-slate-500" onClick={clearSelection}>
-                    <X className="h-3 w-3 mr-1" />
-                    Clear
+              <ScrollArea className="h-[200px]">
+                <div className="p-2 space-y-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={selectAllClinics}
+                    className="w-full justify-start text-sm h-8"
+                  >
+                    Select All ({clinics.length})
                   </Button>
+                  <div className="border-t my-2" />
+                  {clinics.map((clinic) => (
+                    <div
+                      key={clinic.id}
+                      className="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer"
+                      onClick={() => toggleClinic(clinic.id)}
+                    >
+                      <Checkbox
+                        checked={selectedClinics.includes(clinic.id)}
+                        onCheckedChange={() => toggleClinic(clinic.id)}
+                      />
+                      <span className="text-sm">{clinic.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+              {selectedClinics.length > 0 && (
+                <div className="p-2 border-t bg-muted/50">
+                  <div className="flex flex-wrap gap-1">
+                    {selectedClinics.slice(0, 3).map((clinicId) => {
+                      const clinic = clinics.find((c) => c.id === clinicId)
+                      return (
+                        <Badge key={clinicId} variant="secondary" className="text-xs">
+                          {clinic?.name}
+                          <X
+                            className="h-3 w-3 ml-1 cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleClinic(clinicId)
+                            }}
+                          />
+                        </Badge>
+                      )
+                    })}
+                    {selectedClinics.length > 3 && (
+                      <Badge variant="outline" className="text-xs">
+                        +{selectedClinics.length - 3} more
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               )}
             </PopoverContent>
           </Popover>
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-slate-200 text-slate-700 hover:bg-slate-50 h-8 text-xs bg-transparent"
-          >
-            <Download className="mr-2 h-3 w-3" />
-            Export Report
+          {/* Client Filter */}
+          <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700 min-w-[160px] justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <Briefcase className="h-4 w-4 text-purple-400" />
+                  <span className="truncate max-w-[100px]">{getClientSelectorDisplay()}</span>
+                </div>
+                <ChevronDown className="h-4 w-4 ml-2 shrink-0" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-0" align="end">
+              <div className="p-3 border-b">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-sm">Filter by Client</span>
+                  {selectedClients.length > 0 && (
+                    <Button variant="ghost" size="sm" onClick={clearClientSelection} className="h-6 px-2 text-xs">
+                      <X className="h-3 w-3 mr-1" />
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                {selectedClinics.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">Showing clients in selected clinics</p>
+                )}
+              </div>
+              <ScrollArea className="h-[250px]">
+                <div className="p-2 space-y-1">
+                  {filteredClients.length > 0 ? (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={selectAllClients}
+                        className="w-full justify-start text-sm h-8"
+                      >
+                        Select All ({filteredClients.length})
+                      </Button>
+                      <div className="border-t my-2" />
+                      {filteredClients.map((client) => (
+                        <div
+                          key={client.id}
+                          className="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer"
+                          onClick={() => toggleClient(client.id)}
+                        >
+                          <Checkbox
+                            checked={selectedClients.includes(client.id)}
+                            onCheckedChange={() => toggleClient(client.id)}
+                          />
+                          <div className="flex flex-col">
+                            <span className="text-sm">{client.name || client.company_name}</span>
+                            {client.clinic && <span className="text-xs text-muted-foreground">{client.clinic}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      No clients found for selected clinics
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+              {selectedClients.length > 0 && (
+                <div className="p-2 border-t bg-muted/50">
+                  <div className="flex flex-wrap gap-1">
+                    {selectedClients.slice(0, 2).map((clientId) => {
+                      const client = clients.find((c) => c.id === clientId)
+                      return (
+                        <Badge key={clientId} variant="secondary" className="text-xs">
+                          {client?.name || client?.company_name}
+                          <X
+                            className="h-3 w-3 ml-1 cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleClient(clientId)
+                            }}
+                          />
+                        </Badge>
+                      )
+                    })}
+                    {selectedClients.length > 2 && (
+                      <Badge variant="outline" className="text-xs">
+                        +{selectedClients.length - 2} more
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+
+          {/* Export Button */}
+          <Button variant="outline" className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700">
+            <Download className="h-4 w-4 mr-2" />
+            Export
           </Button>
         </div>
       </div>
-    </div>
+
+      {/* Active Filters Display */}
+      {(selectedClinics.length > 0 || selectedClients.length > 0 || selectedWeeks.length > 0) && (
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-700">
+          <span className="text-xs text-slate-400">Active filters:</span>
+          {selectedClinics.length > 0 && (
+            <Badge variant="secondary" className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30">
+              {selectedClinics.length} {selectedClinics.length === 1 ? "clinic" : "clinics"}
+            </Badge>
+          )}
+          {selectedClients.length > 0 && (
+            <Badge variant="secondary" className="bg-purple-500/20 text-purple-300 border-purple-500/30">
+              {selectedClients.length} {selectedClients.length === 1 ? "client" : "clients"}
+            </Badge>
+          )}
+          {selectedWeeks.length > 0 && (
+            <Badge variant="secondary" className="bg-amber-500/20 text-amber-300 border-amber-500/30">
+              {selectedWeeks.length} {selectedWeeks.length === 1 ? "week" : "weeks"}
+            </Badge>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              clearClinicSelection()
+              clearClientSelection()
+              clearWeekSelection()
+            }}
+            className="h-6 px-2 text-xs text-slate-400 hover:text-white"
+          >
+            Clear all
+          </Button>
+        </div>
+      )}
+    </header>
   )
 }

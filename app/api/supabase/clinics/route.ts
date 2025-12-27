@@ -9,12 +9,12 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error("Error fetching clinics:", error)
-      return NextResponse.json({ clinics: [] })
+      return NextResponse.json({ success: true, clinics: [] })
     }
 
-    return NextResponse.json({ clinics: clinics || [] })
+    return NextResponse.json({ success: true, clinics: clinics || [] })
   } catch (error) {
     console.error("Error in clinics API:", error)
-    return NextResponse.json({ clinics: [] })
+    return NextResponse.json({ success: false, clinics: [] })
   }
 }

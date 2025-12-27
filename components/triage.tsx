@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Separator } from "@/components/ui/separator"
 import {
   AlertTriangle,
   Bell,
@@ -35,6 +37,7 @@ import {
   BookOpen,
   Inbox,
   Send,
+  Building2,
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
@@ -114,6 +117,8 @@ export function Triage({
   const [showAgreementDialog, setShowAgreementDialog] = useState(false)
   const [selectedAgreement, setSelectedAgreement] = useState<AgreementType | null>(null)
   const [signature, setSignature] = useState("")
+  const [clinicName, setClinicName] = useState("")
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [notifications, setNotifications] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -433,7 +438,12 @@ export function Triage({
   const onboardingCount = triageItems.filter((i) => i.type === "onboarding").length
 
   const handleSignAgreement = async () => {
-    if (!signature.trim() || !selectedAgreement) return
+    if (!signature.trim() || !selectedAgreement || !agreedToTerms) return
+    if (
+      (selectedAgreement === "student-confidentiality" || selectedAgreement === "director-confidentiality") &&
+      !clinicName.trim()
+    )
+      return
 
     try {
       await fetch("/api/agreements", {
@@ -445,6 +455,7 @@ export function Triage({
           userEmail,
           userType,
           signature: signature.trim(),
+          clinicName: clinicName.trim(),
           signedAt: new Date().toISOString(),
           programName,
         }),
@@ -453,11 +464,21 @@ export function Triage({
       onAgreementSigned?.(selectedAgreement)
       setShowAgreementDialog(false)
       setSignature("")
+      setClinicName("")
+      setAgreedToTerms(false)
       setSelectedAgreement(null)
     } catch (error) {
       console.error("Error signing agreement:", error)
     }
   }
+
+  useEffect(() => {
+    if (!showAgreementDialog) {
+      setSignature("")
+      setClinicName("")
+      setAgreedToTerms(false)
+    }
+  }, [showAgreementDialog])
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -469,6 +490,66 @@ export function Triage({
         return "border-l-green-500"
     }
   }
+
+  const getAgreementContent = () => {
+    if (selectedAgreement === "student-confidentiality" || selectedAgreement === "director-confidentiality") {
+      return {
+        title: "SUFFOLK UNIVERSITY\nSEED PROGRAM\nCONFIDENTIALITY AGREEMENT",
+        sections: [
+          {
+            text: 'Due to your access to confidential information, all faculty and students Participating in SEED programs must sign this agreement. "Confidential information" means any information of a secret or confidential nature relating to the workplace. All such information should be labeled or marked as "confidential" by the client.',
+          },
+          {
+            text: "Confidential information may include, but is not limited to, the following: trade secrets, proprietary information, customer information, customer lists, methods, plans, documents, data, drawings, manuals, notebooks, reports, models, inventions, formulas, processes, software, information systems, contracts, negotiations, strategic planning, proposals, business alliances, and training materials.",
+          },
+          {
+            heading: "In connection with my participation in this SEED program, I agree to the following:",
+          },
+          {
+            text: 'I have read and understand the above definition of "confidential information." I agree that I will not at any time, both during and after my enrollment in a SEED, communicate or disclose confidential information to any person, corporation, or entity.',
+            isItalic: true,
+          },
+          {
+            text: "I further recognize and agree that while in SEED I may become aware of nonpublic information of a personal nature about employees or associates, including, without limitation, actions, omissions, statements, or personally identifiable medical, family, financial, social, behavioral, or other personal or private information. I will not disclose any such information that I learn in SEED to any other person or entity, unless required by applicable law or legal process.",
+            isItalic: true,
+          },
+        ],
+        signatureFields: ["Name (Student/Faculty)", "Program Name (Clinic)", "Signature", "Date"],
+      }
+    } else if (selectedAgreement === "client-contract") {
+      return {
+        title: "SUFFOLK UNIVERSITY\nSEED PROGRAM\nCLIENT ENGAGEMENT AGREEMENT",
+        sections: [
+          {
+            text: "This Client Engagement Agreement establishes the terms and conditions for participation in the Suffolk University SEED (Small Enterprise Economic Development) Program.",
+          },
+          {
+            text: "By signing this agreement, you acknowledge and agree to the following terms:",
+          },
+          {
+            text: "1. You will provide accurate and complete information about your business and its operations to support the student consulting engagement.",
+            isItalic: true,
+          },
+          {
+            text: "2. You understand that students are learning consultants and their recommendations are advisory in nature.",
+            isItalic: true,
+          },
+          {
+            text: "3. You agree to maintain professional communication with student teams and program directors.",
+            isItalic: true,
+          },
+          {
+            text: "4. You will provide timely feedback on deliverables and attend scheduled meetings as agreed upon.",
+            isItalic: true,
+          },
+        ],
+        signatureFields: ["Organization Name", "Authorized Representative", "Signature", "Date"],
+      }
+    }
+    return null
+  }
+
+  const agreementContent = getAgreementContent()
 
   if (loading && userType === "director") {
     return (
@@ -637,37 +718,144 @@ export function Triage({
         </CardContent>
       </Card>
 
-      {/* Agreement Signing Dialog */}
       <Dialog open={showAgreementDialog} onOpenChange={setShowAgreementDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Sign Agreement
+              <Shield className="h-5 w-5 text-primary" />
+              {selectedAgreement === "client-contract" ? "Client Engagement Agreement" : "Confidentiality Agreement"}
             </DialogTitle>
-            <DialogDescription>
-              Please type your full name to sign the {selectedAgreement?.replace("-", " ")} agreement.
-            </DialogDescription>
+            <DialogDescription>Please read the agreement carefully before signing</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="signature">Electronic Signature</Label>
-              <Input
-                id="signature"
-                placeholder="Type your full name"
-                value={signature}
-                onChange={(e) => setSignature(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                By signing, you agree to the terms of the {programName} {selectedAgreement?.replace("-", " ")}.
-              </p>
+
+          {agreementContent && (
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {/* Agreement Document */}
+              <ScrollArea className="flex-1 border rounded-lg bg-white p-6 my-4">
+                <div className="max-w-xl mx-auto">
+                  {/* Header */}
+                  <div className="text-center mb-6">
+                    <div className="flex justify-center mb-4">
+                      <Building2 className="h-10 w-10 text-primary" />
+                    </div>
+                    {agreementContent.title.split("\n").map((line, i) => (
+                      <p key={i} className={`font-bold ${i === 0 ? "text-lg" : "text-base"}`}>
+                        {line}
+                      </p>
+                    ))}
+                  </div>
+
+                  <Separator className="my-4" />
+
+                  {/* Agreement Content */}
+                  <div className="space-y-4 text-sm leading-relaxed">
+                    {agreementContent.sections.map((section, i) => (
+                      <div key={i}>
+                        {section.heading && <p className="font-semibold underline mb-2">{section.heading}</p>}
+                        {section.text && <p className={section.isItalic ? "italic" : ""}>{section.text}</p>}
+                      </div>
+                    ))}
+                  </div>
+
+                  <Separator className="my-6" />
+
+                  {/* Signature Section */}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name" className="font-semibold italic">
+                        Name ({userType === "client" ? "Authorized Representative" : "Student/Faculty"}):
+                      </Label>
+                      <Input
+                        id="name"
+                        value={signature}
+                        onChange={(e) => setSignature(e.target.value)}
+                        placeholder="Type your full legal name"
+                        className="border-b-2 border-t-0 border-x-0 rounded-none focus:ring-0 bg-transparent"
+                      />
+                    </div>
+
+                    {(selectedAgreement === "student-confidentiality" ||
+                      selectedAgreement === "director-confidentiality") && (
+                      <div className="space-y-2">
+                        <Label htmlFor="clinic" className="font-semibold italic">
+                          Program Name (Clinic):
+                        </Label>
+                        <Input
+                          id="clinic"
+                          value={clinicName}
+                          onChange={(e) => setClinicName(e.target.value)}
+                          placeholder="e.g., Accounting Clinic, Marketing Clinic"
+                          className="border-b-2 border-t-0 border-x-0 rounded-none focus:ring-0 bg-transparent"
+                        />
+                      </div>
+                    )}
+
+                    {selectedAgreement === "client-contract" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="org" className="font-semibold italic">
+                          Organization Name:
+                        </Label>
+                        <Input
+                          id="org"
+                          value={clinicName}
+                          onChange={(e) => setClinicName(e.target.value)}
+                          placeholder="Your organization name"
+                          className="border-b-2 border-t-0 border-x-0 rounded-none focus:ring-0 bg-transparent"
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <Label className="font-semibold italic">Signature:</Label>
+                      <div className="h-12 border-b-2 border-gray-400 flex items-end pb-1">
+                        {signature && <span className="text-2xl font-script italic text-gray-700">{signature}</span>}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="font-semibold italic">Date:</Label>
+                      <p className="border-b-2 border-gray-400 pb-1">
+                        {new Date().toLocaleDateString("en-US", {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </ScrollArea>
+
+              {/* Agreement Checkbox */}
+              <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+                <Checkbox
+                  id="agree"
+                  checked={agreedToTerms}
+                  onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
+                />
+                <Label htmlFor="agree" className="text-sm leading-relaxed cursor-pointer">
+                  I have read and understand the above agreement. I agree to all terms and conditions stated herein. I
+                  understand that this is a legally binding electronic signature.
+                </Label>
+              </div>
             </div>
-          </div>
-          <DialogFooter>
+          )}
+
+          <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setShowAgreementDialog(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSignAgreement} disabled={!signature.trim()}>
+            <Button
+              onClick={handleSignAgreement}
+              disabled={
+                !signature.trim() ||
+                !agreedToTerms ||
+                ((selectedAgreement === "student-confidentiality" ||
+                  selectedAgreement === "director-confidentiality" ||
+                  selectedAgreement === "client-contract") &&
+                  !clinicName.trim())
+              }
+            >
               <Send className="h-4 w-4 mr-2" />
               Sign Agreement
             </Button>

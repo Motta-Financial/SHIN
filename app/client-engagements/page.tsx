@@ -49,7 +49,8 @@ function LoadingSkeleton({ height = "h-48" }: { height?: string }) {
 export default function ClientEngagementsPage() {
   const [availableWeeks, setAvailableWeeks] = useState<string[]>([])
   const [selectedWeeks, setSelectedWeeks] = useState<string[]>(["2025-09-14"])
-  const [selectedClinic, setSelectedClinic] = useState<string>("all")
+  const [selectedClinics, setSelectedClinics] = useState<string[]>([])
+  const [selectedClients, setSelectedClients] = useState<string[]>([])
 
   useEffect(() => {
     getAvailableWeeks().then((weeks) => {
@@ -61,41 +62,53 @@ export default function ClientEngagementsPage() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-background pt-[48px] pl-12">
-      <MainNavigation />
+    <div className="min-h-screen bg-background">
+      <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+        <MainNavigation />
+      </aside>
 
-      <DashboardHeader
-        selectedWeeks={selectedWeeks}
-        onWeeksChange={setSelectedWeeks}
-        availableWeeks={availableWeeks}
-        selectedClinic={selectedClinic}
-        onClinicChange={setSelectedClinic}
-      />
+      <div className="pl-52 pt-14">
+        <DashboardHeader
+          selectedWeeks={selectedWeeks}
+          onWeeksChange={setSelectedWeeks}
+          availableWeeks={availableWeeks}
+          selectedClinics={selectedClinics}
+          onClinicsChange={setSelectedClinics}
+          selectedClients={selectedClients}
+          onClientsChange={setSelectedClients}
+        />
 
-      <main className="container mx-auto px-6 py-6 space-y-6">
-        {/* Page Header */}
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Client Engagements</h1>
-            <p className="text-sm text-muted-foreground">Manage all client projects and deliverables</p>
+        <main className="p-4 space-y-4">
+          {/* Page Header */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h1 className="text-2xl font-semibold tracking-tight text-foreground">Client Engagements</h1>
+              <p className="text-sm text-muted-foreground">Manage all client projects and deliverables</p>
+            </div>
+            <UploadSOWButton />
           </div>
-          <UploadSOWButton />
-        </div>
 
-        {selectedWeeks.length > 0 && (
-          <>
-            {/* Director Reminders */}
-            <Suspense fallback={null}>
-              <DirectorReminders selectedWeeks={selectedWeeks} selectedClinic={selectedClinic} />
-            </Suspense>
+          {selectedWeeks.length > 0 && (
+            <>
+              {/* Director Reminders */}
+              <Suspense fallback={null}>
+                <DirectorReminders
+                  selectedWeeks={selectedWeeks}
+                  selectedClinic={selectedClinics.length > 0 ? selectedClinics[0] : "all"}
+                />
+              </Suspense>
 
-            {/* Client Engagements Grid */}
-            <Suspense fallback={<LoadingSkeleton height="h-96" />}>
-              <ClientEngagements selectedWeeks={selectedWeeks} selectedClinic={selectedClinic} />
-            </Suspense>
-          </>
-        )}
-      </main>
+              {/* Client Engagements Grid */}
+              <Suspense fallback={<LoadingSkeleton height="h-96" />}>
+                <ClientEngagements
+                  selectedWeeks={selectedWeeks}
+                  selectedClinic={selectedClinics.length > 0 ? selectedClinics[0] : "all"}
+                />
+              </Suspense>
+            </>
+          )}
+        </main>
+      </div>
     </div>
   )
 }

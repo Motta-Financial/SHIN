@@ -25,8 +25,8 @@ import {
   Briefcase,
   MessageSquare,
 } from "lucide-react"
-import { createBrowserClient } from "@supabase/ssr"
-import { DocumentUpload } from "@/components/document-upload"
+import { createClient } from "@/lib/supabase/client"
+import DocumentUpload from "@/components/shared/DocumentUpload" // Added import for DocumentUpload
 
 interface ClinicViewProps {
   selectedClinic: string
@@ -93,10 +93,7 @@ export function ClinicView({ selectedClinic, selectedWeeks = [] }: ClinicViewPro
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null)
   const [expandedDebrief, setExpandedDebrief] = useState<string | null>(null)
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  )
+  const supabase = createClient()
 
   const normalizeDate = (dateStr: string): string => {
     if (!dateStr) return ""

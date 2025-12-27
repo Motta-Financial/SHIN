@@ -1,22 +1,29 @@
-import { createClient } from "@/lib/supabase/server"
+import { createServerClient } from "@supabase/ssr"
+import { cookies } from "next/headers"
 import { put, del } from "@vercel/blob"
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function GET(request: NextRequest) {
+  const cookieStore = await cookies()
+  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value
+      },
+    },
+  })
+
   try {
-    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
     const clinic = searchParams.get("clinic")
     const category = searchParams.get("category")
 
     let query = supabase.from("course_materials").select("*").order("created_at", { ascending: false })
 
-    // Filter by clinic if specified (also include 'all' materials)
     if (clinic && clinic !== "all") {
       query = query.or(`target_clinic.eq.${clinic},target_clinic.eq.all`)
     }
 
-    // Filter by category if specified
     if (category && category !== "all") {
       query = query.eq("category", category)
     }
@@ -25,19 +32,27 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error("Error fetching course materials:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: error.message, materials: [] }, { status: 500 })
     }
 
-    return NextResponse.json({ materials: data || [] })
+    return NextResponse.json({ success: true, materials: data || [] })
   } catch (error) {
     console.error("Error in course materials GET:", error)
-    return NextResponse.json({ error: "Failed to fetch materials" }, { status: 500 })
+    return NextResponse.json({ success: false, error: "Failed to fetch materials", materials: [] }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
+  const cookieStore = await cookies()
+  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value
+      },
+    },
+  })
+
   try {
-    const supabase = await createClient()
     const formData = await request.formData()
 
     const file = formData.get("file") as File
@@ -45,15 +60,15 @@ export async function POST(request: NextRequest) {
     const description = formData.get("description") as string
     const targetClinic = (formData.get("targetClinic") as string) || "all"
     const category = (formData.get("category") as string) || "resource"
-    const uploadedByName = formData.get("uploadedByName") as string
-    const uploadedByEmail = formData.get("uploadedByEmail") as string
+    const uploadedBy = formData.get("uploadedBy") as string
+    const uploaderName = formData.get("uploaderName") as string
 
     if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 })
+      return NextResponse.json({ success: false, error: "No file provided" }, { status: 400 })
     }
 
     if (!title) {
-      return NextResponse.json({ error: "Title is required" }, { status: 400 })
+      return NextResponse.json({ success: false, error: "Title is required" }, { status: 400 })
     }
 
     // Upload to Vercel Blob
@@ -61,7 +76,6 @@ export async function POST(request: NextRequest) {
       access: "public",
     })
 
-    // Store metadata in Supabase
     const { data, error } = await supabase
       .from("course_materials")
       .insert({
@@ -73,8 +87,8 @@ export async function POST(request: NextRequest) {
         file_size: file.size,
         target_clinic: targetClinic,
         category,
-        uploaded_by_name: uploadedByName,
-        uploaded_by_email: uploadedByEmail,
+        uploaded_by: uploadedBy,
+        uploader_name: uploaderName,
       })
       .select()
       .single()
@@ -83,23 +97,31 @@ export async function POST(request: NextRequest) {
       // If database insert fails, try to delete the blob
       await del(blob.url).catch(console.error)
       console.error("Error inserting course material:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ material: data })
+    return NextResponse.json({ success: true, material: data })
   } catch (error) {
     console.error("Error uploading course material:", error)
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 })
+    return NextResponse.json({ success: false, error: "Upload failed" }, { status: 500 })
   }
 }
 
 export async function DELETE(request: NextRequest) {
+  const cookieStore = await cookies()
+  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value
+      },
+    },
+  })
+
   try {
-    const supabase = await createClient()
     const { id, fileUrl } = await request.json()
 
     if (!id) {
-      return NextResponse.json({ error: "Material ID is required" }, { status: 400 })
+      return NextResponse.json({ success: false, error: "Material ID is required" }, { status: 400 })
     }
 
     // Delete from Supabase
@@ -107,7 +129,7 @@ export async function DELETE(request: NextRequest) {
 
     if (error) {
       console.error("Error deleting course material:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
     // Delete from Vercel Blob
@@ -118,6 +140,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("Error deleting course material:", error)
-    return NextResponse.json({ error: "Delete failed" }, { status: 500 })
+    return NextResponse.json({ success: false, error: "Delete failed" }, { status: 500 })
   }
 }

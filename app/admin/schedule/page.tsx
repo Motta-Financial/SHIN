@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { MainNavigation } from "@/components/main-navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -57,11 +58,14 @@ export default function ScheduleAdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className="min-h-screen bg-slate-50">
+      <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+        <MainNavigation />
+      </aside>
+      <main className="pl-52 pt-14 p-4 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-slate-800">Semester Schedule Management</h1>
+            <h1 className="text-2xl font-bold text-slate-800">Semester Schedule Management</h1>
             <p className="text-slate-500 mt-1">Import and manage the FALL 2025 course schedule</p>
           </div>
           <Badge variant="outline" className="text-lg px-4 py-2">
@@ -151,7 +155,7 @@ export default function ScheduleAdminPage() {
             </CardContent>
           </Card>
         )}
-      </div>
+      </main>
     </div>
   )
 }

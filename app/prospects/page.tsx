@@ -19,10 +19,8 @@ import {
   Plus,
   Users,
   AlertCircle,
-  ArrowLeft,
 } from "lucide-react"
 import { MainNavigation } from "@/components/main-navigation"
-import Link from "next/link"
 
 interface ProspectRecord {
   id: string
@@ -188,160 +186,131 @@ export default function ProspectInterviewsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#4A6FA5]"></div>
+      <div className="min-h-screen bg-background">
+        <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+          <MainNavigation />
+        </aside>
+        <div className="pl-52 pt-14 flex items-center justify-center h-screen">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Card className="p-6 max-w-md">
-          <div className="text-center">
-            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-slate-900 mb-2">Error Loading Prospects</h2>
-            <p className="text-slate-600 mb-4">{error}</p>
-            <Button onClick={() => window.location.reload()}>Try Again</Button>
-          </div>
-        </Card>
+      <div className="min-h-screen bg-background">
+        <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+          <MainNavigation />
+        </aside>
+        <div className="pl-52 pt-14 flex items-center justify-center h-screen">
+          <Card className="p-6 max-w-md">
+            <div className="text-center">
+              <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+              <h2 className="text-xl font-semibold text-slate-900 mb-2">Error Loading Prospects</h2>
+              <p className="text-slate-600 mb-4">{error}</p>
+              <Button onClick={() => window.location.reload()}>Try Again</Button>
+            </div>
+          </Card>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pt-[81px] pl-12">
-      <MainNavigation />
+    <div className="min-h-screen bg-background">
+      <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+        <MainNavigation />
+      </aside>
 
-      <div className="container mx-auto p-6">
-        <div className="mb-6">
-          <Link href="/" className="inline-flex items-center gap-2 text-[#4A6FA5] hover:underline mb-4">
-            <ArrowLeft className="w-4 h-4" />
-            Back to Dashboard
-          </Link>
-
+      <div className="pl-52 pt-14">
+        <main className="p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-slate-900">Pre-SEED Prospect Interviews</h1>
-              <p className="text-slate-600 mt-1">Track and manage prospective student interviews</p>
+              <h1 className="text-2xl font-bold text-slate-900">Pre-SEED Prospect Interviews</h1>
+              <p className="text-slate-600 text-sm">Track and manage prospective student interviews</p>
             </div>
-            <Button className="bg-[#4A6FA5] hover:bg-[#3A5F95] gap-2">
+            <Button className="bg-primary hover:bg-primary/90 gap-2">
               <Plus className="h-4 w-4" />
               Add New Prospect
             </Button>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <Card className="bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-lg bg-[#4A6FA5]/10">
-                  <Users className="h-6 w-6 text-[#4A6FA5]" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-900">{prospects.length}</p>
-                  <p className="text-sm text-slate-600">Total Prospects</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-lg bg-green-500/10">
-                  <CheckCircle className="h-6 w-6 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-green-900">{completedCount}</p>
-                  <p className="text-sm text-green-700">Completed</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-lg bg-blue-500/10">
-                  <Calendar className="h-6 w-6 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-blue-900">{scheduledCount}</p>
-                  <p className="text-sm text-blue-700">Scheduled</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-200">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-lg bg-yellow-500/10">
-                  <Clock className="h-6 w-6 text-yellow-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-yellow-900">{pendingCount}</p>
-                  <p className="text-sm text-yellow-700">Pending</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Tabs defaultValue="all" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="all">All Prospects</TabsTrigger>
-            <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
-            <TabsTrigger value="completed">Completed</TabsTrigger>
-            <TabsTrigger value="pending">Pending</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="all">
-            <Card>
-              <CardHeader>
-                <CardTitle>All Prospects</CardTitle>
-                <CardDescription>Complete list of all prospective students</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {prospects.map((prospect) => (
-                    <ProspectCard
-                      key={prospect.id}
-                      prospect={prospect}
-                      getProspectName={getProspectName}
-                      getInterviewStatus={getInterviewStatus}
-                      getInterviewDate={getInterviewDate}
-                      getInterviewTime={getInterviewTime}
-                      getEmail={getEmail}
-                      getPhone={getPhone}
-                      getInterviewer={getInterviewer}
-                      getClinic={getClinic}
-                      getNotes={getNotes}
-                      getStatusColor={getStatusColor}
-                      getStatusIcon={getStatusIcon}
-                    />
-                  ))}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <Card className="bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-lg bg-[#4A6FA5]/10">
+                    <Users className="h-6 w-6 text-[#4A6FA5]" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-slate-900">{prospects.length}</p>
+                    <p className="text-sm text-slate-600">Total Prospects</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
 
-          <TabsContent value="scheduled">
-            <Card>
-              <CardHeader>
-                <CardTitle>Scheduled Interviews</CardTitle>
-                <CardDescription>Upcoming interviews that have been confirmed</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {prospects
-                    .filter((p) => {
-                      const status = getInterviewStatus(p.fields).toLowerCase()
-                      return status.includes("schedule") || status.includes("confirm")
-                    })
-                    .map((prospect) => (
+            <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-lg bg-green-500/10">
+                    <CheckCircle className="h-6 w-6 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-green-900">{completedCount}</p>
+                    <p className="text-sm text-green-700">Completed</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-lg bg-blue-500/10">
+                    <Calendar className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-blue-900">{scheduledCount}</p>
+                    <p className="text-sm text-blue-700">Scheduled</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-200">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-lg bg-yellow-500/10">
+                    <Clock className="h-6 w-6 text-yellow-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-yellow-900">{pendingCount}</p>
+                    <p className="text-sm text-yellow-700">Pending</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Tabs defaultValue="all" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="all">All Prospects</TabsTrigger>
+              <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
+              <TabsTrigger value="completed">Completed</TabsTrigger>
+              <TabsTrigger value="pending">Pending</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="all">
+              <Card>
+                <CardHeader>
+                  <CardTitle>All Prospects</CardTitle>
+                  <CardDescription>Complete list of all prospective students</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {prospects.map((prospect) => (
                       <ProspectCard
                         key={prospect.id}
                         prospect={prospect}
@@ -358,81 +327,117 @@ export default function ProspectInterviewsPage() {
                         getStatusIcon={getStatusIcon}
                       />
                     ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-          <TabsContent value="completed">
-            <Card>
-              <CardHeader>
-                <CardTitle>Completed Interviews</CardTitle>
-                <CardDescription>Interviews that have been conducted</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {prospects
-                    .filter((p) => {
-                      const status = getInterviewStatus(p.fields).toLowerCase()
-                      return status.includes("complete") || status.includes("done")
-                    })
-                    .map((prospect) => (
-                      <ProspectCard
-                        key={prospect.id}
-                        prospect={prospect}
-                        getProspectName={getProspectName}
-                        getInterviewStatus={getInterviewStatus}
-                        getInterviewDate={getInterviewDate}
-                        getInterviewTime={getInterviewTime}
-                        getEmail={getEmail}
-                        getPhone={getPhone}
-                        getInterviewer={getInterviewer}
-                        getClinic={getClinic}
-                        getNotes={getNotes}
-                        getStatusColor={getStatusColor}
-                        getStatusIcon={getStatusIcon}
-                      />
-                    ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+            <TabsContent value="scheduled">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Scheduled Interviews</CardTitle>
+                  <CardDescription>Upcoming interviews that have been confirmed</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {prospects
+                      .filter((p) => {
+                        const status = getInterviewStatus(p.fields).toLowerCase()
+                        return status.includes("schedule") || status.includes("confirm")
+                      })
+                      .map((prospect) => (
+                        <ProspectCard
+                          key={prospect.id}
+                          prospect={prospect}
+                          getProspectName={getProspectName}
+                          getInterviewStatus={getInterviewStatus}
+                          getInterviewDate={getInterviewDate}
+                          getInterviewTime={getInterviewTime}
+                          getEmail={getEmail}
+                          getPhone={getPhone}
+                          getInterviewer={getInterviewer}
+                          getClinic={getClinic}
+                          getNotes={getNotes}
+                          getStatusColor={getStatusColor}
+                          getStatusIcon={getStatusIcon}
+                        />
+                      ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-          <TabsContent value="pending">
-            <Card>
-              <CardHeader>
-                <CardTitle>Pending Interviews</CardTitle>
-                <CardDescription>Prospects awaiting interview scheduling</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {prospects
-                    .filter((p) => {
-                      const status = getInterviewStatus(p.fields).toLowerCase()
-                      return !status.includes("complete") && !status.includes("done") && !status.includes("schedule")
-                    })
-                    .map((prospect) => (
-                      <ProspectCard
-                        key={prospect.id}
-                        prospect={prospect}
-                        getProspectName={getProspectName}
-                        getInterviewStatus={getInterviewStatus}
-                        getInterviewDate={getInterviewDate}
-                        getInterviewTime={getInterviewTime}
-                        getEmail={getEmail}
-                        getPhone={getPhone}
-                        getInterviewer={getInterviewer}
-                        getClinic={getClinic}
-                        getNotes={getNotes}
-                        getStatusColor={getStatusColor}
-                        getStatusIcon={getStatusIcon}
-                      />
-                    ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="completed">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Completed Interviews</CardTitle>
+                  <CardDescription>Interviews that have been conducted</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {prospects
+                      .filter((p) => {
+                        const status = getInterviewStatus(p.fields).toLowerCase()
+                        return status.includes("complete") || status.includes("done")
+                      })
+                      .map((prospect) => (
+                        <ProspectCard
+                          key={prospect.id}
+                          prospect={prospect}
+                          getProspectName={getProspectName}
+                          getInterviewStatus={getInterviewStatus}
+                          getInterviewDate={getInterviewDate}
+                          getInterviewTime={getInterviewTime}
+                          getEmail={getEmail}
+                          getPhone={getPhone}
+                          getInterviewer={getInterviewer}
+                          getClinic={getClinic}
+                          getNotes={getNotes}
+                          getStatusColor={getStatusColor}
+                          getStatusIcon={getStatusIcon}
+                        />
+                      ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="pending">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Pending Interviews</CardTitle>
+                  <CardDescription>Prospects awaiting interview scheduling</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {prospects
+                      .filter((p) => {
+                        const status = getInterviewStatus(p.fields).toLowerCase()
+                        return !status.includes("complete") && !status.includes("done") && !status.includes("schedule")
+                      })
+                      .map((prospect) => (
+                        <ProspectCard
+                          key={prospect.id}
+                          prospect={prospect}
+                          getProspectName={getProspectName}
+                          getInterviewStatus={getInterviewStatus}
+                          getInterviewDate={getInterviewDate}
+                          getInterviewTime={getInterviewTime}
+                          getEmail={getEmail}
+                          getPhone={getPhone}
+                          getInterviewer={getInterviewer}
+                          getClinic={getClinic}
+                          getNotes={getNotes}
+                          getStatusColor={getStatusColor}
+                          getStatusIcon={getStatusIcon}
+                        />
+                      ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </main>
       </div>
     </div>
   )

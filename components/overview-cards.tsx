@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Users, Briefcase, AlertCircle } from "lucide-react"
 import { useEffect, useState, useMemo } from "react"
 import { getClinicColor } from "@/lib/clinic-colors"
-import { createBrowserClient } from "@supabase/ssr"
+import { createClient } from "@/lib/supabase/client"
 
 interface OverviewStats {
   activeStudents: number
@@ -43,10 +43,7 @@ export function OverviewCards({ selectedWeeks, selectedClinic, weekSchedule = []
   const [directorStudentIds, setDirectorStudentIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  )
+  const supabase = createClient()
 
   const isDateInWeekRange = (dateStr: string, selectedWeekValues: string[]): boolean => {
     if (selectedWeekValues.length === 0) return true

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { getClinicColor } from "@/lib/clinic-colors"
 import { getClientColor } from "@/lib/client-colors"
-import { createBrowserClient } from "@supabase/ssr"
+import { createClient } from "@/lib/supabase/client"
 
 interface WorkEntry {
   student: string
@@ -27,10 +27,7 @@ export function WeeklyProgramSummary({ selectedWeek, selectedClinic }: WeeklyPro
   const [clientToDirectorMap, setClientToDirectorMap] = useState<Map<string, string>>(new Map())
   const [clientTeamMembers, setClientTeamMembers] = useState<Map<string, string[]>>(new Map())
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  )
+  const supabase = createClient()
 
   useEffect(() => {
     async function fetchData() {

@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { AppSidebar } from "@/components/app-sidebar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -84,11 +86,15 @@ export default function DataMappingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">SEED Data Mapping</h1>
-          <p className="text-slate-600 mt-1">Import and validate Directors, Students, and Clients data</p>
+    <SidebarProvider>
+      <AppSidebar />
+      <main className="flex-1 p-4 space-y-4">
+        <div className="flex items-center gap-2 mb-4">
+          <SidebarTrigger />
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">SEED Data Mapping</h1>
+            <p className="text-slate-600 mt-1">Import and validate Directors, Students, and Clients data</p>
+          </div>
         </div>
 
         {error && (
@@ -319,7 +325,7 @@ export default function DataMappingPage() {
             </CardContent>
           </Card>
         )}
-      </div>
-    </div>
+      </main>
+    </SidebarProvider>
   )
 }

@@ -2,9 +2,8 @@
 
 import { Card } from "@/components/ui/card"
 import { useEffect, useState } from "react"
-import { ChevronRight, X, ArrowLeft } from "lucide-react"
+import { ChevronRight, X } from "lucide-react"
 import { getClinicColor } from "@/lib/clinic-colors"
-import Link from "next/link"
 import { MainNavigation } from "@/components/main-navigation"
 
 interface DebriefRecord {
@@ -134,20 +133,17 @@ export default function StudentHoursPage() {
   )
 
   return (
-    <div className="min-h-screen bg-background pt-[41px] pl-12">
-      <MainNavigation />
+    <div className="min-h-screen bg-background">
+      <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+        <MainNavigation />
+      </aside>
 
-      <div className="container mx-auto p-6">
-        <div className="mb-6">
-          <Link href="/?tab=students" className="inline-flex items-center gap-2 text-primary hover:underline mb-4">
-            <ArrowLeft className="w-4 h-4" />
-            Back to Dashboard
-          </Link>
-
+      <div className="pl-52 pt-14">
+        <main className="p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Student Hours - Full View</h1>
-              <p className="text-muted-foreground">Detailed breakdown of all student hours</p>
+              <h1 className="text-2xl font-bold text-foreground">Student Hours - Full View</h1>
+              <p className="text-muted-foreground text-sm">Detailed breakdown of all student hours</p>
             </div>
 
             <div className="flex items-center gap-4">
@@ -170,110 +166,110 @@ export default function StudentHoursPage() {
               </div>
             </div>
           </div>
-        </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center h-[400px]">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
-        ) : (
-          <Card className="p-6">
-            <div className="flex items-center gap-4 mb-6">
-              <label className="text-sm font-medium">Group by:</label>
-              <button
-                onClick={() => setGroupBy("clinic")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  groupBy === "clinic"
-                    ? "bg-primary text-primary-foreground shadow-md"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                }`}
-              >
-                Clinic
-              </button>
-              <button
-                onClick={() => setGroupBy("client")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  groupBy === "client"
-                    ? "bg-primary text-primary-foreground shadow-md"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                }`}
-              >
-                Client
-              </button>
+          {loading ? (
+            <div className="flex items-center justify-center h-[400px]">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
+          ) : (
+            <Card className="p-6">
+              <div className="flex items-center gap-4 mb-6">
+                <label className="text-sm font-medium">Group by:</label>
+                <button
+                  onClick={() => setGroupBy("clinic")}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    groupBy === "clinic"
+                      ? "bg-primary text-primary-foreground shadow-md"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  Clinic
+                </button>
+                <button
+                  onClick={() => setGroupBy("client")}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    groupBy === "client"
+                      ? "bg-primary text-primary-foreground shadow-md"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  Client
+                </button>
+              </div>
 
-            {Object.keys(groupedData).length > 0 ? (
-              <div className="space-y-6">
-                {Object.entries(groupedData).map(([groupName, students]) => {
-                  const groupTotal = students.reduce((sum, s) => sum + s.totalHours, 0)
-                  const colors =
-                    groupBy === "clinic" ? getClinicColor(groupName) : { hex: "#0077B6", bg: "bg-[#0077B6]" }
+              {Object.keys(groupedData).length > 0 ? (
+                <div className="space-y-6">
+                  {Object.entries(groupedData).map(([groupName, students]) => {
+                    const groupTotal = students.reduce((sum, s) => sum + s.totalHours, 0)
+                    const colors =
+                      groupBy === "clinic" ? getClinicColor(groupName) : { hex: "#0077B6", bg: "bg-[#0077B6]" }
 
-                  return (
-                    <div
-                      key={groupName}
-                      className="bg-card rounded-lg p-6 shadow-md border-2"
-                      style={{ borderColor: colors.hex }}
-                    >
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-3 h-3 rounded-full ${colors.bg}`} />
-                          <h3 className="text-xl font-bold text-foreground">{groupName}</h3>
+                    return (
+                      <div
+                        key={groupName}
+                        className="bg-card rounded-lg p-6 shadow-md border-2"
+                        style={{ borderColor: colors.hex }}
+                      >
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-3 h-3 rounded-full ${colors.bg}`} />
+                            <h3 className="text-xl font-bold text-foreground">{groupName}</h3>
+                          </div>
+                          <span className="text-lg font-bold" style={{ color: colors.hex }}>
+                            {groupTotal.toFixed(1)} hours total
+                          </span>
                         </div>
-                        <span className="text-lg font-bold" style={{ color: colors.hex }}>
-                          {groupTotal.toFixed(1)} hours total
-                        </span>
-                      </div>
-                      <div className="space-y-3">
-                        {students.map((student) => (
-                          <button
-                            key={student.name}
-                            onClick={() => setSelectedStudent(student)}
-                            className="w-full flex items-center justify-between p-4 rounded-lg bg-background border-2 hover:shadow-lg transition-all group"
-                            style={{ borderColor: `${colors.hex}30` }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.borderColor = colors.hex
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.borderColor = `${colors.hex}30`
-                            }}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={`w-12 h-12 rounded-full ${colors.bg} flex items-center justify-center text-white font-bold text-lg`}
-                              >
-                                {student.name.charAt(0)}
+                        <div className="space-y-3">
+                          {students.map((student) => (
+                            <button
+                              key={student.name}
+                              onClick={() => setSelectedStudent(student)}
+                              className="w-full flex items-center justify-between p-4 rounded-lg bg-background border-2 hover:shadow-lg transition-all group"
+                              style={{ borderColor: `${colors.hex}30` }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.borderColor = colors.hex
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.borderColor = `${colors.hex}30`
+                              }}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={`w-12 h-12 rounded-full ${colors.bg} flex items-center justify-center text-white font-bold text-lg`}
+                                >
+                                  {student.name.charAt(0)}
+                                </div>
+                                <div className="text-left">
+                                  <p className="font-semibold text-foreground text-base">{student.name}</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {student.records.length} {student.records.length === 1 ? "entry" : "entries"}
+                                  </p>
+                                </div>
                               </div>
-                              <div className="text-left">
-                                <p className="font-semibold text-foreground text-base">{student.name}</p>
-                                <p className="text-sm text-muted-foreground">
-                                  {student.records.length} {student.records.length === 1 ? "entry" : "entries"}
-                                </p>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xl font-bold" style={{ color: colors.hex }}>
+                                  {student.totalHours.toFixed(1)}h
+                                </span>
+                                <ChevronRight
+                                  className="w-5 h-5 group-hover:translate-x-1 transition-transform"
+                                  style={{ color: colors.hex }}
+                                />
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xl font-bold" style={{ color: colors.hex }}>
-                                {student.totalHours.toFixed(1)}h
-                              </span>
-                              <ChevronRight
-                                className="w-5 h-5 group-hover:translate-x-1 transition-transform"
-                                style={{ color: colors.hex }}
-                              />
-                            </div>
-                          </button>
-                        ))}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-[300px]">
-                <p className="text-muted-foreground">No hours data available</p>
-              </div>
-            )}
-          </Card>
-        )}
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-[300px]">
+                  <p className="text-muted-foreground">No hours data available</p>
+                </div>
+              )}
+            </Card>
+          )}
+        </main>
       </div>
 
       {selectedStudent && (

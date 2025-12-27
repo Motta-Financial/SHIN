@@ -297,6 +297,17 @@ export default function ClassCoursePage() {
       created_at: string
       average_rating: number
       evaluation_type?: string
+      question_1_rating?: number
+      question_1_notes?: string
+      question_2_rating?: number
+      question_2_notes?: string
+      question_3_rating?: number
+      question_3_notes?: string
+      question_4_rating?: number
+      question_4_notes?: string
+      question_5_rating?: number
+      question_5_notes?: string
+      additional_comments?: string
     }>
   >([])
   const [clientDeliverables, setClientDeliverables] = useState<
@@ -911,14 +922,16 @@ export default function ClassCoursePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <MainNavigation userRole="director" userName="Director" />
-      <main className="container mx-auto px-4 py-8 max-w-7xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Class Course Dashboard</h1>
+      <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+        <MainNavigation userRole="director" userName="Director" />
+      </aside>
+      <main className="pl-52 pt-14 p-4 space-y-4">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold tracking-tight">Class Course Dashboard</h1>
           <p className="text-muted-foreground mt-1">Fall 2025 Semester</p>
         </div>
 
-        <Tabs defaultValue="announcements" className="space-y-6">
+        <Tabs defaultValue="announcements" className="space-y-4">
           <TabsList className="bg-muted/50 p-1 rounded-lg">
             <TabsTrigger
               value="announcements"
@@ -1625,30 +1638,178 @@ export default function ClassCoursePage() {
                         {(clientEvalsMidterm.length > 0 || clientEvalsFinal.length > 0) && (
                           <div className="mt-3 pt-3 border-t">
                             <p className="text-xs font-medium text-muted-foreground mb-2">Submitted Evaluations</p>
-                            <div className="flex flex-wrap gap-2">
+                            <Accordion type="single" collapsible className="w-full space-y-2">
                               {clientEvalsMidterm.map((evaluation) => (
-                                <Badge
+                                <AccordionItem
                                   key={evaluation.id}
-                                  variant="outline"
-                                  className="text-xs bg-blue-50 border-blue-200 text-blue-800"
+                                  value={`eval-${evaluation.id}`}
+                                  className="border rounded-lg bg-blue-50/50 border-blue-200"
                                 >
-                                  {evaluation.director_name} - {evaluation.average_rating.toFixed(1)}
-                                  <Star className="h-3 w-3 ml-1 text-yellow-500" />
-                                  (Mid-Term)
-                                </Badge>
+                                  <AccordionTrigger className="px-3 py-2 hover:no-underline">
+                                    <div className="flex items-center gap-2 text-left">
+                                      <Badge
+                                        variant="outline"
+                                        className="text-xs bg-blue-50 border-blue-200 text-blue-800"
+                                      >
+                                        {evaluation.director_name} - {evaluation.average_rating.toFixed(1)}
+                                        <Star className="h-3 w-3 ml-1 text-yellow-500 fill-yellow-500" />
+                                        (Mid-Term)
+                                      </Badge>
+                                    </div>
+                                  </AccordionTrigger>
+                                  <AccordionContent className="px-3 pb-3">
+                                    <div className="space-y-3 pt-2">
+                                      {/* Question Ratings with Notes */}
+                                      {[
+                                        {
+                                          label: "Presentation Opening",
+                                          rating: evaluation.question_1_rating,
+                                          notes: evaluation.question_1_notes,
+                                        },
+                                        {
+                                          label: "Business Knowledge",
+                                          rating: evaluation.question_2_rating,
+                                          notes: evaluation.question_2_notes,
+                                        },
+                                        {
+                                          label: "Industry Knowledge",
+                                          rating: evaluation.question_3_rating,
+                                          notes: evaluation.question_3_notes,
+                                        },
+                                        {
+                                          label: "Performance Metrics",
+                                          rating: evaluation.question_4_rating,
+                                          notes: evaluation.question_4_notes,
+                                        },
+                                        {
+                                          label: "Project Outline",
+                                          rating: evaluation.question_5_rating,
+                                          notes: evaluation.question_5_notes,
+                                        },
+                                      ].map((q, idx) => (
+                                        <div key={idx} className="bg-white rounded-lg p-3 border border-blue-100">
+                                          <div className="flex items-center justify-between mb-1">
+                                            <span className="text-xs font-medium text-slate-700">
+                                              Q{idx + 1}: {q.label}
+                                            </span>
+                                            <div className="flex items-center gap-1">
+                                              {[1, 2, 3, 4, 5].map((star) => (
+                                                <Star
+                                                  key={star}
+                                                  className={`h-3 w-3 ${star <= q.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`}
+                                                />
+                                              ))}
+                                              <span className="text-xs font-semibold ml-1">{q.rating}/5</span>
+                                            </div>
+                                          </div>
+                                          {q.notes && (
+                                            <p className="text-xs text-slate-600 mt-2 italic border-l-2 border-blue-200 pl-2">
+                                              {q.notes}
+                                            </p>
+                                          )}
+                                        </div>
+                                      ))}
+                                      {/* Additional Comments */}
+                                      {evaluation.additional_comments && (
+                                        <div className="bg-white rounded-lg p-3 border border-blue-100">
+                                          <span className="text-xs font-medium text-slate-700">
+                                            Additional Comments
+                                          </span>
+                                          <p className="text-xs text-slate-600 mt-1">
+                                            {evaluation.additional_comments}
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </AccordionContent>
+                                </AccordionItem>
                               ))}
                               {clientEvalsFinal.map((evaluation) => (
-                                <Badge
+                                <AccordionItem
                                   key={evaluation.id}
-                                  variant="outline"
-                                  className="text-xs bg-purple-50 border-purple-200 text-purple-800"
+                                  value={`eval-${evaluation.id}`}
+                                  className="border rounded-lg bg-purple-50/50 border-purple-200"
                                 >
-                                  {evaluation.director_name} - {evaluation.average_rating.toFixed(1)}
-                                  <Star className="h-3 w-3 ml-1 text-yellow-500" />
-                                  (Final)
-                                </Badge>
+                                  <AccordionTrigger className="px-3 py-2 hover:no-underline">
+                                    <div className="flex items-center gap-2 text-left">
+                                      <Badge
+                                        variant="outline"
+                                        className="text-xs bg-purple-50 border-purple-200 text-purple-800"
+                                      >
+                                        {evaluation.director_name} - {evaluation.average_rating.toFixed(1)}
+                                        <Star className="h-3 w-3 ml-1 text-yellow-500 fill-yellow-500" />
+                                        (Final)
+                                      </Badge>
+                                    </div>
+                                  </AccordionTrigger>
+                                  <AccordionContent className="px-3 pb-3">
+                                    <div className="space-y-3 pt-2">
+                                      {/* Question Ratings with Notes */}
+                                      {[
+                                        {
+                                          label: "Executive Summary",
+                                          rating: evaluation.question_1_rating,
+                                          notes: evaluation.question_1_notes,
+                                        },
+                                        {
+                                          label: "Deliverables Quality",
+                                          rating: evaluation.question_2_rating,
+                                          notes: evaluation.question_2_notes,
+                                        },
+                                        {
+                                          label: "Analysis & Recommendations",
+                                          rating: evaluation.question_3_rating,
+                                          notes: evaluation.question_3_notes,
+                                        },
+                                        {
+                                          label: "Presentation Skills",
+                                          rating: evaluation.question_4_rating,
+                                          notes: evaluation.question_4_notes,
+                                        },
+                                        {
+                                          label: "Client Impact",
+                                          rating: evaluation.question_5_rating,
+                                          notes: evaluation.question_5_notes,
+                                        },
+                                      ].map((q, idx) => (
+                                        <div key={idx} className="bg-white rounded-lg p-3 border border-purple-100">
+                                          <div className="flex items-center justify-between mb-1">
+                                            <span className="text-xs font-medium text-slate-700">
+                                              Q{idx + 1}: {q.label}
+                                            </span>
+                                            <div className="flex items-center gap-1">
+                                              {[1, 2, 3, 4, 5].map((star) => (
+                                                <Star
+                                                  key={star}
+                                                  className={`h-3 w-3 ${star <= q.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`}
+                                                />
+                                              ))}
+                                              <span className="text-xs font-semibold ml-1">{q.rating}/5</span>
+                                            </div>
+                                          </div>
+                                          {q.notes && (
+                                            <p className="text-xs text-slate-600 mt-2 italic border-l-2 border-purple-200 pl-2">
+                                              {q.notes}
+                                            </p>
+                                          )}
+                                        </div>
+                                      ))}
+                                      {/* Additional Comments */}
+                                      {evaluation.additional_comments && (
+                                        <div className="bg-white rounded-lg p-3 border border-purple-100">
+                                          <span className="text-xs font-medium text-slate-700">
+                                            Additional Comments
+                                          </span>
+                                          <p className="text-xs text-slate-600 mt-1">
+                                            {evaluation.additional_comments}
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </AccordionContent>
+                                </AccordionItem>
                               ))}
-                            </div>
+                            </Accordion>
                           </div>
                         )}
 

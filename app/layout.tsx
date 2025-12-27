@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { Geist, Geist_Mono, Inter } from "next/font/google"
 // import { ClerkProvider } from "@clerk/nextjs"
 import "./globals.css"
+import { GlobalHeader } from "@/components/global-header"
 
 const geistSans = Geist({
   subsets: ["latin"],
@@ -31,7 +32,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${inter.variable}`}>
-      <body className={`font-sans antialiased`}>{children}</body>
+      <body className={`font-sans antialiased`}>
+        <GlobalHeader />
+        {children}
+      </body>
     </html>
   )
 }

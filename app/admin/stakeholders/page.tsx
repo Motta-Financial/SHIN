@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { AppSidebar } from "@/components/app-sidebar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -96,15 +98,19 @@ export default function StakeholdersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900">Stakeholder Data Management</h1>
-          <p className="text-slate-600 mt-2">Import and link Students, Directors, and Clients in Supabase</p>
+    <SidebarProvider>
+      <AppSidebar />
+      <main className="flex-1 p-4 space-y-4">
+        <div className="flex items-center gap-2 mb-4">
+          <SidebarTrigger />
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Stakeholder Data Management</h1>
+            <p className="text-slate-600 mt-2">Import and link Students, Directors, and Clients in Supabase</p>
+          </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-4 mb-8">
+        <div className="flex gap-4 mb-6">
           <Button onClick={runImport} disabled={loading} className="bg-blue-600 hover:bg-blue-700">
             {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Users className="h-4 w-4 mr-2" />}
             {loading ? "Importing..." : "Import & Link All Stakeholders"}
@@ -124,7 +130,7 @@ export default function StakeholdersPage() {
 
         {/* Import Results */}
         {importResults && (
-          <Card className="mb-8">
+          <Card className="mb-6">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-green-600" />
@@ -181,7 +187,7 @@ export default function StakeholdersPage() {
         {auditResults && (
           <>
             {/* Summary Cards */}
-            <div className="grid grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-4 gap-4 mb-6">
               <Card>
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-4">
@@ -239,7 +245,7 @@ export default function StakeholdersPage() {
             </div>
 
             {/* Students by Clinic */}
-            <Card className="mb-8">
+            <Card className="mb-6">
               <CardHeader>
                 <CardTitle>Students by Clinic</CardTitle>
               </CardHeader>
@@ -257,7 +263,7 @@ export default function StakeholdersPage() {
             </Card>
 
             {/* Validation Results */}
-            <Card className="mb-8">
+            <Card className="mb-6">
               <CardHeader>
                 <CardTitle>Data Validation</CardTitle>
                 <CardDescription>Checking that all clients have students from all 4 clinics</CardDescription>
@@ -364,7 +370,7 @@ export default function StakeholdersPage() {
             </Card>
           </>
         )}
-      </div>
-    </div>
+      </main>
+    </SidebarProvider>
   )
 }

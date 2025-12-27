@@ -46,12 +46,15 @@ export default function MyClinicPage() {
         : "Select director"
 
   return (
-    <>
-      <MainNavigation />
-      <main className="min-h-screen bg-slate-50 pt-[48px] pl-12">
-        <div className="p-6">
+    <div className="min-h-screen bg-background">
+      <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+        <MainNavigation />
+      </aside>
+
+      <div className="pl-52 pt-14">
+        <main className="p-4 space-y-4">
           {/* Header */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-slate-800 flex items-center justify-center">
                 <Building2 className="h-5 w-5 text-white" />
@@ -85,8 +88,8 @@ export default function MyClinicPage() {
           </div>
 
           <ClinicView selectedClinic={selectedDirectorId} selectedWeeks={[]} />
-        </div>
-      </main>
-    </>
+        </main>
+      </div>
+    </div>
   )
 }
