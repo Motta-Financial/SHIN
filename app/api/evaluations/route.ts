@@ -66,6 +66,8 @@ export async function POST(request: NextRequest) {
       client_id,
       director_name,
       directorName,
+      evaluation_type,
+      evaluationType,
       question_1_rating,
       question1Rating,
       question_2_rating,
@@ -93,6 +95,7 @@ export async function POST(request: NextRequest) {
     const finalDocumentId = document_id || documentId
     const finalClientId = client_id
     const finalDirectorName = director_name || directorName
+    const finalEvaluationType = evaluation_type || evaluationType || "midterm"
     const finalQ1Rating = question_1_rating ?? question1Rating
     const finalQ2Rating = question_2_rating ?? question2Rating
     const finalQ3Rating = question_3_rating ?? question3Rating
@@ -118,7 +121,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Ratings must be between 1 and 5" }, { status: 400 })
     }
 
-    let existingQuery = supabase.from("evaluations").select("id").eq("director_name", finalDirectorName)
+    let existingQuery = supabase
+      .from("evaluations")
+      .select("id")
+      .eq("director_name", finalDirectorName)
+      .eq("evaluation_type", finalEvaluationType)
 
     if (finalDocumentId) {
       existingQuery = existingQuery.eq("document_id", finalDocumentId)
@@ -132,6 +139,7 @@ export async function POST(request: NextRequest) {
       document_id: finalDocumentId || null,
       client_id: finalClientId || null,
       director_name: finalDirectorName.trim(),
+      evaluation_type: finalEvaluationType,
       question_1_rating: finalQ1Rating,
       question_2_rating: finalQ2Rating,
       question_3_rating: finalQ3Rating,
