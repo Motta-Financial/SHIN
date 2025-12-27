@@ -1,10 +1,13 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+function getSupabaseClient() {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+}
 
 export async function GET(request: Request) {
   try {
+    const supabase = getSupabaseClient()
     const { searchParams } = new URL(request.url)
     const userEmail = searchParams.get("userEmail")
     const userType = searchParams.get("userType")
@@ -31,6 +34,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const supabase = getSupabaseClient()
     const body = await request.json()
     const { agreementType, userName, userEmail, userType, signature, signedAt, programName, clientName } = body
 

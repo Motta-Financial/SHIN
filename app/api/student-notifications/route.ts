@@ -1,7 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+function getSupabaseClient() {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+}
 
 function isValidUUID(str: string | null): boolean {
   if (!str) return false
@@ -11,6 +13,7 @@ function isValidUUID(str: string | null): boolean {
 
 export async function GET(request: NextRequest) {
   try {
+    const supabase = getSupabaseClient()
     const { searchParams } = new URL(request.url)
     const studentIdParam = searchParams.get("studentId")
     const clinicIdParam = searchParams.get("clinicId")
@@ -32,7 +35,6 @@ export async function GET(request: NextRequest) {
     } else if (clinicId) {
       query = query.or(`clinic_id.eq.${clinicId},clinic_id.is.null`)
     }
-    // If no valid IDs, just return all student-targeted notifications (already filtered by target_audience)
 
     const { data, error } = await query
 
@@ -50,6 +52,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = getSupabaseClient()
     const body = await request.json()
     const { studentId, clinicId, title, message, type, createdBy, createdById } = body
 
