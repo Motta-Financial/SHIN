@@ -8,6 +8,7 @@ import { ChevronDown, ChevronRight, Users, Clock, FileText } from "lucide-react"
 import { getClinicColor } from "@/lib/clinic-colors"
 import { StakeholderContactCard } from "@/components/stakeholder"
 import { Button } from "@/components/ui/button"
+import { useDirectors } from "@/hooks/use-directors"
 
 interface ActiveStudentsProps {
   selectedWeek: string
@@ -25,18 +26,12 @@ interface StudentDebrief {
   questions?: string
 }
 
-interface Director {
-  id: string
-  full_name: string
-  clinicName?: string
-}
-
 export function ActiveStudents({ selectedWeek, selectedClinic }: ActiveStudentsProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
   const [activeStudents, setActiveStudents] = useState<StudentDebrief[]>([])
   const [loading, setLoading] = useState(true)
-  const [directors, setDirectors] = useState<Director[]>([])
+  const { directors } = useDirectors()
 
   const toggleStudent = (studentName: string) => {
     setExpandedStudents((prev) => {
@@ -49,21 +44,6 @@ export function ActiveStudents({ selectedWeek, selectedClinic }: ActiveStudentsP
       return newSet
     })
   }
-
-  useEffect(() => {
-    async function fetchDirectors() {
-      try {
-        const res = await fetch("/api/directors")
-        if (res.ok) {
-          const data = await res.json()
-          setDirectors(data.directors || [])
-        }
-      } catch (error) {
-        console.error("Error fetching directors:", error)
-      }
-    }
-    fetchDirectors()
-  }, [])
 
   useEffect(() => {
     async function fetchData() {
@@ -79,7 +59,9 @@ export function ActiveStudents({ selectedWeek, selectedClinic }: ActiveStudentsP
             const isUUID = selectedClinic.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
             if (isUUID) {
               const director = directors.find((d) => d.id === selectedClinic)
-              filterClinicName = director?.clinicName || "all"
+              if (director?.clinic) {
+                filterClinicName = director.clinic
+              }
             } else {
               filterClinicName = selectedClinic
             }

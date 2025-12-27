@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { ChevronRight, X } from "lucide-react"
 import { getClinicColor } from "@/lib/clinic-colors"
 import Link from "next/link"
+import { useDirectors } from "@/hooks/use-directors"
 
 interface DebriefRecord {
   weekEnding: string
@@ -31,22 +32,7 @@ export function StudentHours({ selectedWeeks, selectedClinic }: StudentHoursProp
   const [loading, setLoading] = useState(true)
   const [groupBy, setGroupBy] = useState<"clinic" | "client">("clinic")
   const [selectedStudent, setSelectedStudent] = useState<StudentSummary | null>(null)
-  const [directors, setDirectors] = useState<any[]>([])
-
-  useEffect(() => {
-    async function fetchDirectors() {
-      try {
-        const res = await fetch("/api/directors")
-        if (res.ok) {
-          const data = await res.json()
-          setDirectors(data.directors || [])
-        }
-      } catch (error) {
-        console.error("[v0] Error fetching directors:", error)
-      }
-    }
-    fetchDirectors()
-  }, [])
+  const { directors } = useDirectors()
 
   const normalizeDate = (dateStr: string): string => {
     if (!dateStr) return ""
@@ -72,21 +58,15 @@ export function StudentHours({ selectedWeeks, selectedClinic }: StudentHoursProp
 
         const debriefs = debriefsData.debriefs || []
 
-        console.log("[v0] Student Hours - Total debrief records:", debriefs.length)
-        console.log("[v0] Student Hours - Selected weeks:", selectedWeeks)
-        console.log("[v0] Student Hours - Selected clinic:", selectedClinic)
-
         const studentMap = new Map<string, StudentSummary>()
-        let filteredRecordsCount = 0
 
         let filterClinicName = "all"
         if (selectedClinic && selectedClinic !== "all") {
-          // Check if selectedClinic is a director ID (UUID format)
           const isUUID = selectedClinic.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
           if (isUUID) {
             const director = directors.find((d) => d.id === selectedClinic)
-            if (director?.clinicName) {
-              filterClinicName = director.clinicName
+            if (director?.clinic) {
+              filterClinicName = director.clinic
             }
           } else {
             filterClinicName = selectedClinic
@@ -112,8 +92,6 @@ export function StudentHours({ selectedWeeks, selectedClinic }: StudentHoursProp
             return
           }
 
-          filteredRecordsCount++
-
           if (!studentMap.has(studentName)) {
             studentMap.set(studentName, {
               name: studentName,
@@ -134,19 +112,12 @@ export function StudentHours({ selectedWeeks, selectedClinic }: StudentHoursProp
           })
         })
 
-        console.log("[v0] Student Hours - Filtered records for week:", filteredRecordsCount)
-        console.log("[v0] Student Hours - Unique students:", studentMap.size)
-
         const studentsArray = Array.from(studentMap.values())
         studentsArray.sort((a, b) => b.totalHours - a.totalHours)
 
-        console.log(
-          "[v0] Student Hours - Final data:",
-          studentsArray.map((s) => ({ name: s.name, hours: s.totalHours, clinic: s.clinic })),
-        )
         setData(studentsArray)
       } catch (error) {
-        console.error("[v0] Error fetching student hours:", error)
+        console.error("Error fetching student hours:", error)
       } finally {
         setLoading(false)
       }

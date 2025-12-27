@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { OnboardingAgreements } from "@/components/onboarding-agreements"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   RefreshCw,
   BarChart3,
@@ -22,8 +23,10 @@ import {
   Download,
   ChevronDown,
   Building2,
+  AlertCircle,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { useDirectors } from "@/hooks/use-directors"
 
 interface QuickStats {
   totalHours: number
@@ -44,8 +47,16 @@ interface WeekSchedule {
   weekEnd: string
 }
 
+interface Director {
+  id: string
+  full_name: string
+  email: string
+  clinic: string
+  job_title?: string
+  role?: string
+}
+
 async function getAvailableWeeks(): Promise<{ weeks: string[]; schedule: WeekSchedule[] }> {
-  // Only run on client side
   if (typeof window === "undefined") {
     return { weeks: [], schedule: [] }
   }
@@ -127,11 +138,18 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
   }
 }
 
-export default function DirectorPortal() {
+export default function DirectorPortalPage() {
   const [availableWeeks, setAvailableWeeks] = useState<string[]>([])
   const [weekSchedule, setWeekSchedule] = useState<WeekSchedule[]>([])
   const [selectedWeeks, setSelectedWeeks] = useState<string[]>([])
   const [selectedDirectorId, setSelectedDirectorId] = useState<string>("all")
+  const { directors, isLoading: directorsLoading } = useDirectors()
+  const [currentDirector, setCurrentDirector] = useState<{
+    name: string
+    email: string
+    clinic: string
+    jobTitle: string
+  } | null>(null)
   const [quickStats, setQuickStats] = useState<QuickStats>({
     totalHours: 0,
     activeStudents: 0,
@@ -144,7 +162,30 @@ export default function DirectorPortal() {
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("overview")
   const [signedAgreements, setSignedAgreements] = useState<string[]>([])
-  const [currentDirector, setCurrentDirector] = useState<{ name: string; email: string } | null>(null)
+
+  useEffect(() => {
+    if (directors.length > 0 && selectedDirectorId === "all") {
+      // Auto-select first director for personalized demo
+      const firstDirector = directors[0]
+      setSelectedDirectorId(firstDirector.id)
+      setCurrentDirector({
+        name: firstDirector.full_name,
+        email: firstDirector.email || "",
+        clinic: firstDirector.clinic || "",
+        jobTitle: firstDirector.job_title || "Director",
+      })
+    } else if (selectedDirectorId !== "all") {
+      const director = directors.find((d) => d.id === selectedDirectorId)
+      if (director) {
+        setCurrentDirector({
+          name: director.full_name,
+          email: director.email || "",
+          clinic: director.clinic || "",
+          jobTitle: director.job_title || "Director",
+        })
+      }
+    }
+  }, [directors, selectedDirectorId])
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -179,33 +220,43 @@ export default function DirectorPortal() {
   }, [selectedWeeks, selectedDirectorId])
 
   useEffect(() => {
-    const fetchDirectorInfo = async () => {
-      if (!selectedDirectorId || selectedDirectorId === "all") return
-      try {
-        // Get director info
-        const dirRes = await fetch("/api/directors")
-        const dirData = await dirRes.json()
-        const director = dirData.directors?.find((d: any) => d.id === selectedDirectorId)
-        if (director) {
-          setCurrentDirector({ name: director.full_name, email: director.email || "" })
+    const updateDirectorInfo = async () => {
+      if (!selectedDirectorId || selectedDirectorId === "all") {
+        setCurrentDirector(null)
+        setSignedAgreements([])
+        return
+      }
 
-          // Fetch signed agreements for this director
-          if (director.email) {
+      const director = directors.find((d) => d.id === selectedDirectorId)
+      if (director) {
+        setCurrentDirector({
+          name: director.full_name,
+          email: director.email || "",
+          clinic: director.clinic || "",
+          jobTitle: director.job_title || "Director",
+        })
+
+        // Fetch signed agreements for this director
+        if (director.email) {
+          try {
             const agreeRes = await fetch(`/api/agreements?userEmail=${encodeURIComponent(director.email)}`)
             const agreeData = await agreeRes.json()
             if (agreeData.agreements) {
               setSignedAgreements(agreeData.agreements.map((a: any) => a.agreement_type))
+            } else {
+              setSignedAgreements([])
             }
+          } catch (error) {
+            console.error("Error fetching agreements:", error)
+            setSignedAgreements([])
           }
         }
-      } catch (error) {
-        console.error("Error fetching director info:", error)
       }
     }
-    fetchDirectorInfo()
-  }, [selectedDirectorId])
+    updateDirectorInfo()
+  }, [selectedDirectorId, directors])
 
-  const handleClinicChange = (directorId: string) => {
+  const handleDirectorChange = (directorId: string) => {
     setSelectedDirectorId(directorId)
   }
 
@@ -225,12 +276,6 @@ export default function DirectorPortal() {
     return week ? week.label : weekValue
   }
 
-  const handleDirectorChange = (directorId: string) => {
-    console.log("[v0] DirectorPortal - handleDirectorChange called with:", directorId)
-    console.log("[v0] DirectorPortal - directorId type:", typeof directorId)
-    setSelectedDirectorId(directorId)
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100">
       <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
@@ -238,27 +283,63 @@ export default function DirectorPortal() {
       </aside>
       <div className="pl-52 pt-14">
         <DashboardHeader
-          selectedClinic={selectedDirectorId}
-          onClinicChange={handleDirectorChange}
           selectedWeeks={selectedWeeks}
           onWeeksChange={setSelectedWeeks}
           availableWeeks={availableWeeks}
+          selectedDirectorId={selectedDirectorId}
+          onDirectorChange={handleDirectorChange}
+          showDirectorFilter={true}
         />
 
         <main className="p-4 space-y-4">
+          <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm text-amber-800 font-medium">Demo Mode</p>
+              <p className="text-xs text-amber-600">
+                In production, directors will be authenticated and see only their personalized dashboard.
+              </p>
+            </div>
+            <Select value={selectedDirectorId} onValueChange={handleDirectorChange}>
+              <SelectTrigger className="w-[240px] bg-white">
+                <SelectValue placeholder="Select a director to preview" />
+              </SelectTrigger>
+              <SelectContent>
+                {directors.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.full_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-semibold tracking-tight text-foreground">Director Dashboard</h1>
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                  {currentDirector ? `Welcome, ${currentDirector.name.split(" ")[0]}` : "Director Dashboard"}
+                </h1>
               </div>
-              <p className="text-muted-foreground flex items-center gap-2 text-sm">
-                <Calendar className="h-4 w-4" />
-                {selectedWeeks.length === 0
-                  ? "Select Week"
-                  : selectedWeeks.length === 1
-                    ? getWeekLabel(selectedWeeks[0])
-                    : `${selectedWeeks.length} weeks`}
-              </p>
+              <div className="flex items-center gap-3 text-muted-foreground text-sm">
+                <span className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  {selectedWeeks.length === 0
+                    ? "Select Week"
+                    : selectedWeeks.length === 1
+                      ? getWeekLabel(selectedWeeks[0])
+                      : `${selectedWeeks.length} weeks`}
+                </span>
+                {currentDirector && (
+                  <>
+                    <span className="text-muted-foreground/50">•</span>
+                    <span className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4" />
+                      {currentDirector.clinic}
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center gap-3">
@@ -328,7 +409,9 @@ export default function DirectorPortal() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">{quickStats.totalHours}</div>
-                    <p className="text-xs text-muted-foreground">This period</p>
+                    <p className="text-xs text-muted-foreground">
+                      {currentDirector ? "Your students this period" : "This period"}
+                    </p>
                   </CardContent>
                 </Card>
                 <Card>
@@ -348,7 +431,9 @@ export default function DirectorPortal() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">{quickStats.activeClients}</div>
-                    <p className="text-xs text-muted-foreground">With activity</p>
+                    <p className="text-xs text-muted-foreground">
+                      {currentDirector ? "Your clients with activity" : "With activity"}
+                    </p>
                   </CardContent>
                 </Card>
                 <Card>
@@ -380,7 +465,6 @@ export default function DirectorPortal() {
             </TabsContent>
 
             <TabsContent value="my-clinic" className="space-y-6">
-              {console.log("[v0] DirectorPortal - Passing to ClinicView:", selectedDirectorId)}
               <ClinicView selectedClinic={selectedDirectorId} selectedWeeks={selectedWeeks} />
             </TabsContent>
 

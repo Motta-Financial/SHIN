@@ -1,41 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { ClinicView } from "@/components/clinic-view"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MainNavigation } from "@/components/main-navigation"
 import { Building2, Loader2 } from "lucide-react"
-
-interface Director {
-  id: string
-  full_name: string
-  clinic: string
-  email: string
-  job_title?: string
-  role?: string
-}
+import { useDirectors } from "@/hooks/use-directors"
 
 export default function MyClinicPage() {
   const [selectedDirectorId, setSelectedDirectorId] = useState<string>("all")
-  const [directors, setDirectors] = useState<Director[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-
-  useEffect(() => {
-    async function fetchDirectors() {
-      try {
-        const res = await fetch("/api/directors")
-        const data = await res.json()
-        if (data.directors) {
-          setDirectors(data.directors)
-        }
-      } catch (error) {
-        console.error("Error fetching directors:", error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    fetchDirectors()
-  }, [])
+  const { directors, isLoading } = useDirectors()
 
   const selectedDirector = directors.find((d) => d.id === selectedDirectorId)
   const displayName =

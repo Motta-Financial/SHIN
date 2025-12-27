@@ -33,6 +33,7 @@ import { DocumentUpload } from "@/components/document-upload"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { ClientServiceTab } from "@/components/client-service-tab"
+import { useDirectors } from "@/hooks/use-directors"
 
 interface TeamMember {
   id: string
@@ -163,6 +164,7 @@ export function ClientEngagements({ selectedWeeks, selectedClinic }: ClientEngag
   const [expandedClient, setExpandedClient] = useState<string | null>(null)
   const [clientTabs, setClientTabs] = useState<Record<string, string>>({})
   const [directorInfo, setDirectorInfo] = useState<{ id: string; name: string; email: string } | null>(null)
+  const { directors } = useDirectors()
 
   const getClientTab = (clientId: string) => clientTabs[clientId] || "overview"
   const setClientTab = (clientId: string, tab: string) => {
@@ -170,32 +172,19 @@ export function ClientEngagements({ selectedWeeks, selectedClinic }: ClientEngag
   }
 
   useEffect(() => {
-    const fetchDirectorInfo = async () => {
-      if (selectedClinic && selectedClinic !== "all") {
-        try {
-          const res = await fetch("/api/directors")
-          if (res.ok) {
-            const data = await res.json()
-            const directors = data.directors || []
-            // Find director by id or name
-            const director = directors.find(
-              (d: any) => d.id === selectedClinic || d.full_name?.toLowerCase().includes(selectedClinic.toLowerCase()),
-            )
-            if (director) {
-              setDirectorInfo({
-                id: director.id,
-                name: director.full_name,
-                email: director.email || `${director.full_name?.toLowerCase().replace(/\s+/g, ".")}@suffolk.edu`,
-              })
-            }
-          }
-        } catch (err) {
-          console.error("Error fetching director info:", err)
-        }
+    if (selectedClinic && selectedClinic !== "all" && directors.length > 0) {
+      const director = directors.find(
+        (d: any) => d.id === selectedClinic || d.full_name?.toLowerCase().includes(selectedClinic.toLowerCase()),
+      )
+      if (director) {
+        setDirectorInfo({
+          id: director.id,
+          name: director.full_name,
+          email: director.email || `${director.full_name?.toLowerCase().replace(/\s+/g, ".")}@suffolk.edu`,
+        })
       }
     }
-    fetchDirectorInfo()
-  }, [selectedClinic])
+  }, [selectedClinic, directors])
 
   useEffect(() => {
     async function fetchData() {
