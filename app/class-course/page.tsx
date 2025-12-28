@@ -413,6 +413,20 @@ export default function ClassCoursePage() {
   const [postingAnnouncement, setPostingAnnouncement] = useState(false)
   const [clinics, setClinics] = useState<Array<{ id: string; name: string }>>([])
 
+  // State for student selection in demo mode
+  interface Student {
+    id: string
+    first_name: string
+    last_name: string
+    email: string
+    clinic_id: string
+    clinic_name: string
+    is_team_lead?: boolean // Added for role display
+  }
+  const [students, setStudents] = useState<Student[]>([])
+  const [selectedStudentId, setSelectedStudentId] = useState<string>("")
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
+
   useEffect(() => {
     const fetchEvaluations = async () => {
       try {
@@ -535,6 +549,33 @@ export default function ClassCoursePage() {
     fetchAnnouncements()
     fetchClinics()
   }, [])
+
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        const res = await fetch("/api/supabase/students")
+        if (res.ok) {
+          const data = await res.json()
+          setStudents(data.students || [])
+        } else {
+          console.error("Failed to fetch students")
+        }
+      } catch (error) {
+        console.error("Error fetching students:", error)
+      }
+    }
+    fetchStudents()
+  }, [])
+
+  // Update selectedStudent when selectedStudentId changes
+  useEffect(() => {
+    if (selectedStudentId) {
+      const student = students.find((s) => s.id === selectedStudentId)
+      setSelectedStudent(student || null)
+    } else {
+      setSelectedStudent(null)
+    }
+  }, [selectedStudentId, students])
 
   useEffect(() => {
     fetchMaterials()
@@ -920,6 +961,16 @@ export default function ClassCoursePage() {
     })
   }
 
+  // Helper to get current week number (assuming semester starts on Jan 1st for simplicity)
+  const getCurrentWeekNumber = () => {
+    const today = new Date()
+    const startOfYear = new Date(today.getFullYear(), 0, 1) // January 1st
+    const diff = today.getTime() - startOfYear.getTime()
+    const oneDay = 1000 * 60 * 60 * 24
+    const days = Math.floor(diff / oneDay)
+    return Math.ceil((days + 1) / 7)
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
@@ -927,8 +978,64 @@ export default function ClassCoursePage() {
       </aside>
       <main className="pl-52 pt-14 p-4 space-y-4">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold tracking-tight">Class Course Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Fall 2025 Semester</p>
+          <div className="mb-4 flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm text-amber-800 font-medium">Demo Mode</p>
+              <p className="text-xs text-amber-600">
+                In production, students will be authenticated and see only their personalized dashboard.
+              </p>
+            </div>
+            <Select value={selectedStudentId} onValueChange={setSelectedStudentId}>
+              <SelectTrigger className="w-[240px] bg-white">
+                <SelectValue placeholder="Select a student to preview" />
+              </SelectTrigger>
+              <SelectContent>
+                {students.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.first_name} {s.last_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 rounded-xl p-5 text-white shadow-lg mb-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="h-14 w-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold">
+                  {selectedStudent?.first_name?.charAt(0) || "S"}
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold tracking-tight">
+                    {selectedStudent ? `Welcome, ${selectedStudent.first_name}!` : "Class Course Dashboard"}
+                  </h1>
+                  <p className="text-emerald-100 text-sm mt-0.5">
+                    {selectedStudent?.clinic_name
+                      ? `${selectedStudent.clinic_name} Clinic - Fall 2025 Semester`
+                      : "Fall 2025 Semester"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-6 text-sm">
+                <div className="text-right">
+                  <p className="text-emerald-200 text-xs">Current Week</p>
+                  <p className="text-lg font-semibold">Week {getCurrentWeekNumber()}</p>
+                </div>
+                {selectedStudent && (
+                  <>
+                    <div className="h-10 w-px bg-emerald-400/50" />
+                    <div className="text-right">
+                      <p className="text-emerald-200 text-xs">Role</p>
+                      <p className="text-lg font-semibold">
+                        {selectedStudent.is_team_lead ? "Team Lead" : "Consultant"}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+          {/* End welcome header banner */}
         </div>
 
         <Tabs defaultValue="announcements" className="space-y-4">

@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { OnboardingAgreements } from "@/components/onboarding-agreements"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   RefreshCw,
   BarChart3,
@@ -23,7 +22,6 @@ import {
   Download,
   ChevronDown,
   Building2,
-  AlertCircle,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useDirectors } from "@/hooks/use-directors"
@@ -75,20 +73,36 @@ async function getAvailableWeeks(): Promise<{ weeks: string[]; schedule: WeekSch
 
 async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string): Promise<QuickStats> {
   try {
-    const [debriefsRes, overviewRes] = await Promise.all([
-      fetch("/api/supabase/debriefs"),
-      fetch("/api/supabase/students/overview"),
-    ])
+    const mappingUrl =
+      selectedDirectorId && selectedDirectorId !== "all"
+        ? `/api/supabase/v-complete-mapping?directorId=${selectedDirectorId}`
+        : "/api/supabase/v-complete-mapping"
+
+    const [debriefsRes, mappingRes] = await Promise.all([fetch("/api/supabase/debriefs"), fetch(mappingUrl)])
 
     const debriefsData = await debriefsRes.json()
-    const overviewData = await overviewRes.json()
+    const mappingData = await mappingRes.json()
 
-    let filteredStudents = overviewData.students || []
+    const mappings = mappingData.data || mappingData.records || mappingData.mappings || []
+
+    // Get student IDs that belong to this director (either as clinic director or client director)
+    const directorStudentIds = new Set<string>()
+    const directorClientNames = new Set<string>()
+
     if (selectedDirectorId && selectedDirectorId !== "all") {
-      filteredStudents = filteredStudents.filter((s: any) => s.client_primary_director_id === selectedDirectorId)
-    }
+      mappings.forEach((m: any) => {
+        // When using directorId filter, all returned records belong to this director
+        if (m.student_id) directorStudentIds.add(m.student_id)
+        if (m.client_name) directorClientNames.add(m.client_name)
+      })
 
-    const studentIds = new Set(filteredStudents.map((s: any) => s.student_id))
+      console.log(
+        "[v0] Director filter - Student IDs:",
+        directorStudentIds.size,
+        "Client Names:",
+        directorClientNames.size,
+      )
+    }
 
     let totalHours = 0
     const activeStudents = new Set<string>()
@@ -97,20 +111,29 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
 
     const allDebriefs = debriefsData.debriefs || []
     allDebriefs.forEach((debrief: any) => {
-      const weekEnding = debrief.week_ending
+      const weekEnding = debrief.week_ending || debrief.weekEnding
       const studentId = debrief.student_id || debrief.studentId
+      const clientName = debrief.client_name || debrief.clientName
 
-      const matchesWeek = selectedWeeks.length === 0 || selectedWeeks.includes(weekEnding)
-      const matchesDirector = selectedDirectorId === "all" || studentIds.has(studentId)
+      // Check week filter
+      const matchesWeek =
+        selectedWeeks.length === 0 ||
+        selectedWeeks.some((w) => {
+          const normalizeDate = (d: string) => (d ? new Date(d).toISOString().split("T")[0] : "")
+          return normalizeDate(weekEnding) === normalizeDate(w)
+        })
+
+      // Check director filter - either student belongs to director OR client belongs to director
+      const matchesDirector =
+        selectedDirectorId === "all" ||
+        directorStudentIds.size === 0 ||
+        directorStudentIds.has(studentId) ||
+        directorClientNames.has(clientName)
 
       if (matchesWeek && matchesDirector) {
         totalHours += Number.parseFloat(debrief.hours_worked || debrief.hoursWorked || "0")
-        if (debrief.student_id || debrief.studentId) {
-          activeStudents.add(debrief.student_id || debrief.studentId)
-        }
-        if (debrief.client_name || debrief.clientName) {
-          activeClients.add(debrief.client_name || debrief.clientName)
-        }
+        if (studentId) activeStudents.add(studentId)
+        if (clientName) activeClients.add(clientName)
         debriefsSubmitted++
       }
     })
@@ -292,77 +315,65 @@ export default function DirectorPortalPage() {
         />
 
         <main className="p-4 space-y-4">
-          <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm text-amber-800 font-medium">Demo Mode</p>
-              <p className="text-xs text-amber-600">
-                In production, directors will be authenticated and see only their personalized dashboard.
-              </p>
-            </div>
-            <Select value={selectedDirectorId} onValueChange={handleDirectorChange}>
-              <SelectTrigger className="w-[240px] bg-white">
-                <SelectValue placeholder="Select a director to preview" />
-              </SelectTrigger>
-              <SelectContent>
-                {directors.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    {d.full_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-                  {currentDirector ? `Welcome, ${currentDirector.name.split(" ")[0]}` : "Director Dashboard"}
-                </h1>
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-5 text-white shadow-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="h-14 w-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold">
+                  {currentDirector?.name?.charAt(0) || "D"}
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold tracking-tight">
+                    {currentDirector ? `Welcome, ${currentDirector.name.split(" ")[0]}!` : "Director Dashboard"}
+                  </h1>
+                  <p className="text-blue-100 text-sm mt-0.5">
+                    {currentDirector?.clinic ? `${currentDirector.clinic} Clinic Director` : "SEED Program Director"}
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-3 text-muted-foreground text-sm">
-                <span className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  {selectedWeeks.length === 0
-                    ? "Select Week"
-                    : selectedWeeks.length === 1
-                      ? getWeekLabel(selectedWeeks[0])
-                      : `${selectedWeeks.length} weeks`}
-                </span>
-                {currentDirector && (
-                  <>
-                    <span className="text-muted-foreground/50">•</span>
-                    <span className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4" />
-                      {currentDirector.clinic}
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="gap-2 bg-transparent">
-                    <Download className="h-4 w-4" />
-                    Export
-                    <ChevronDown className="h-4 w-4" />
+              <div className="flex items-center gap-6 text-sm">
+                <div className="text-right">
+                  <p className="text-blue-200 text-xs">Current Period</p>
+                  <p className="text-lg font-semibold">
+                    {selectedWeeks.length === 0
+                      ? "Select Week"
+                      : selectedWeeks.length === 1
+                        ? getWeekLabel(selectedWeeks[0])
+                        : `${selectedWeeks.length} weeks`}
+                  </p>
+                </div>
+                <div className="h-10 w-px bg-blue-400/50" />
+                <div className="flex items-center gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="secondary" className="gap-2 bg-white/20 hover:bg-white/30 text-white border-0">
+                        <Download className="h-4 w-4" />
+                        Export
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40">
+                      <DropdownMenuItem onClick={() => alert("Export as PDF coming soon!")}>
+                        Export as PDF
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => alert("Export as CSV coming soon!")}>
+                        Export as CSV
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => alert("Export as Excel coming soon!")}>
+                        Export as Excel
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    onClick={handleRefresh}
+                    disabled={isLoading}
+                    className="bg-white/20 hover:bg-white/30 text-white border-0"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40">
-                  <DropdownMenuItem onClick={() => alert("Export as PDF coming soon!")}>Export as PDF</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => alert("Export as CSV coming soon!")}>Export as CSV</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => alert("Export as Excel coming soon!")}>
-                    Export as Excel
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isLoading}>
-                <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-              </Button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -450,7 +461,11 @@ export default function DirectorPortalPage() {
 
               <div className="grid gap-6 lg:grid-cols-2">
                 <Suspense fallback={<div>Loading performance...</div>}>
-                  <ClinicPerformance selectedClinic={selectedDirectorId} selectedWeeks={selectedWeeks} />
+                  <ClinicPerformance
+                    selectedClinic={selectedDirectorId}
+                    selectedWeeks={selectedWeeks}
+                    directorId={selectedDirectorId}
+                  />
                 </Suspense>
                 <Suspense fallback={<div>Loading notifications...</div>}>
                   <DirectorNotifications />
@@ -459,7 +474,11 @@ export default function DirectorPortalPage() {
 
               <div className="grid gap-6 lg:grid-cols-2">
                 <Suspense fallback={<div>Loading summary...</div>}>
-                  <WeeklyProgramSummary selectedClinic={selectedDirectorId} selectedWeeks={selectedWeeks} />
+                  <WeeklyProgramSummary
+                    selectedClinic={selectedDirectorId}
+                    selectedWeeks={selectedWeeks}
+                    directorId={selectedDirectorId}
+                  />
                 </Suspense>
               </div>
             </TabsContent>

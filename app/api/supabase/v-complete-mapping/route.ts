@@ -9,6 +9,7 @@ export async function GET(request: Request) {
     const clinicId = searchParams.get("clinicId")
     const clientId = searchParams.get("clientId")
     const studentId = searchParams.get("studentId")
+    const directorId = searchParams.get("directorId")
 
     let query = supabase.from("v_complete_mapping").select("*")
 
@@ -22,6 +23,9 @@ export async function GET(request: Request) {
     if (studentId) {
       query = query.eq("student_id", studentId)
     }
+    if (directorId) {
+      query = query.or(`clinic_director_id.eq.${directorId},client_director_id.eq.${directorId}`)
+    }
 
     const { data, error } = await query
 
@@ -32,8 +36,9 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
+      data: data || [],
       records: data || [],
-      mappings: data || [], // Alias for compatibility
+      mappings: data || [],
     })
   } catch (err) {
     console.error("Error in v-complete-mapping route:", err)

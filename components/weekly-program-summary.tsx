@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { getClinicColor } from "@/lib/clinic-colors"
 import { getClientColor } from "@/lib/client-colors"
-import { createClient } from "@/lib/supabase/client"
 
 interface WorkEntry {
   student: string
@@ -16,35 +15,64 @@ interface WorkEntry {
 }
 
 interface WeeklyProgramSummaryProps {
-  selectedWeek: string
+  selectedWeek?: string
+  selectedWeeks?: string[]
   selectedClinic: string
+  directorId?: string
 }
 
-export function WeeklyProgramSummary({ selectedWeek, selectedClinic }: WeeklyProgramSummaryProps) {
+export function WeeklyProgramSummary({
+  selectedWeek,
+  selectedWeeks = [],
+  selectedClinic,
+  directorId,
+}: WeeklyProgramSummaryProps) {
   const [workEntries, setWorkEntries] = useState<WorkEntry[]>([])
   const [clientSummaries, setClientSummaries] = useState<Map<string, string>>(new Map())
   const [generatingSummaries, setGeneratingSummaries] = useState(false)
   const [clientToDirectorMap, setClientToDirectorMap] = useState<Map<string, string>>(new Map())
   const [clientTeamMembers, setClientTeamMembers] = useState<Map<string, string[]>>(new Map())
 
-  const supabase = createClient()
+  const normalizedWeeks = selectedWeeks.length > 0 ? selectedWeeks : selectedWeek ? [selectedWeek] : []
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [debriefResponse, studentClientResponse, clientsResponse] = await Promise.all([
+        const mappingUrl =
+          directorId && directorId !== "all"
+            ? `/api/supabase/v-complete-mapping?directorId=${directorId}`
+            : "/api/supabase/v-complete-mapping"
+
+        const [debriefResponse, clientsResponse, directorsResponse, mappingResponse] = await Promise.all([
           fetch("/api/supabase/debriefs"),
-          supabase.from("v_student_client_team_clinics").select("student_name, client_name, team_role"),
-          supabase.from("clients").select("id, name, primary_director_id").eq("status", "Active"),
+          fetch("/api/supabase/clients"),
+          fetch("/api/directors"),
+          fetch(mappingUrl),
         ])
 
         const debriefData = await debriefResponse.json()
+        const clientsData = await clientsResponse.json()
+        const directorsData = await directorsResponse.json()
+        const mappingData = await mappingResponse.json()
+
+        const mappings = mappingData.data || mappingData.records || mappingData.mappings || []
+        const directors = directorsData.directors || []
+        const clients = clientsData.records || []
+
+        const directorClientNames = new Set<string>()
+        if (directorId && directorId !== "all") {
+          mappings.forEach((m: any) => {
+            if (m.client_name) {
+              directorClientNames.add(m.client_name.trim())
+            }
+          })
+          console.log("[v0] WeeklyProgramSummary - Director client names:", directorClientNames.size)
+        }
+
+        const directorLookup = new Map(directors.map((d: any) => [d.id, d.full_name]))
 
         const directorMap = new Map<string, string>()
-        const { data: directors } = await supabase.from("directors").select("id, full_name")
-        const directorLookup = new Map(directors?.map((d: any) => [d.id, d.full_name]) || [])
-
-        clientsResponse.data?.forEach((client: any) => {
+        clients.forEach((client: any) => {
           if (client.name && client.primary_director_id) {
             const directorName = directorLookup.get(client.primary_director_id)
             if (directorName) {
@@ -56,15 +84,14 @@ export function WeeklyProgramSummary({ selectedWeek, selectedClinic }: WeeklyPro
         const teamMap = new Map<string, string[]>()
         const seenStudents = new Map<string, Set<string>>()
 
-        studentClientResponse.data?.forEach((assignment: any) => {
-          const clientName = assignment.client_name?.trim()
-          const studentName = assignment.student_name?.trim()
+        mappings.forEach((m: any) => {
+          const clientName = m.client_name?.trim()
+          const studentName = m.student_name?.trim()
           if (clientName && studentName) {
             if (!seenStudents.has(clientName)) {
               seenStudents.set(clientName, new Set())
               teamMap.set(clientName, [])
             }
-            // Only add if not already seen (handles duplicate rows from view)
             if (!seenStudents.get(clientName)!.has(studentName)) {
               seenStudents.get(clientName)!.add(studentName)
               teamMap.get(clientName)!.push(studentName)
@@ -75,28 +102,34 @@ export function WeeklyProgramSummary({ selectedWeek, selectedClinic }: WeeklyPro
         setClientToDirectorMap(directorMap)
         setClientTeamMembers(teamMap)
 
-        const filteredRecords = debriefData.records?.filter((record: any) => {
-          const weekEnding = record.fields.week_ending
-          const clinic = record.fields.clinic
+        const allDebriefs = debriefData.debriefs || []
+        const filteredRecords = allDebriefs.filter((record: any) => {
+          const weekEnding = record.week_ending || record.weekEnding
+          const clientName = record.client_name || record.clientName
 
           if (!weekEnding) return false
 
-          const weekMatch = weekEnding === selectedWeek
+          const normalizeDate = (d: string) => (d ? new Date(d).toISOString().split("T")[0] : "")
+          const matchesWeek =
+            normalizedWeeks.length === 0 || normalizedWeeks.some((w) => normalizeDate(weekEnding) === normalizeDate(w))
 
-          if (selectedClinic === "all") return weekMatch
+          const matchesDirector =
+            !directorId ||
+            directorId === "all" ||
+            directorClientNames.size === 0 ||
+            directorClientNames.has(clientName?.trim())
 
-          return weekMatch && clinic === selectedClinic
+          return matchesWeek && matchesDirector
         })
 
-        const entries: WorkEntry[] =
-          filteredRecords?.map((record: any) => ({
-            student: "", // No individual student names in weekly_summaries - use clientTeamMembers instead
-            client: record.fields.client_name || "Unknown",
-            work: record.fields.summary || "",
-            hours: record.fields.total_hours || 0,
-            clinic: record.fields.clinic || "Unknown",
-            dateSubmitted: record.fields.week_ending || "",
-          })) || []
+        const entries: WorkEntry[] = filteredRecords.map((record: any) => ({
+          student: "",
+          client: record.client_name || record.clientName || "Unknown",
+          work: record.work_summary || record.summary || "",
+          hours: record.hours_worked || record.hoursWorked || record.total_hours || 0,
+          clinic: record.clinic || "Unknown",
+          dateSubmitted: record.week_ending || record.weekEnding || "",
+        }))
 
         setWorkEntries(entries)
 
@@ -121,15 +154,12 @@ export function WeeklyProgramSummary({ selectedWeek, selectedClinic }: WeeklyPro
           setGeneratingSummaries(false)
         }
       } catch (error) {
-        console.error("Error fetching work entries:", error)
-        setGeneratingSummaries(false)
+        console.error("Error fetching data:", error)
       }
     }
 
-    if (selectedWeek) {
-      fetchData()
-    }
-  }, [selectedWeek, selectedClinic])
+    fetchData()
+  }, [selectedWeek, selectedWeeks, selectedClinic, directorId, normalizedWeeks])
 
   function getWeekEnding(date: Date): string {
     const day = date.getDay()

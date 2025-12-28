@@ -275,27 +275,37 @@ export default function ClientPortalPage() {
             </Select>
           </div>
 
-          <div className="mb-4 bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl p-4 text-white shadow-lg">
+          <div className="mb-4 bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl p-5 text-white shadow-lg">
             <div className="flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Building2 className="h-6 w-6 text-slate-300" />
-                  <div>
-                    <h1 className="text-xl font-bold">{loading ? "Loading..." : client?.name || "Client Portal"}</h1>
-                    <p className="text-slate-300 text-sm">{client?.projectType || "Business Consulting Engagement"}</p>
-                  </div>
+              <div className="flex items-center gap-4">
+                <div className="h-14 w-14 rounded-full bg-white/20 flex items-center justify-center">
+                  <Building2 className="h-7 w-7 text-slate-300" />
                 </div>
-                {client?.semester && <Badge className="bg-slate-600 text-slate-200 mt-1">{client.semester}</Badge>}
+                <div>
+                  <h1 className="text-2xl font-bold tracking-tight">
+                    {loading
+                      ? "Loading..."
+                      : client?.contactName
+                        ? `Welcome, ${client.contactName.split(" ")[0]}!`
+                        : client?.name || "Client Portal"}
+                  </h1>
+                  <p className="text-slate-300 text-sm mt-0.5">
+                    {client?.name
+                      ? `${client.name} - ${client.projectType || "Business Consulting Engagement"}`
+                      : "Business Consulting Engagement"}
+                  </p>
+                  {client?.semester && <Badge className="bg-slate-600 text-slate-200 mt-2">{client.semester}</Badge>}
+                </div>
               </div>
-              <div className="flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-6 text-sm">
                 <div className="text-right">
                   <p className="text-slate-400 text-xs">Team Size</p>
-                  <p className="text-lg font-semibold">{teamMembers.length + directors.length}</p>
+                  <p className="text-2xl font-bold">{teamMembers.length + directors.length}</p>
                 </div>
-                <div className="h-10 w-px bg-slate-600" />
+                <div className="h-12 w-px bg-slate-600" />
                 <div className="text-right">
                   <p className="text-slate-400 text-xs">Hours Logged</p>
-                  <p className="text-lg font-semibold">{progress.totalHours.toFixed(1)}</p>
+                  <p className="text-2xl font-bold">{progress.totalHours.toFixed(1)}</p>
                 </div>
               </div>
             </div>
