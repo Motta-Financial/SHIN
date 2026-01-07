@@ -41,16 +41,19 @@ export async function GET(request: Request) {
       return NextResponse.json({ debriefs: [] })
     }
 
-    const { data: studentOverview, error: overviewError } = await supabase.from("v_student_overview").select("*")
+    const { data: mappingData, error: mappingError } = await supabase.from("v_complete_mapping").select("*")
 
-    if (overviewError) {
-      console.log("[v0] Error fetching v_student_overview:", overviewError.message)
+    if (mappingError) {
+      console.log("[v0] Error fetching v_complete_mapping:", mappingError.message)
     }
 
     const studentMap = new Map<string, any>()
-    if (studentOverview) {
-      for (const student of studentOverview) {
-        studentMap.set(student.student_id, student)
+    if (mappingData) {
+      for (const row of mappingData) {
+        // Deduplicate by student_id
+        if (!studentMap.has(row.student_id)) {
+          studentMap.set(row.student_id, row)
+        }
       }
     }
 
@@ -60,16 +63,15 @@ export async function GET(request: Request) {
       return {
         id: debrief.id,
         studentId: debrief.student_id,
-        // Use v_student_overview data if available, fallback to debrief text fields
         studentName: studentData?.student_name || null,
         studentEmail: studentData?.student_email || debrief.student_email,
         clientName: studentData?.client_name || debrief.client_name,
-        clinic: studentData?.clinic || debrief.clinic,
-        // Director info from v_student_overview
-        clinicDirector: studentData?.clinic_director || null,
-        clinicDirectorEmail: studentData?.clinic_director_email || null,
-        clientDirector: studentData?.client_director || null,
-        clientDirectorEmail: studentData?.client_director_email || null,
+        clinic: studentData?.student_clinic_name || debrief.clinic,
+        // Director info from v_complete_mapping
+        clinicDirector: studentData?.clinic_director_name || null,
+        clinicDirectorEmail: null, // Not available in v_complete_mapping
+        clientDirector: studentData?.client_director_name || null,
+        clientDirectorEmail: null, // Not available in v_complete_mapping
         // Debrief specific data
         hoursWorked: debrief.hours_worked || 0,
         workSummary: debrief.work_summary,
@@ -77,7 +79,7 @@ export async function GET(request: Request) {
         questionType: (debrief as any).question_type || "clinic",
         weekEnding: debrief.week_ending,
         weekNumber: debrief.week_number,
-        semester: studentData?.semester || null,
+        semester: null,
         semesterId: debrief.semester_id,
         status: debrief.status,
         createdAt: debrief.created_at,
@@ -98,23 +100,28 @@ export async function POST(request: Request) {
 
     let studentData = null
     if (body.studentId) {
-      const { data } = await supabase.from("v_student_overview").select("*").eq("student_id", body.studentId).single()
+      const { data } = await supabase
+        .from("v_complete_mapping")
+        .select("*")
+        .eq("student_id", body.studentId)
+        .limit(1)
+        .maybeSingle()
       studentData = data
     } else if (body.studentEmail) {
       const { data } = await supabase
-        .from("v_student_overview")
+        .from("v_complete_mapping")
         .select("*")
         .eq("student_email", body.studentEmail)
-        .single()
+        .limit(1)
+        .maybeSingle()
       studentData = data
     }
 
     const insertData: Record<string, any> = {
       student_id: body.studentId || studentData?.student_id,
-      // Use v_student_overview data for text fields if available
       student_email: studentData?.student_email || body.studentEmail,
       client_name: studentData?.client_name || body.clientName,
-      clinic: studentData?.clinic || body.clinic,
+      clinic: studentData?.student_clinic_name || body.clinic,
       hours_worked: body.hoursWorked || 0,
       work_summary: body.workSummary,
       questions: body.questions,

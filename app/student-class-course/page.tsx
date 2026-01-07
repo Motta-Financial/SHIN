@@ -136,24 +136,18 @@ export default function StudentClassCoursePage() {
       setCurrentSemesterId(semesterId)
 
       const { data: studentData, error: studentError } = await supabase
-        .from("v_student_overview")
-        .select("student_id, student_name, student_email, clinic")
+        .from("v_complete_mapping")
+        .select("student_id, student_name, student_email, student_clinic_id, student_clinic_name")
         .limit(1)
         .maybeSingle()
 
       if (studentData) {
-        const { data: clinicData } = await supabase
-          .from("clinics")
-          .select("id")
-          .eq("name", studentData.clinic)
-          .maybeSingle()
-
         setStudentInfo({
           id: studentData.student_id,
           full_name: studentData.student_name,
           email: studentData.student_email,
-          clinic: studentData.clinic,
-          clinic_id: clinicData?.id || "",
+          clinic: studentData.student_clinic_name,
+          clinic_id: studentData.student_clinic_id || "",
           semester_id: semesterId || "",
         })
       }
@@ -220,9 +214,8 @@ export default function StudentClassCoursePage() {
         )
         .order("created_at", { ascending: false })
 
-      // Filter materials to show only relevant ones for the student's clinic + 'all' clinic materials
-      if (studentData?.clinic) {
-        materialsQuery = materialsQuery.or(`target_clinic.eq.all,target_clinic.eq.${studentData.clinic}`)
+      if (studentData?.student_clinic_name) {
+        materialsQuery = materialsQuery.or(`target_clinic.eq.all,target_clinic.eq.${studentData.student_clinic_name}`)
       }
 
       const { data: materialsData, error: materialsError } = await materialsQuery
@@ -615,6 +608,7 @@ export default function StudentClassCoursePage() {
                               src={
                                 recording.thumbnail_url ||
                                 "/placeholder.svg?height=180&width=320&query=video recording thumbnail" ||
+                                "/placeholder.svg" ||
                                 "/placeholder.svg" ||
                                 "/placeholder.svg" ||
                                 "/placeholder.svg"

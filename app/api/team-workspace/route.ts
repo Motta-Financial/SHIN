@@ -6,22 +6,25 @@ export async function GET(req: NextRequest) {
     const supabase = await createClient()
     const { searchParams } = new URL(req.url)
     const email = searchParams.get("email")
+    const studentId = searchParams.get("studentId")
     const includeDebriefs = searchParams.get("includeDebriefs") === "true"
 
-    if (!email || email === "undefined") {
-      return NextResponse.json({ success: false, error: "Valid email required" }, { status: 400 })
-    }
-
-    // This view links: students -> clients -> clinics -> directors
-    const { data: allTeamData, error: viewError } = await supabase.from("v_student_client_team_clinics").select("*")
+    const { data: allTeamData, error: viewError } = await supabase.from("v_complete_mapping").select("*")
 
     if (viewError) {
-      console.error("[v0] Error fetching from view:", viewError)
+      console.error("[v0] Error fetching from v_complete_mapping:", viewError)
       return NextResponse.json({ success: false, error: viewError.message }, { status: 500 })
     }
 
-    // Find the student's record(s) in the view
-    const studentRecords = (allTeamData || []).filter((r) => r.student_email?.toLowerCase() === email.toLowerCase())
+    // Find the student's record(s) - prefer UUID lookup, fallback to email
+    let studentRecords: any[] = []
+    if (studentId && studentId !== "undefined") {
+      studentRecords = (allTeamData || []).filter((r: any) => r.student_id === studentId)
+    } else if (email && email !== "undefined") {
+      studentRecords = (allTeamData || []).filter((r: any) => r.student_email?.toLowerCase() === email.toLowerCase())
+    } else {
+      return NextResponse.json({ success: false, error: "Valid studentId or email required" }, { status: 400 })
+    }
 
     if (studentRecords.length === 0) {
       return NextResponse.json({
@@ -43,7 +46,7 @@ export async function GET(req: NextRequest) {
     const { data: clientData } = await supabase.from("clients").select("*").eq("id", clientId).maybeSingle()
 
     // Get ALL team members for this client from the view data (already fetched)
-    const teamRecords = (allTeamData || []).filter((r) => r.client_id === clientId)
+    const teamRecords = (allTeamData || []).filter((r: any) => r.client_id === clientId)
 
     // Build unique team members list (dedupe by student_id)
     const teamMemberMap = new Map<string, any>()
@@ -53,8 +56,8 @@ export async function GET(req: NextRequest) {
           id: m.student_id,
           full_name: m.student_name || "",
           email: m.student_email || "",
-          role: m.team_role || "Team Member",
-          clinic: m.clinic_name || "",
+          role: m.student_role || "Team Member",
+          clinic: m.student_clinic_name || "",
           totalHours: 0,
           debriefCount: 0,
         })
@@ -67,42 +70,46 @@ export async function GET(req: NextRequest) {
     let totalHours = 0
 
     if (includeDebriefs && teamMembers.length > 0) {
-      const teamEmails = teamMembers.map((m) => m.email)
+      const teamStudentIds = teamMembers.map((m) => m.id)
 
       const { data: teamDebriefs } = await supabase
         .from("debriefs")
         .select("*")
-        .in("student_email", teamEmails)
+        .in("student_id", teamStudentIds)
         .order("created_at", { ascending: false })
 
       if (teamDebriefs) {
-        debriefs = teamDebriefs.map((d) => ({
-          id: d.id,
-          studentName: d.student_name,
-          studentEmail: d.student_email,
-          hoursWorked: d.hours_worked || 0,
-          workSummary: d.work_summary || "",
-          questions: d.questions,
-          weekEnding: d.week_ending,
-          weekNumber: d.week_number,
-          clinic: d.clinic,
-          clientName: d.client_name,
-          createdAt: d.created_at,
-        }))
+        debriefs = teamDebriefs.map((d) => {
+          const member = teamMemberMap.get(d.student_id)
+          return {
+            id: d.id,
+            studentName: member?.full_name || d.student_email || "Unknown",
+            studentEmail: d.student_email,
+            studentId: d.student_id,
+            hoursWorked: d.hours_worked || 0,
+            workSummary: d.work_summary || "",
+            questions: d.questions,
+            weekEnding: d.week_ending,
+            weekNumber: d.week_number,
+            clinic: d.clinic,
+            clientName: d.client_name,
+            createdAt: d.created_at,
+          }
+        })
 
         // Calculate total hours and per-member stats
         const memberHours = new Map<string, { hours: number; count: number }>()
         for (const d of teamDebriefs) {
           totalHours += d.hours_worked || 0
-          const existing = memberHours.get(d.student_email) || { hours: 0, count: 0 }
+          const existing = memberHours.get(d.student_id) || { hours: 0, count: 0 }
           existing.hours += d.hours_worked || 0
           existing.count += 1
-          memberHours.set(d.student_email, existing)
+          memberHours.set(d.student_id, existing)
         }
 
         // Add hours to team members
         for (const member of teamMembers) {
-          const stats = memberHours.get(member.email) || { hours: 0, count: 0 }
+          const stats = memberHours.get(member.id) || { hours: 0, count: 0 }
           member.totalHours = stats.hours
           member.debriefCount = stats.count
         }
@@ -117,6 +124,12 @@ export async function GET(req: NextRequest) {
       projectType: clientData?.project_type || "",
       status: clientData?.status || "active",
       clientId,
+      clinicId: studentData.student_clinic_id,
+      clinicName: studentData.student_clinic_name,
+      clinicDirectorId: studentData.clinic_director_id,
+      clinicDirectorName: studentData.clinic_director_name,
+      clientDirectorId: studentData.client_director_id,
+      clientDirectorName: studentData.client_director_name,
       notes: [],
       debriefs,
       totalHours,

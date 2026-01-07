@@ -35,12 +35,14 @@ interface TeamNote {
 }
 
 interface MyTeamWorkspaceProps {
+  studentId?: string
   studentEmail?: string
   studentName?: string
   clinic?: string
 }
 
 export function MyTeamWorkspace({
+  studentId: propStudentId,
   studentEmail: propEmail,
   studentName: propName,
   clinic: propClinic,
@@ -53,24 +55,28 @@ export function MyTeamWorkspace({
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [studentId, setStudentId] = useState<string>(propStudentId || "")
   const [studentEmail, setStudentEmail] = useState<string>(propEmail || "")
   const [studentName, setStudentName] = useState<string>(propName || "")
   const [clinic, setClinic] = useState<string>(propClinic || "")
 
   useEffect(() => {
     loadTeamData()
-  }, [studentEmail])
+  }, [studentId, studentEmail])
 
   const loadTeamData = async () => {
-    if (!studentEmail) {
-      console.log("[v0] Cannot load team data: No student email available")
+    if (!studentId && !studentEmail) {
+      console.log("[v0] Cannot load team data: No student ID or email available")
       setLoading(false)
       return
     }
 
     try {
       setLoading(true)
-      const response = await fetch(`/api/team-workspace?email=${encodeURIComponent(studentEmail)}`)
+      const params = studentId
+        ? `studentId=${encodeURIComponent(studentId)}`
+        : `email=${encodeURIComponent(studentEmail)}`
+      const response = await fetch(`/api/team-workspace?${params}`)
       const data = await response.json()
 
       if (data.success) {
@@ -94,6 +100,7 @@ export function MyTeamWorkspace({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          studentId,
           email: studentEmail,
           noteText: newNote,
           category: noteCategory,
@@ -161,7 +168,7 @@ export function MyTeamWorkspace({
     )
   }
 
-  if (!studentEmail) {
+  if (!studentId && !studentEmail) {
     return (
       <Card className="border-amber-200/60 shadow-sm bg-amber-50/30">
         <CardHeader className="p-4">

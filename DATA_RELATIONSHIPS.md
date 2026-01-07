@@ -12,11 +12,11 @@ This document outlines how all data entities in the SHIN platform are connected 
 - `client_assignments` - Junction table linking students to clients
 
 **How They Connect:**
-```
+\`\`\`
 students.client_team → clients.name
 students.id ↔ client_assignments.student_id
 clients.id ↔ client_assignments.client_id
-```
+\`\`\`
 
 **Key Fields:**
 - `students.client_team` - Name of the client the student is assigned to
@@ -24,14 +24,14 @@ clients.id ↔ client_assignments.client_id
 - `client_assignments.role` - 'Team Leader' or 'Team Member'
 
 **Example Query:**
-```sql
+\`\`\`sql
 -- Get all students working on a specific client
 SELECT s.*, ca.role 
 FROM students s
 JOIN client_assignments ca ON s.id = ca.student_id
 JOIN clients c ON ca.client_id = c.id
 WHERE c.name = 'Serene Cycle';
-```
+\`\`\`
 
 ---
 
@@ -43,11 +43,11 @@ WHERE c.name = 'Serene Cycle';
 - `client_directors` - Junction table linking directors to clients
 
 **How They Connect:**
-```
+\`\`\`
 directors.id ↔ client_directors.director_id
 clients.id ↔ client_directors.client_id
 clients.primary_director_id → directors.id
-```
+\`\`\`
 
 **Key Fields:**
 - `client_directors.is_primary` - Boolean indicating primary director
@@ -62,11 +62,11 @@ clients.primary_director_id → directors.id
 - `debriefs` - Weekly work summaries
 
 **How They Connect:**
-```
+\`\`\`
 students.id → debriefs.student_id
 students.email → debriefs.student_email
 students.full_name → debriefs.student_name
-```
+\`\`\`
 
 **Key Fields:**
 - `debriefs.week_ending` - Date for the week being reported
@@ -83,11 +83,11 @@ students.full_name → debriefs.student_name
 - `attendance` - Attendance records
 
 **How They Connect:**
-```
+\`\`\`
 students.id → attendance.student_id
 students.email → attendance.student_email
 students.full_name → attendance.student_name
-```
+\`\`\`
 
 ---
 
@@ -99,12 +99,12 @@ students.full_name → attendance.student_name
 - `document_reviews` - Director feedback on documents
 
 **How They Connect:**
-```
+\`\`\`
 students.full_name → documents.student_name
 students.id → documents.uploaded_by_user_id
 documents.id ↔ document_reviews.document_id
 directors.full_name → document_reviews.director_name
-```
+\`\`\`
 
 ---
 
@@ -113,14 +113,14 @@ directors.full_name → document_reviews.director_name
 **How Clinics Connect Everything:**
 All major tables have a `clinic` field that groups entities:
 
-```
+\`\`\`
 students.clinic
 clients.clinic (implied through client_assignments)
 directors.clinic
 debriefs.clinic
 attendance.clinic
 documents.clinic
-```
+\`\`\`
 
 **Clinic Values:**
 - Marketing
@@ -137,10 +137,10 @@ documents.clinic
 - `key_dates` - Important dates in the semester
 
 **How Week Numbers Are Calculated:**
-```sql
+\`\`\`sql
 -- Automatic calculation via trigger
 week_number = FLOOR((week_ending_date - semester_start_date) / 7) + 1
-```
+\`\`\`
 
 ---
 
