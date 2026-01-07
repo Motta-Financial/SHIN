@@ -8,34 +8,34 @@ export async function updateSession(request: NextRequest) {
     },
   })
 
-  // This is acceptable as middleware runs on edge and doesn't share browser context
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          response = NextResponse.next({
-            request,
-          })
-          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options))
-        },
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    // Auth not configured yet, just return response with headers
+    return response
+  }
+
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll()
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+        response = NextResponse.next({
+          request,
+        })
+        cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options))
       },
     },
-  )
+  })
 
   // Refresh session if expired - this is important for SSR
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  // Only log in development to avoid noise
-  if (process.env.NODE_ENV === "development" && user) {
-    console.log("[v0] Middleware: Refreshed session for user:", user.email)
+  try {
+    await supabase.auth.getUser()
+  } catch {
+    // Auth may not be set up yet, ignore errors
   }
 
   return response
