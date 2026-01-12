@@ -108,11 +108,30 @@ export default function SignInPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
       <div className="w-full max-w-md px-4">
-        <div className="mb-6 flex justify-center">
-          <div className="relative w-48 h-48">
+        <div className="mb-8 flex flex-col items-center gap-6">
+          {/* SEED Program Logo */}
+          <div className="relative w-[360px] h-[130px]">
             <Image
-              src="/images/shin-logo-cropped.png"
-              alt="SHIN Logo"
+              src="/images/seed-logo.avif"
+              alt="Suffolk SEED Program"
+              fill
+              className="object-contain drop-shadow-md"
+              priority
+            />
+          </div>
+
+          {/* Divider text */}
+          <div className="flex items-center gap-3 w-full">
+            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-slate-300"></div>
+            <span className="text-slate-500 text-sm font-medium">powered by</span>
+            <div className="flex-1 h-px bg-gradient-to-l from-transparent via-slate-300 to-slate-300"></div>
+          </div>
+
+          {/* SHIN Platform Logo */}
+          <div className="relative w-[420px] h-[240px]">
+            <Image
+              src="/images/shin-logo-new.png"
+              alt="SHIN - SEED Hub & Information Nexus"
               fill
               className="object-contain drop-shadow-lg"
               priority
@@ -121,8 +140,7 @@ export default function SignInPage() {
         </div>
 
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-slate-800 mb-2">SEED SHIN Dashboard</h1>
-          <p className="text-slate-600">Sign in to your account</p>
+          <p className="text-slate-700 text-lg font-medium">Dashboard Sign In</p>
         </div>
 
         <Card className="shadow-xl border border-slate-200">
