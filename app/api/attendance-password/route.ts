@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createServiceClient } from "@/lib/supabase/service"
+import { createClient } from "@/utils/supabase/server"
 
 export async function GET(request: NextRequest) {
   try {
@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const semesterId = searchParams.get("semesterId")
     const weekNumber = searchParams.get("weekNumber")
 
-    const supabase = createServiceClient()
+    const supabase = await createClient()
 
     let query = supabase.from("attendance_passwords").select("*").order("week_number", { ascending: true })
 
@@ -45,7 +45,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = createServiceClient()
+    const supabase = await createClient()
+
+    // Get current user for created_by field
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
     // Generate default dates if not provided (assuming Spring 2026 starts Jan 13, 2026)
     const defaultWeekStart = weekStart || new Date(2026, 0, 13 + (weekNumber - 1) * 7).toISOString().split("T")[0]
@@ -61,7 +66,8 @@ export async function POST(request: NextRequest) {
           password,
           week_start: defaultWeekStart,
           week_end: defaultWeekEnd,
-          created_by_name: createdByName || "Admin",
+          created_by: user?.id || null,
+          created_by_name: createdByName || user?.email || "Admin",
           updated_at: new Date().toISOString(),
         },
         {
@@ -92,7 +98,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Missing password ID" }, { status: 400 })
     }
 
-    const supabase = createServiceClient()
+    const supabase = await createClient()
 
     const { error } = await supabase.from("attendance_passwords").delete().eq("id", id)
 
