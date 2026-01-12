@@ -1130,20 +1130,38 @@ export default function ClassCoursePage() {
 
   // Handle setting a new password
   const handleSetPassword = async () => {
-    if (!newPasswordWeek.trim() || !newPassword.trim()) {
+    const weekNumber = Number.parseInt(newPasswordWeek, 10)
+
+    console.log("[v0] Setting password - newPasswordWeek:", newPasswordWeek)
+    console.log("[v0] Setting password - weekNumber:", weekNumber)
+    console.log("[v0] Setting password - semesterSchedule length:", semesterSchedule.length)
+    console.log("[v0] Setting password - semesterSchedule:", JSON.stringify(semesterSchedule.slice(0, 3)))
+
+    if (!newPasswordWeek || !newPassword.trim()) {
       alert("Please enter both week number and password")
       return
     }
 
-    const weekNumber = Number.parseInt(newPasswordWeek, 10)
     if (isNaN(weekNumber) || weekNumber <= 0) {
       alert("Week number must be a positive integer")
       return
     }
 
-    const weekInfo = semesterSchedule.find((w) => w.week_number === weekNumber)
+    const uniqueWeeks = Array.from(new Map(semesterSchedule.map((w) => [w.week_number, w])).values())
+
+    console.log(
+      "[v0] Unique weeks:",
+      uniqueWeeks.map((w) => w.week_number),
+    )
+
+    const weekInfo = uniqueWeeks.find((w) => w.week_number === weekNumber)
+
+    console.log("[v0] Found weekInfo:", weekInfo ? `Week ${weekInfo.week_number}` : "NOT FOUND")
+
     if (!weekInfo) {
-      alert("Invalid week number. Please select a valid week from the dropdown.")
+      alert(
+        `Invalid week number. Please select a valid week from the dropdown. Available weeks: ${uniqueWeeks.map((w) => w.week_number).join(", ")}`,
+      )
       return
     }
 
@@ -2337,17 +2355,23 @@ export default function ClassCoursePage() {
                                 <SelectValue placeholder="Week #" />
                               </SelectTrigger>
                               <SelectContent>
-                                {/* Generate options based on semester schedule if available, otherwise default to 1-17 */}
-                                {(semesterSchedule.length > 0
-                                  ? semesterSchedule.sort((a, b) => a.week_number - b.week_number)
-                                  : Array.from({ length: 17 }, (_, i) => ({ week_number: i + 1 }))
-                                ).map((week) => (
-                                  <SelectItem key={week.week_number} value={week.week_number.toString()}>
-                                    Week {week.week_number}
-                                  </SelectItem>
-                                ))}
+                                {(() => {
+                                  const uniqueWeeks =
+                                    semesterSchedule.length > 0
+                                      ? Array.from(new Map(semesterSchedule.map((w) => [w.week_number, w])).values())
+                                      : Array.from({ length: 17 }, (_, i) => ({ week_number: i + 1 }))
+
+                                  return uniqueWeeks
+                                    .sort((a, b) => a.week_number - b.week_number)
+                                    .map((week) => (
+                                      <SelectItem key={week.week_number} value={week.week_number.toString()}>
+                                        Week {week.week_number}
+                                      </SelectItem>
+                                    ))
+                                })()}
                               </SelectContent>
                             </Select>
+
                             <Input
                               type="text"
                               placeholder="Password"
@@ -2383,7 +2407,7 @@ export default function ClassCoursePage() {
                               <SelectValue placeholder="Week #" />
                             </SelectTrigger>
                             <SelectContent>
-                              {/* Generate options based on semester schedule if available, otherwise default to 1-17 */}
+                              {/* Generate options based on semesterSchedule if available, otherwise default to 1-17 */}
                               {(semesterSchedule.length > 0
                                 ? semesterSchedule.sort((a, b) => a.week_number - b.week_number)
                                 : Array.from({ length: 17 }, (_, i) => ({ week_number: i + 1 }))
