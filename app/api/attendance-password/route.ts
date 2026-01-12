@@ -38,11 +38,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { weekNumber, semesterId, password, weekStart, weekEnd, createdByName } = body
 
-    if (!weekNumber || !semesterId || !password || !weekStart || !weekEnd) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    if (!weekNumber || !semesterId || !password) {
+      return NextResponse.json(
+        { error: "Missing required fields: weekNumber, semesterId, and password are required" },
+        { status: 400 },
+      )
     }
 
     const supabase = createServiceClient()
+
+    // Generate default dates if not provided (assuming Spring 2026 starts Jan 13, 2026)
+    const defaultWeekStart = weekStart || new Date(2026, 0, 13 + (weekNumber - 1) * 7).toISOString().split("T")[0]
+    const defaultWeekEnd = weekEnd || new Date(2026, 0, 19 + (weekNumber - 1) * 7).toISOString().split("T")[0]
 
     // Upsert the password (update if exists, insert if not)
     const { data, error } = await supabase
@@ -52,8 +59,8 @@ export async function POST(request: NextRequest) {
           week_number: weekNumber,
           semester_id: semesterId,
           password,
-          week_start: weekStart,
-          week_end: weekEnd,
+          week_start: defaultWeekStart,
+          week_end: defaultWeekEnd,
           created_by_name: createdByName || "Admin",
           updated_at: new Date().toISOString(),
         },
