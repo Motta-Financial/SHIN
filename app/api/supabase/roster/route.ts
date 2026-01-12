@@ -6,6 +6,20 @@ export async function GET(request: Request) {
     const supabase = createServiceClient()
     const { searchParams } = new URL(request.url)
     const studentId = searchParams.get("studentId")
+    const semesterId = searchParams.get("semesterId")
+    const includeAll = searchParams.get("includeAll") === "true"
+
+    let activeSemesterId = semesterId
+
+    if (!activeSemesterId && !includeAll && !studentId) {
+      const { data: activeSemester } = await supabase
+        .from("semester_config")
+        .select("id")
+        .eq("is_active", true)
+        .single()
+
+      activeSemesterId = activeSemester?.id
+    }
 
     let query = supabase
       .from("students")
@@ -33,6 +47,10 @@ export async function GET(request: Request) {
       query = query.eq("id", studentId)
     }
 
+    if (activeSemesterId && !studentId) {
+      query = query.eq("semester_id", activeSemesterId)
+    }
+
     const { data: students, error } = await query
 
     if (error) {
@@ -40,6 +58,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ students: [] })
     }
 
+    // ... existing code for debriefs and attendance ...
     let debriefsQuery = supabase.from("debriefs").select("student_id, hours_worked")
     let attendanceQuery = supabase.from("attendance").select("student_id")
 

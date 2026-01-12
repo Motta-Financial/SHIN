@@ -1,12 +1,41 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
+import { getCachedData, setCachedData } from "@/lib/api-cache"
+
+const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
 
 export async function GET(request: Request) {
   try {
-    const supabase = createServiceClient()
     const { searchParams } = new URL(request.url)
     const studentId = searchParams.get("studentId")
     const studentEmail = searchParams.get("studentEmail")
+    const semesterId = searchParams.get("semesterId")
+    const includeAll = searchParams.get("includeAll") === "true"
+
+    const cacheKey = `debriefs:${studentId || ""}:${studentEmail || ""}:${semesterId || ""}:${includeAll}`
+    const cached = getCachedData(cacheKey)
+    if (cached) {
+      console.log("[v0] Debriefs API - Returning cached response")
+      return NextResponse.json(cached)
+    }
+
+    let supabase
+    try {
+      supabase = createServiceClient()
+    } catch (credError) {
+      console.log("[v0] Supabase service client error:", credError)
+      return NextResponse.json({ debriefs: [], error: "Database not configured" })
+    }
+
+    let activeSemesterId = semesterId
+    if (!activeSemesterId && !includeAll && !studentId && !studentEmail) {
+      const { data: activeSemester } = await supabase
+        .from("semester_config")
+        .select("id")
+        .eq("is_active", true)
+        .single()
+      activeSemesterId = activeSemester?.id
+    }
 
     let query = supabase
       .from("debriefs")
@@ -27,11 +56,14 @@ export async function GET(request: Request) {
       `)
       .order("week_ending", { ascending: false })
 
-    // Filter by student if provided
     if (studentId) {
       query = query.eq("student_id", studentId)
     } else if (studentEmail) {
       query = query.eq("student_email", studentEmail)
+    }
+
+    if (activeSemesterId && !studentId && !studentEmail) {
+      query = query.eq("semester_id", activeSemesterId)
     }
 
     const { data: debriefs, error } = await query
@@ -41,7 +73,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ debriefs: [] })
     }
 
-    const { data: mappingData, error: mappingError } = await supabase.from("v_complete_mapping").select("*")
+    const { data: mappingData, error: mappingError } = await supabase
+      .from("v_complete_mapping")
+      .select("*")
+      .eq("semester_id", SPRING_2026_SEMESTER_ID)
 
     if (mappingError) {
       console.log("[v0] Error fetching v_complete_mapping:", mappingError.message)
@@ -50,7 +85,6 @@ export async function GET(request: Request) {
     const studentMap = new Map<string, any>()
     if (mappingData) {
       for (const row of mappingData) {
-        // Deduplicate by student_id
         if (!studentMap.has(row.student_id)) {
           studentMap.set(row.student_id, row)
         }
@@ -67,12 +101,10 @@ export async function GET(request: Request) {
         studentEmail: studentData?.student_email || debrief.student_email,
         clientName: studentData?.client_name || debrief.client_name,
         clinic: studentData?.student_clinic_name || debrief.clinic,
-        // Director info from v_complete_mapping
         clinicDirector: studentData?.clinic_director_name || null,
-        clinicDirectorEmail: null, // Not available in v_complete_mapping
+        clinicDirectorEmail: null,
         clientDirector: studentData?.client_director_name || null,
-        clientDirectorEmail: null, // Not available in v_complete_mapping
-        // Debrief specific data
+        clientDirectorEmail: null,
         hoursWorked: debrief.hours_worked || 0,
         workSummary: debrief.work_summary,
         questions: debrief.questions,
@@ -86,7 +118,12 @@ export async function GET(request: Request) {
       }
     })
 
-    return NextResponse.json({ debriefs: formattedDebriefs })
+    const response = { debriefs: formattedDebriefs }
+
+    setCachedData(cacheKey, response)
+    console.log("[v0] Debriefs API - Fetched and cached debriefs count:", formattedDebriefs.length)
+
+    return NextResponse.json(response)
   } catch (error) {
     console.log("[v0] Error fetching debriefs:", error)
     return NextResponse.json({ debriefs: [] })

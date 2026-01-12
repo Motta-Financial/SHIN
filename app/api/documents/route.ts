@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
+import { getCachedData, setCachedData } from "@/lib/api-cache"
 
 export async function GET(request: Request) {
   try {
@@ -7,10 +9,40 @@ export async function GET(request: Request) {
     const clientName = searchParams.get("client")
     const clientId = searchParams.get("clientId")
     const submissionType = searchParams.get("submissionType")
+    const semesterId = searchParams.get("semesterId")
+    const includeAll = searchParams.get("includeAll") === "true"
+
+    const cacheKey = `documents-${clientId || "all"}-${clientName || "all"}-${submissionType || "all"}-${semesterId || "default"}-${includeAll}`
+    const cached = getCachedData(cacheKey)
+    if (cached) {
+      console.log("[v0] Documents API - Returning cached response")
+      return NextResponse.json(cached)
+    }
 
     const supabase = await createClient()
 
+    // Get active semester if not specified and not including all
+    let activeSemesterId = semesterId
+    if (!activeSemesterId && !includeAll) {
+      try {
+        const serviceClient = createServiceClient()
+        const { data: activeSemester } = await serviceClient
+          .from("semester_config")
+          .select("id")
+          .eq("is_active", true)
+          .maybeSingle()
+        activeSemesterId = activeSemester?.id || null
+      } catch (err) {
+        console.error("[v0] Error fetching active semester:", err)
+      }
+    }
+
     let query = supabase.from("documents").select("*").order("uploaded_at", { ascending: false })
+
+    // Filter by active semester (Spring 2026) by default
+    if (activeSemesterId) {
+      query = query.eq("semester_id", activeSemesterId)
+    }
 
     if (clientId && clientId !== "all") {
       query = query.eq("client_id", clientId)
@@ -29,7 +61,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ documents: data || [] })
+    const result = { documents: data || [] }
+
+    setCachedData(cacheKey, result, 30000) // 30 second cache
+    console.log("[v0] Documents API - Fetched and cached documents count:", data?.length || 0)
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[v0] Error in documents API:", error)
     return NextResponse.json({ error: "Failed to fetch documents" }, { status: 500 })
@@ -50,6 +87,7 @@ export async function POST(request: Request) {
       description,
       clinic,
       submissionType,
+      semesterId,
     } = body
 
     if (!fileUrl || !fileName) {
@@ -57,6 +95,22 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createClient()
+
+    // Get active semester if not provided
+    let activeSemesterId = semesterId
+    if (!activeSemesterId) {
+      try {
+        const serviceClient = createServiceClient()
+        const { data: activeSemester } = await serviceClient
+          .from("semester_config")
+          .select("id")
+          .eq("is_active", true)
+          .maybeSingle()
+        activeSemesterId = activeSemester?.id || null
+      } catch (err) {
+        console.error("[v0] Error fetching active semester:", err)
+      }
+    }
 
     const insertData: Record<string, any> = {
       file_url: fileUrl,
@@ -66,6 +120,7 @@ export async function POST(request: Request) {
       clinic: clinic || "",
       submission_type: submissionType || "document",
       uploaded_at: new Date().toISOString(),
+      semester_id: activeSemesterId,
     }
 
     // Add optional foreign key references if provided

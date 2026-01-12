@@ -17,6 +17,43 @@ interface Director {
   clinicName?: string
 }
 
+async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url)
+
+      // Check for rate limiting
+      if (response.status === 429) {
+        const delay = Math.pow(2, attempt + 1) * 1000 // 2s, 4s, 8s
+        console.log(`[v0] Rate limited, retrying in ${delay}ms...`)
+        await new Promise((resolve) => setTimeout(resolve, delay))
+        continue
+      }
+
+      // Check if response is "Too Many Requests" text
+      const contentType = response.headers.get("content-type")
+      if (!contentType?.includes("application/json")) {
+        const text = await response.text()
+        if (text.startsWith("Too Many R")) {
+          const delay = Math.pow(2, attempt + 1) * 1000
+          console.log(`[v0] Rate limited (text), retrying in ${delay}ms...`)
+          await new Promise((resolve) => setTimeout(resolve, delay))
+          continue
+        }
+        // Return a mock response with the text
+        return new Response(JSON.stringify({ error: text }), { status: 500 })
+      }
+
+      return response
+    } catch (error) {
+      if (attempt === maxRetries - 1) throw error
+      const delay = Math.pow(2, attempt + 1) * 1000
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+  throw new Error("Max retries exceeded")
+}
+
 export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRemindersProps) {
   const [pendingEvaluations, setPendingEvaluations] = useState(0)
   const [unresolvedQuestions, setUnresolvedQuestions] = useState(0)
@@ -27,7 +64,8 @@ export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRem
   useEffect(() => {
     async function fetchDirectors() {
       try {
-        const res = await fetch("/api/directors")
+        await new Promise((resolve) => setTimeout(resolve, 1200))
+        const res = await fetchWithRetry("/api/directors")
         if (res.ok) {
           const data = await res.json()
           setDirectors(data.directors || [])
@@ -42,19 +80,19 @@ export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRem
   useEffect(() => {
     async function fetchReminders() {
       try {
-        const docsResponse = await fetch("/api/documents")
+        await new Promise((resolve) => setTimeout(resolve, 500))
+
+        const docsResponse = await fetchWithRetry("/api/documents")
         const docsData = await docsResponse.json()
 
         if (docsData.documents) {
           let currentDirector: Director | undefined
 
           if (selectedClinic && selectedClinic !== "all") {
-            // Check if selectedClinic is a UUID
             const isUUID = selectedClinic.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
             if (isUUID) {
               currentDirector = directors.find((d) => d.id === selectedClinic)
             } else {
-              // Try to find by clinic name
               currentDirector = directors.find((d) => d.clinicName === selectedClinic)
             }
           }
@@ -64,11 +102,20 @@ export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRem
           let pendingEvals = 0
           let docsNeedingReview = 0
 
-          for (const doc of docsData.documents) {
-            const isPPTX = doc.file_name.toLowerCase().endsWith(".pptx") || doc.file_name.toLowerCase().endsWith(".ppt")
+          const pptxDocs = docsData.documents.filter(
+            (doc: any) => doc.file_name.toLowerCase().endsWith(".pptx") || doc.file_name.toLowerCase().endsWith(".ppt"),
+          )
+          const otherDocs = docsData.documents.filter(
+            (doc: any) =>
+              !doc.file_name.toLowerCase().endsWith(".pptx") && !doc.file_name.toLowerCase().endsWith(".ppt"),
+          )
 
-            if (isPPTX) {
-              const evalsResponse = await fetch(`/api/evaluations?documentId=${doc.id}`)
+          // Process PPTX docs with delays
+          for (const doc of pptxDocs.slice(0, 5)) {
+            // Limit to 5 to avoid too many requests
+            await new Promise((resolve) => setTimeout(resolve, 300))
+            try {
+              const evalsResponse = await fetchWithRetry(`/api/evaluations?documentId=${doc.id}`)
               const evalsData = await evalsResponse.json()
 
               const hasEvaluation = currentDirectorName
@@ -78,8 +125,20 @@ export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRem
               if (!hasEvaluation) {
                 pendingEvals++
               }
-            } else {
-              const reviewsResponse = await fetch(`/api/documents/reviews?documentId=${doc.id}`)
+            } catch (err) {
+              console.error("Error fetching evaluations:", err)
+            }
+          }
+
+          // Add remaining PPTX docs count without fetching
+          pendingEvals += Math.max(0, pptxDocs.length - 5)
+
+          // Process other docs with delays
+          for (const doc of otherDocs.slice(0, 5)) {
+            // Limit to 5 to avoid too many requests
+            await new Promise((resolve) => setTimeout(resolve, 300))
+            try {
+              const reviewsResponse = await fetchWithRetry(`/api/documents/reviews?documentId=${doc.id}`)
               const reviewsData = await reviewsResponse.json()
 
               const hasReview = currentDirectorName
@@ -89,15 +148,22 @@ export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRem
               if (!hasReview) {
                 docsNeedingReview++
               }
+            } catch (err) {
+              console.error("Error fetching reviews:", err)
             }
           }
+
+          // Add remaining docs count without fetching
+          docsNeedingReview += Math.max(0, otherDocs.length - 5)
 
           setPendingEvaluations(pendingEvals)
           setDocumentsNeedingReview(docsNeedingReview)
         }
 
+        await new Promise((resolve) => setTimeout(resolve, 500))
+
         // Fetch debriefs for questions
-        const questionsResponse = await fetch("/api/supabase/debriefs")
+        const questionsResponse = await fetchWithRetry("/api/supabase/debriefs")
         const questionsData = await questionsResponse.json()
 
         if (questionsData.debriefs) {

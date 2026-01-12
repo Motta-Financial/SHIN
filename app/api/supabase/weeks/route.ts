@@ -1,34 +1,75 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
+import { getCachedData, setCachedData } from "@/lib/api-cache"
 
-const FALL_2025_WEEKS = [
-  { week_start: "2025-09-08", week_end: "2025-09-14", week_label: "Week 1", week_number: 1, is_break: false },
-  { week_start: "2025-09-15", week_end: "2025-09-21", week_label: "Week 2", week_number: 2, is_break: false },
-  { week_start: "2025-09-22", week_end: "2025-09-28", week_label: "Week 3", week_number: 3, is_break: false },
-  { week_start: "2025-09-29", week_end: "2025-10-05", week_label: "Week 4", week_number: 4, is_break: false },
-  { week_start: "2025-10-06", week_end: "2025-10-12", week_label: "Week 5", week_number: 5, is_break: false },
-  { week_start: "2025-10-13", week_end: "2025-10-19", week_label: "Oct Break", week_number: 6, is_break: true },
-  { week_start: "2025-10-20", week_end: "2025-10-26", week_label: "Week 6", week_number: 7, is_break: false },
-  { week_start: "2025-10-27", week_end: "2025-11-02", week_label: "Week 7", week_number: 8, is_break: false },
-  { week_start: "2025-11-03", week_end: "2025-11-09", week_label: "Week 8", week_number: 9, is_break: false },
-  { week_start: "2025-11-10", week_end: "2025-11-16", week_label: "Week 9", week_number: 10, is_break: false },
-  { week_start: "2025-11-17", week_end: "2025-11-23", week_label: "Week 10", week_number: 11, is_break: false },
-  { week_start: "2025-11-24", week_end: "2025-11-30", week_label: "Week 11", week_number: 12, is_break: false },
-  { week_start: "2025-12-01", week_end: "2025-12-07", week_label: "Week 12", week_number: 13, is_break: false },
-  { week_start: "2025-12-08", week_end: "2025-12-14", week_label: "Week 13", week_number: 14, is_break: false },
+const SPRING_2026_WEEKS = [
+  { week_start: "2026-01-12", week_end: "2026-01-18", week_label: "Week 1", week_number: 1, is_break: false },
+  { week_start: "2026-01-19", week_end: "2026-01-25", week_label: "Week 2", week_number: 2, is_break: false },
+  { week_start: "2026-01-26", week_end: "2026-02-01", week_label: "Week 3", week_number: 3, is_break: false },
+  { week_start: "2026-02-02", week_end: "2026-02-08", week_label: "Week 4", week_number: 4, is_break: false },
+  { week_start: "2026-02-09", week_end: "2026-02-15", week_label: "Week 5", week_number: 5, is_break: false },
+  {
+    week_start: "2026-02-16",
+    week_end: "2026-02-22",
+    week_label: "Week 6-Spring Break",
+    week_number: 6,
+    is_break: true,
+  },
+  { week_start: "2026-02-23", week_end: "2026-03-01", week_label: "Week 7", week_number: 7, is_break: false },
+  { week_start: "2026-03-02", week_end: "2026-03-08", week_label: "Week 8", week_number: 8, is_break: false },
+  { week_start: "2026-03-09", week_end: "2026-03-15", week_label: "Week 9", week_number: 9, is_break: false },
+  { week_start: "2026-03-16", week_end: "2026-03-22", week_label: "Week 10", week_number: 10, is_break: false },
+  { week_start: "2026-03-23", week_end: "2026-03-29", week_label: "Week 11", week_number: 11, is_break: false },
+  { week_start: "2026-03-30", week_end: "2026-04-05", week_label: "Week 12", week_number: 12, is_break: false },
+  { week_start: "2026-04-06", week_end: "2026-04-12", week_label: "Week 13", week_number: 13, is_break: false },
+  { week_start: "2026-04-13", week_end: "2026-04-19", week_label: "Week 14", week_number: 14, is_break: false },
 ]
 
+function findCurrentWeek(schedule: typeof SPRING_2026_WEEKS): string | null {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  for (const week of schedule) {
+    const weekStart = new Date(week.week_start)
+    const weekEnd = new Date(week.week_end)
+    weekStart.setHours(0, 0, 0, 0)
+    weekEnd.setHours(23, 59, 59, 999)
+
+    if (today >= weekStart && today <= weekEnd) {
+      return week.week_start
+    }
+  }
+
+  // If no current week found, return the first week that hasn't started yet
+  for (const week of schedule) {
+    const weekStart = new Date(week.week_start)
+    if (today < weekStart) {
+      return week.week_start
+    }
+  }
+
+  // If all weeks are past, return the last week
+  return schedule.length > 0 ? schedule[schedule.length - 1].week_start : null
+}
+
 export async function GET() {
+  const cacheKey = "weeks:active"
+  const cached = getCachedData(cacheKey)
+  if (cached) {
+    console.log("[v0] Weeks API - Returning cached response")
+    return NextResponse.json(cached)
+  }
+
   try {
     const supabase = createServiceClient()
 
-    let schedule: typeof FALL_2025_WEEKS | null = null
+    let schedule: typeof SPRING_2026_WEEKS | null = null
 
     try {
       const { data: semesterConfig } = await supabase
         .from("semester_config")
         .select("id, semester")
-        .or("is_active.eq.true,semester.ilike.%Fall 2025%")
+        .eq("is_active", true)
         .limit(1)
         .single()
 
@@ -59,32 +100,40 @@ export async function GET() {
     }
 
     if (!schedule || schedule.length === 0) {
-      schedule = FALL_2025_WEEKS
+      schedule = SPRING_2026_WEEKS
     }
 
-    const weeks = schedule.map((week) => week.week_end)
+    const weeks = schedule.map((week) => week.week_start)
+    const currentWeek = findCurrentWeek(schedule)
 
-    return NextResponse.json({
+    const response = {
       success: true,
       weeks,
+      currentWeek,
       schedule: schedule.map((w) => ({
-        value: w.week_end,
+        value: w.week_start, // Use week_start as the value
         label: w.week_label,
         weekNumber: w.week_number,
         isBreak: w.is_break,
         weekStart: w.week_start,
         weekEnd: w.week_end,
       })),
-      source: schedule === FALL_2025_WEEKS ? "hardcoded" : "database",
-    })
+      source: schedule === SPRING_2026_WEEKS ? "hardcoded" : "database",
+    }
+
+    setCachedData(cacheKey, response)
+    return NextResponse.json(response)
   } catch (error) {
     console.error("[v0] Error fetching weeks:", error)
 
+    const currentWeek = findCurrentWeek(SPRING_2026_WEEKS)
+
     return NextResponse.json({
       success: true,
-      weeks: FALL_2025_WEEKS.map((w) => w.week_end),
-      schedule: FALL_2025_WEEKS.map((w) => ({
-        value: w.week_end,
+      weeks: SPRING_2026_WEEKS.map((w) => w.week_start),
+      currentWeek,
+      schedule: SPRING_2026_WEEKS.map((w) => ({
+        value: w.week_start,
         label: w.week_label,
         weekNumber: w.week_number,
         isBreak: w.is_break,

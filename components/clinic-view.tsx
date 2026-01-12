@@ -26,7 +26,10 @@ import {
   MessageSquare,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
-import DocumentUpload from "@/components/shared/DocumentUpload" // Added import for DocumentUpload
+import DocumentUpload from "@/components/shared/DocumentUpload"
+
+// Spring 2026 semester ID - used to filter data
+const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
 
 interface ClinicViewProps {
   selectedClinic: string
@@ -49,6 +52,7 @@ interface CompleteMapping {
   client_director_name: string | null
   client_director_email: string | null
   semester: string | null
+  semester_id: string | null // Added semester_id to CompleteMapping
 }
 
 interface ClinicData {
@@ -68,6 +72,7 @@ interface ScheduleWeek {
   session_focus: string
   assignments: any
   is_break: boolean
+  semester_id: string | null // Added semester_id to ScheduleWeek
 }
 
 interface CourseMaterial {
@@ -131,7 +136,10 @@ export function ClinicView({ selectedClinic, selectedWeeks = [] }: ClinicViewPro
           /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedClinic),
       )
 
-      const { data: mappingData, error: mappingError } = await supabase.from("v_complete_mapping").select("*")
+      const { data: mappingData, error: mappingError } = await supabase
+        .from("v_complete_mapping")
+        .select("*")
+        .eq("semester_id", SPRING_2026_SEMESTER_ID)
 
       let filteredStudents: CompleteMapping[] = []
 
@@ -165,7 +173,7 @@ export function ClinicView({ selectedClinic, selectedWeeks = [] }: ClinicViewPro
         students: filteredStudents,
         directors: Array.from(directorsSet),
         clients: Array.from(clientsSet),
-        semester: filteredStudents[0]?.semester || "Fall 2025",
+        semester: filteredStudents[0]?.semester || "Spring 2026",
       })
 
       const debriefsRes = await fetch("/api/supabase/debriefs")
@@ -177,6 +185,7 @@ export function ClinicView({ selectedClinic, selectedWeeks = [] }: ClinicViewPro
       const { data: scheduleData } = await supabase
         .from("semester_schedule")
         .select("*")
+        .eq("semester_id", SPRING_2026_SEMESTER_ID)
         .order("week_number", { ascending: true })
 
       if (scheduleData) {

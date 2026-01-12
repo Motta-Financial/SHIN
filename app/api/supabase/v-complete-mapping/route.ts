@@ -1,17 +1,57 @@
 import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
+import { getCached, setCache, getCacheKey } from "@/lib/api-cache"
 
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient()
     const { searchParams } = new URL(request.url)
 
     const clinicId = searchParams.get("clinicId")
     const clientId = searchParams.get("clientId")
     const studentId = searchParams.get("studentId")
     const directorId = searchParams.get("directorId")
+    const semesterId = searchParams.get("semesterId")
+    const includeAll = searchParams.get("includeAll") === "true"
+
+    const cacheKey = getCacheKey("v-complete-mapping", {
+      clinicId: clinicId || undefined,
+      clientId: clientId || undefined,
+      studentId: studentId || undefined,
+      directorId: directorId || undefined,
+      semesterId: semesterId || undefined,
+      includeAll: includeAll.toString(),
+    })
+    const cached = getCached<{ success: boolean; data: any[]; records: any[]; mappings: any[] }>(cacheKey)
+    if (cached) {
+      console.log("[v0] v-complete-mapping API - Returning cached response")
+      return NextResponse.json(cached)
+    }
+
+    const supabase = await createClient()
+
+    // Get active semester if not specified and not including all
+    let activeSemesterId = semesterId
+    if (!activeSemesterId && !includeAll) {
+      try {
+        const serviceClient = createServiceClient()
+        const { data: activeSemester } = await serviceClient
+          .from("semester_config")
+          .select("id")
+          .eq("is_active", true)
+          .maybeSingle()
+        activeSemesterId = activeSemester?.id || null
+      } catch (err) {
+        console.error("[v0] Error fetching active semester:", err)
+      }
+    }
 
     let query = supabase.from("v_complete_mapping").select("*")
+
+    // Apply semester filter by default (Spring 2026)
+    if (activeSemesterId) {
+      query = query.eq("semester_id", activeSemesterId)
+    }
 
     // Apply filters based on provided parameters
     if (clinicId) {
@@ -34,12 +74,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({
+    const response = {
       success: true,
       data: data || [],
       records: data || [],
       mappings: data || [],
-    })
+    }
+    setCache(cacheKey, response)
+    return NextResponse.json(response)
   } catch (err) {
     console.error("Error in v-complete-mapping route:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

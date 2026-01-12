@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
       workSummary,
       questions,
       weekEnding,
-      semester = "Fall 2025",
+      semester = "Spring 2026",
     } = body
 
     if (!studentId || !studentName || !clientName || !hoursWorked) {
@@ -77,8 +77,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient()
 
-    // Calculate week number from semester start
-    const semesterStart = new Date("2025-09-07")
+    const semesterStart = new Date("2026-01-12")
     const weekEndDate = new Date(weekEnding)
     const diffTime = weekEndDate.getTime() - semesterStart.getTime()
     const weekNumber = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 7)) + 1

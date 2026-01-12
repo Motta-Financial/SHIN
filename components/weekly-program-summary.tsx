@@ -21,6 +21,46 @@ interface WeeklyProgramSummaryProps {
   directorId?: string
 }
 
+// Helper functions for sequential fetching with retry
+async function fetchWithRetry(url: string, retries = 3, delay = 2000): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    const res = await fetch(url)
+
+    // Check if response is "Too Many Requests" by inspecting text
+    if (!res.ok && res.status === 429) {
+      await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, i)))
+      continue
+    }
+
+    // Check for text-based rate limit error
+    const contentType = res.headers.get("content-type")
+    if (contentType && contentType.includes("text/plain")) {
+      const text = await res.clone().text()
+      if (text.includes("Too Many R")) {
+        if (i < retries - 1) {
+          await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, i)))
+          continue
+        }
+      }
+    }
+
+    return res
+  }
+  return fetch(url)
+}
+
+async function fetchSequentially(urls: string[]): Promise<Response[]> {
+  const results: Response[] = []
+  for (const url of urls) {
+    if (results.length > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 500)) // Increased from 150ms to 500ms
+    }
+    const res = await fetchWithRetry(url)
+    results.push(res)
+  }
+  return results
+}
+
 export function WeeklyProgramSummary({
   selectedWeek,
   selectedWeeks = [],
@@ -36,19 +76,47 @@ export function WeeklyProgramSummary({
   const normalizedWeeks = selectedWeeks.length > 0 ? selectedWeeks : selectedWeek ? [selectedWeek] : []
 
   useEffect(() => {
-    async function fetchData() {
+    const fetchData = async () => {
       try {
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+
         const mappingUrl =
           directorId && directorId !== "all"
             ? `/api/supabase/v-complete-mapping?directorId=${directorId}`
             : "/api/supabase/v-complete-mapping"
 
-        const [debriefResponse, clientsResponse, directorsResponse, mappingResponse] = await Promise.all([
-          fetch("/api/supabase/debriefs"),
-          fetch("/api/supabase/clients"),
-          fetch("/api/directors"),
-          fetch(mappingUrl),
-        ])
+        const urls = ["/api/supabase/debriefs", "/api/supabase/clients", "/api/directors", mappingUrl]
+
+        const [debriefResponse, clientsResponse, directorsResponse, mappingResponse] = await fetchSequentially(urls)
+
+        const isJsonResponse = (res: Response) => {
+          const contentType = res.headers.get("content-type")
+          return contentType && contentType.includes("application/json")
+        }
+
+        if (!debriefResponse.ok || !clientsResponse.ok || !directorsResponse.ok || !mappingResponse.ok) {
+          console.log("[v0] WeeklyProgramSummary - One or more API responses failed", {
+            debriefs: debriefResponse.status,
+            clients: clientsResponse.status,
+            directors: directorsResponse.status,
+            mapping: mappingResponse.status,
+          })
+          setWorkEntries([])
+          setGeneratingSummaries(false)
+          return
+        }
+
+        if (
+          !isJsonResponse(debriefResponse) ||
+          !isJsonResponse(clientsResponse) ||
+          !isJsonResponse(directorsResponse) ||
+          !isJsonResponse(mappingResponse)
+        ) {
+          console.log("[v0] WeeklyProgramSummary - One or more API responses are not JSON")
+          setWorkEntries([])
+          setGeneratingSummaries(false)
+          return
+        }
 
         const debriefData = await debriefResponse.json()
         const clientsData = await clientsResponse.json()

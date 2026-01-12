@@ -88,6 +88,49 @@ interface TriageProps {
   signedAgreements?: AgreementType[]
 }
 
+const fetchWithRetry = async (url: string, maxRetries = 3): Promise<Response> => {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url)
+
+      // Check for rate limiting
+      if (response.status === 429) {
+        const delay = Math.pow(2, attempt + 1) * 1000 // 2s, 4s, 8s
+        console.log(`[v0] Triage - Rate limited, retrying in ${delay}ms...`)
+        await new Promise((resolve) => setTimeout(resolve, delay))
+        continue
+      }
+
+      // Check if response might be rate limit text
+      const contentType = response.headers.get("content-type")
+      if (!contentType?.includes("application/json")) {
+        const text = await response.text()
+        if (text.startsWith("Too Many R")) {
+          const delay = Math.pow(2, attempt + 1) * 1000
+          console.log(`[v0] Triage - Rate limited (text), retrying in ${delay}ms...`)
+          await new Promise((resolve) => setTimeout(resolve, delay))
+          continue
+        }
+        // Try to parse as JSON anyway
+        try {
+          return new Response(JSON.stringify(JSON.parse(text)), {
+            headers: { "content-type": "application/json" },
+          })
+        } catch {
+          throw new Error(`Non-JSON response: ${text.substring(0, 50)}`)
+        }
+      }
+
+      return response
+    } catch (error) {
+      if (attempt === maxRetries - 1) throw error
+      const delay = Math.pow(2, attempt + 1) * 1000
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+  throw new Error("Max retries exceeded")
+}
+
 export function Triage({
   userType,
   userName,
@@ -134,12 +177,20 @@ export function Triage({
   const fetchDirectorNotifications = async () => {
     setLoading(true)
     try {
-      const notifResponse = await fetch(
+      // Add initial delay to avoid collision with other components
+      await new Promise((resolve) => setTimeout(resolve, 800))
+
+      // Fetch notifications first with retry
+      const notifResponse = await fetchWithRetry(
         `/api/notifications?${selectedClinic !== "all" ? `directorId=${selectedClinic}` : ""}`,
       )
       const notifData = await notifResponse.json()
 
-      const meetingResponse = await fetch("/api/meeting-requests?status=pending")
+      // Add delay between requests
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
+      // Then fetch meeting requests with retry
+      const meetingResponse = await fetchWithRetry("/api/meeting-requests?status=pending")
       const meetingData = await meetingResponse.json()
 
       const meetingNotifs = (meetingData.requests || []).map((m: any) => ({

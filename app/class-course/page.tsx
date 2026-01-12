@@ -31,6 +31,7 @@ import {
   FileCode,
   Loader2,
   AlertCircle,
+  AlertTriangle,
   ClipboardList,
   Star,
   CheckCircle2,
@@ -38,8 +39,15 @@ import {
   Users,
   Send,
   Megaphone,
+  Building2,
+  Key,
+  Save,
+  XCircle,
 } from "lucide-react"
 import { UnifiedWeeklyAgenda } from "@/components/unified-weekly-agenda"
+import { useDemoMode } from "@/contexts/demo-mode-context"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ClinicAgendaTab } from "@/components/clinic-agenda-tab"
 
 // Mock announcements - REMOVED - will fetch from database
 // const mockAnnouncements = [
@@ -314,6 +322,38 @@ export default function ClassCoursePage() {
     Record<string, { sow: boolean; midterm: boolean; final: boolean }>
   >({})
 
+  const [attendanceRecords, setAttendanceRecords] = useState<
+    Array<{
+      id: string
+      studentId: string
+      studentName: string
+      studentEmail: string
+      classDate: string
+      weekNumber: number
+      weekEnding: string
+      clinic: string
+      notes: string
+      submittedAt?: string // Added for attendance submission time
+    }>
+  >([])
+  const [loadingAttendance, setLoadingAttendance] = useState(true)
+
+  // State for password management
+  interface WeekPassword {
+    id: string
+    week_number: number
+    password: string
+    created_at: string
+    updated_at: string
+    week_start: string // Added for date range
+    week_end: string // Added for date range
+    semesterId: string // Added for semester association
+  }
+  const [weekPasswords, setWeekPasswords] = useState<WeekPassword[]>([])
+  const [newPasswordWeek, setNewPasswordWeek] = useState<string>("")
+  const [newPassword, setNewPassword] = useState<string>("")
+  const [savingPassword, setSavingPassword] = useState(false)
+
   const [scheduleData, setScheduleData] = useState<TimeBlock[]>([
     {
       id: "1",
@@ -412,6 +452,7 @@ export default function ClassCoursePage() {
   const [newAnnouncementPriority, setNewAnnouncementPriority] = useState<"high" | "normal">("normal")
   const [postingAnnouncement, setPostingAnnouncement] = useState(false)
   const [clinics, setClinics] = useState<Array<{ id: string; name: string }>>([])
+  const { isDemoMode } = useDemoMode()
 
   // State for student selection in demo mode
   interface Student {
@@ -426,6 +467,29 @@ export default function ClassCoursePage() {
   const [students, setStudents] = useState<Student[]>([])
   const [selectedStudentId, setSelectedStudentId] = useState<string>("")
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
+
+  // State for Roster Data
+  const [rosterData, setRosterData] = useState<any[]>([])
+
+  const semesterName = "Spring 2026" // Define semester name
+  const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
+
+  const [semesterSchedule, setSemesterSchedule] = useState<any[]>([])
+
+  useEffect(() => {
+    const fetchSemesterSchedule = async () => {
+      try {
+        const res = await fetch(`/api/semester-schedule?semesterId=${SPRING_2026_SEMESTER_ID}`)
+        if (res.ok) {
+          const data = await res.json()
+          setSemesterSchedule(data.schedules || [])
+        }
+      } catch (error) {
+        console.error("Error fetching semester schedule:", error)
+      }
+    }
+    fetchSemesterSchedule()
+  }, [])
 
   useEffect(() => {
     const fetchEvaluations = async () => {
@@ -565,6 +629,25 @@ export default function ClassCoursePage() {
       }
     }
     fetchStudents()
+  }, [])
+
+  // Fetch roster data for absent students
+  useEffect(() => {
+    const fetchRosterForAbsent = async () => {
+      try {
+        console.log("[v0] Fetching roster for absent students calculation...")
+        const response = await fetch("/api/supabase/v-complete-mapping")
+        if (response.ok) {
+          const data = await response.json()
+          console.log("[v0] Roster data fetched:", data.mappings?.length, "students")
+          setRosterData(data.mappings || [])
+        }
+      } catch (error) {
+        console.error("[v0] Error fetching roster:", error)
+      }
+    }
+
+    fetchRosterForAbsent()
   }, [])
 
   // Update selectedStudent when selectedStudentId changes
@@ -860,7 +943,7 @@ export default function ClassCoursePage() {
           content: newAnnouncementContent,
           clinicId: newAnnouncementClinic === "all" ? null : newAnnouncementClinic,
           priority: newAnnouncementPriority,
-          postedBy: "Program Director", // This could be dynamic based on logged-in user
+          postedBy: "Program Director", // This could be dynamic based on logged in user
         }),
       })
 
@@ -962,13 +1045,139 @@ export default function ClassCoursePage() {
   }
 
   // Helper to get current week number (assuming semester starts on Jan 1st for simplicity)
+  // Replaced with semester-aware calculation
   const getCurrentWeekNumber = () => {
+    if (!semesterSchedule || semesterSchedule.length === 0) {
+      return 1 // Default to Week 1 if schedule not loaded
+    }
+
     const today = new Date()
-    const startOfYear = new Date(today.getFullYear(), 0, 1) // January 1st
-    const diff = today.getTime() - startOfYear.getTime()
-    const oneDay = 1000 * 60 * 60 * 24
-    const days = Math.floor(diff / oneDay)
-    return Math.ceil((days + 1) / 7)
+    today.setHours(0, 0, 0, 0) // Reset to start of day for accurate comparison
+
+    // Find the week that contains today's date
+    const currentWeek = semesterSchedule.find((week) => {
+      const weekStart = new Date(week.week_start)
+      const weekEnd = new Date(week.week_end)
+      weekStart.setHours(0, 0, 0, 0)
+      weekEnd.setHours(23, 59, 59, 999)
+
+      return today >= weekStart && today <= weekEnd
+    })
+
+    if (currentWeek) {
+      console.log("[v0] Current week found:", currentWeek.week_number, currentWeek.week_label)
+      return currentWeek.week_number
+    }
+
+    // If today is before semester starts, return 1
+    const firstWeek = semesterSchedule[0]
+    if (firstWeek && today < new Date(firstWeek.week_start)) {
+      console.log("[v0] Before semester start, defaulting to Week 1")
+      return 1
+    }
+
+    // If today is after semester ends, return the last week
+    const lastWeek = semesterSchedule[semesterSchedule.length - 1]
+    if (lastWeek && today > new Date(lastWeek.week_end)) {
+      console.log("[v0] After semester end, using last week:", lastWeek.week_number)
+      return lastWeek.week_number
+    }
+
+    console.log("[v0] Could not determine current week, defaulting to 1")
+    return 1 // Default fallback
+  }
+
+  // Fetch attendance records
+  useEffect(() => {
+    const fetchAttendanceRecords = async () => {
+      setLoadingAttendance(true)
+      try {
+        const semesterId = SPRING_2026_SEMESTER_ID // Spring 2026
+        const res = await fetch(`/api/supabase/attendance?semesterId=${semesterId}`)
+        if (res.ok) {
+          const data = await res.json()
+          console.log("[v0] Fetched attendance records for Spring 2026:", data.attendance?.length || 0)
+          setAttendanceRecords(data.attendance || [])
+        } else {
+          console.error("Failed to fetch attendance records")
+        }
+      } catch (error) {
+        console.error("Error fetching attendance records:", error)
+      } finally {
+        setLoadingAttendance(false)
+      }
+    }
+    fetchAttendanceRecords()
+  }, [])
+
+  // Fetch week passwords
+  useEffect(() => {
+    const fetchWeekPasswords = async () => {
+      try {
+        const res = await fetch("/api/attendance-password")
+        if (res.ok) {
+          const data = await res.json()
+          setWeekPasswords(data.passwords || [])
+        } else {
+          console.error("Failed to fetch week passwords")
+        }
+      } catch (error) {
+        console.error("Error fetching week passwords:", error)
+      }
+    }
+    fetchWeekPasswords()
+  }, [])
+
+  // Handle setting a new password
+  const handleSetPassword = async () => {
+    if (!newPasswordWeek.trim() || !newPassword.trim()) {
+      alert("Please enter both week number and password")
+      return
+    }
+
+    const weekNumber = Number.parseInt(newPasswordWeek, 10)
+    if (isNaN(weekNumber) || weekNumber <= 0) {
+      alert("Week number must be a positive integer")
+      return
+    }
+
+    const weekInfo = semesterSchedule.find((w) => w.week_number === weekNumber)
+    if (!weekInfo) {
+      alert("Invalid week number. Please select a valid week from the dropdown.")
+      return
+    }
+
+    setSavingPassword(true)
+    try {
+      const res = await fetch("/api/attendance-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          weekNumber: weekNumber,
+          semesterId: SPRING_2026_SEMESTER_ID,
+          password: newPassword,
+          weekStart: weekInfo.week_start,
+          weekEnd: weekInfo.week_end,
+          createdByName: "Admin",
+        }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        setWeekPasswords((prev) => [...prev, data.password])
+        setNewPasswordWeek("")
+        setNewPassword("")
+        alert("Password set successfully!") // Or use a toast notification
+      } else {
+        const error = await res.json()
+        alert(error.error || "Failed to set password")
+      }
+    } catch (error) {
+      console.error("Error setting password:", error)
+      alert("Failed to set password. Please try again.")
+    } finally {
+      setSavingPassword(false)
+    }
   }
 
   return (
@@ -978,28 +1187,30 @@ export default function ClassCoursePage() {
       </aside>
       <main className="pl-52 pt-14 p-4 space-y-4">
         <div className="mb-6">
-          <div className="mb-4 flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm text-amber-800 font-medium">Demo Mode</p>
-              <p className="text-xs text-amber-600">
-                In production, students will be authenticated and see only their personalized dashboard.
-              </p>
+          {isDemoMode && (
+            <div className="mb-4 flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm text-amber-800 font-medium">Demo Mode</p>
+                <p className="text-xs text-amber-600">
+                  In production, students will be authenticated and see only their personalized dashboard.
+                </p>
+              </div>
+              <Select value={selectedStudentId} onValueChange={setSelectedStudentId}>
+                <SelectTrigger className="w-[240px] bg-white">
+                  <SelectValue placeholder="Select a student to preview" />
+                </SelectTrigger>
+                <SelectContent>
+                  {students.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.first_name} {s.last_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={selectedStudentId} onValueChange={setSelectedStudentId}>
-              <SelectTrigger className="w-[240px] bg-white">
-                <SelectValue placeholder="Select a student to preview" />
-              </SelectTrigger>
-              <SelectContent>
-                {students.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.first_name} {s.last_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 rounded-xl p-5 text-white shadow-lg mb-4">
+          )}
+          {/* <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 rounded-xl p-5 text-white shadow-lg mb-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="h-14 w-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold">
@@ -1011,8 +1222,8 @@ export default function ClassCoursePage() {
                   </h1>
                   <p className="text-emerald-100 text-sm mt-0.5">
                     {selectedStudent?.clinic_name
-                      ? `${selectedStudent.clinic_name} Clinic - Fall 2025 Semester`
-                      : "Fall 2025 Semester"}
+                      ? `${selectedStudent.clinic_name} Clinic - ${semesterName} Semester`
+                      : `${semesterName} Semester`}
                   </p>
                 </div>
               </div>
@@ -1028,6 +1239,64 @@ export default function ClassCoursePage() {
                       <p className="text-emerald-200 text-xs">Role</p>
                       <p className="text-lg font-semibold">
                         {selectedStudent.is_team_lead ? "Team Lead" : "Consultant"}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div> */}
+          {/* End welcome header banner */}
+
+          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-8 text-white shadow-xl mb-6 border border-slate-700/50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                <div className="relative">
+                  <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-3xl font-bold shadow-lg">
+                    {selectedStudent?.first_name?.charAt(0) || "S"}
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 h-5 w-5 bg-green-500 rounded-full border-2 border-slate-900" />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight mb-1">
+                    {selectedStudent ? `Welcome back, ${selectedStudent.first_name}` : "Class Course Dashboard"}
+                  </h1>
+                  <p className="text-slate-300 text-sm flex items-center gap-2">
+                    {selectedStudent?.clinic_name && (
+                      <>
+                        <span className="px-2 py-0.5 bg-slate-700/50 rounded text-xs font-medium">
+                          {selectedStudent.clinic_name} Clinic
+                        </span>
+                        <span className="text-slate-500">•</span>
+                      </>
+                    )}
+                    <span>{semesterName} Semester</span>
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-8">
+                <div className="text-right">
+                  <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Current Week</p>
+                  <div className="flex items-baseline gap-1">
+                    <p className="text-3xl font-bold">Week</p>
+                    <p className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
+                      {getCurrentWeekNumber()}
+                    </p>
+                  </div>
+                </div>
+                {selectedStudent && (
+                  <>
+                    <div className="h-12 w-px bg-slate-700" />
+                    <div className="text-right">
+                      <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Role</p>
+                      <p className="text-xl font-semibold">
+                        {selectedStudent.is_team_lead ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 text-amber-400 rounded-lg border border-amber-500/20">
+                            <span className="text-lg">★</span> Team Lead
+                          </span>
+                        ) : (
+                          <span className="text-slate-200">Consultant</span>
+                        )}
                       </p>
                     </div>
                   </>
@@ -1067,6 +1336,20 @@ export default function ClassCoursePage() {
             >
               <ClipboardList className="h-4 w-4" />
               Assignments
+            </TabsTrigger>
+            <TabsTrigger
+              value="attendance"
+              className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md px-4"
+            >
+              <Calendar className="h-4 w-4" />
+              Attendance
+            </TabsTrigger>
+            <TabsTrigger
+              value="clinic-agenda"
+              className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md px-4"
+            >
+              <Building2 className="h-4 w-4" />
+              Clinic Agenda
             </TabsTrigger>
           </TabsList>
 
@@ -1219,7 +1502,7 @@ export default function ClassCoursePage() {
           </TabsContent>
 
           <TabsContent value="agenda" className="space-y-4">
-            <UnifiedWeeklyAgenda semester="Fall 2025" />
+            <UnifiedWeeklyAgenda semester={semesterName} />
           </TabsContent>
 
           {/* Course Materials Tab */}
@@ -1398,8 +1681,8 @@ export default function ClassCoursePage() {
                         const grouped = filtered.reduce(
                           (acc, mat) => {
                             const cat = mat.category
-                            if (!acc[cat]) acc[cat] = []
-                            acc[cat].push(mat)
+                            if (!grouped[cat]) grouped[cat] = []
+                            grouped[cat].push(mat)
                             return acc
                           },
                           {} as Record<string, typeof materials>,
@@ -1803,7 +2086,7 @@ export default function ClassCoursePage() {
                                               {[1, 2, 3, 4, 5].map((star) => (
                                                 <Star
                                                   key={star}
-                                                  className={`h-3 w-3 ${star <= q.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`}
+                                                  className={`h-3 w-3 ${star <= q.rating ? "text-amber-500" : "text-gray-300"}`}
                                                 />
                                               ))}
                                               <span className="text-xs font-semibold ml-1">{q.rating}/5</span>
@@ -1888,7 +2171,7 @@ export default function ClassCoursePage() {
                                               {[1, 2, 3, 4, 5].map((star) => (
                                                 <Star
                                                   key={star}
-                                                  className={`h-3 w-3 ${star <= q.rating ? "fill-yellow-400 text-yellow-400" : "text-gray-300"}`}
+                                                  className={`h-3 w-3 ${star <= q.rating ? "text-amber-500" : "text-gray-300"}`}
                                                 />
                                               ))}
                                               <span className="text-xs font-semibold ml-1">{q.rating}/5</span>
@@ -1947,15 +2230,389 @@ export default function ClassCoursePage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Start of Attendance Tab */}
+          <TabsContent value="attendance" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-3 text-3xl">
+                  <ClipboardList className="h-8 w-8" />
+                  Class Attendance Records
+                </CardTitle>
+                <p className="text-base text-slate-600 mt-2">
+                  {semesterName} - View student attendance submissions organized by week and clinic
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                        <Key className="h-5 w-5 text-blue-600" />
+                        Weekly Attendance Password
+                      </h3>
+                      <p className="text-sm text-slate-600 mt-1">
+                        Students need this password to submit their weekly attendance
+                      </p>
+                    </div>
+                  </div>
+
+                  {weekPasswords.length > 0 ? (
+                    <div className="space-y-3">
+                      {/* Current Week Password Display */}
+                      {(() => {
+                        const today = new Date()
+                        today.setHours(0, 0, 0, 0)
+
+                        // Find the week that contains today's date
+                        const currentWeekRecord = semesterSchedule.find((week) => {
+                          const weekStart = new Date(week.week_start)
+                          const weekEnd = new Date(week.week_end)
+                          weekStart.setHours(0, 0, 0, 0)
+                          weekEnd.setHours(23, 59, 59, 999)
+                          return today >= weekStart && today <= weekEnd
+                        })
+
+                        // Check if we're before semester starts
+                        const firstWeek = semesterSchedule[0]
+                        const isBeforeSemester = firstWeek && today < new Date(firstWeek.week_start)
+
+                        // Use Week 1 if before semester or use the actual current week
+                        const currentWeekNum = currentWeekRecord ? currentWeekRecord.week_number : 1
+                        const currentWeekPassword = weekPasswords.find((wp) => wp.week_number === currentWeekNum)
+
+                        return currentWeekPassword ? (
+                          <div className="bg-white rounded-lg p-4 border-2 border-green-300 shadow-sm">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="bg-green-100 p-3 rounded-full">
+                                  <CheckCircle2 className="h-6 w-6 text-green-600" />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-slate-700">
+                                    {isBeforeSemester ? "Week 1 Password (Starts Tomorrow)" : "Current Week Password"}
+                                  </p>
+                                  <p className="text-2xl font-bold text-slate-900 tracking-wider mt-1">
+                                    {currentWeekPassword.password}
+                                  </p>
+                                  <p className="text-xs text-slate-500 mt-1">
+                                    Week {currentWeekPassword.week_number}
+                                    {firstWeek && isBeforeSemester && (
+                                      <span className="ml-1">
+                                        • Starts {new Date(firstWeek.week_start).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                    {!isBeforeSemester && (
+                                      <span className="ml-1">
+                                        • Set on {new Date(currentWeekPassword.created_at).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <Alert className="border-amber-300 bg-amber-50">
+                            <AlertTriangle className="h-4 w-4 text-amber-600" />
+                            <AlertDescription className="text-amber-800">
+                              <strong>Action Required:</strong> No password set for{" "}
+                              {isBeforeSemester ? "Week 1 (starting tomorrow)" : `the current week (${currentWeekNum})`}
+                              . Students cannot submit attendance.
+                            </AlertDescription>
+                          </Alert>
+                        )
+                      })()}
+
+                      {/* Set New Password */}
+                      <details className="group">
+                        <summary className="cursor-pointer text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-2">
+                          <Plus className="h-4 w-4" />
+                          Set Password for Another Week
+                        </summary>
+                        <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
+                          <div className="flex gap-2">
+                            <Select value={newPasswordWeek} onValueChange={setNewPasswordWeek}>
+                              <SelectTrigger className="w-32">
+                                <SelectValue placeholder="Week #" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {/* Generate options based on semester schedule if available, otherwise default to 1-17 */}
+                                {(semesterSchedule.length > 0
+                                  ? semesterSchedule.sort((a, b) => a.week_number - b.week_number)
+                                  : Array.from({ length: 17 }, (_, i) => ({ week_number: i + 1 }))
+                                ).map((week) => (
+                                  <SelectItem key={week.week_number} value={week.week_number.toString()}>
+                                    Week {week.week_number}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              type="text"
+                              placeholder="Password"
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              className="flex-1"
+                            />
+                            <Button onClick={handleSetPassword} disabled={savingPassword} size="sm">
+                              {savingPassword ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  Saving...
+                                </>
+                              ) : (
+                                <>
+                                  <Save className="h-4 w-4 mr-2" />
+                                  Save
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </details>
+                    </div>
+                  ) : (
+                    <Alert className="border-red-300 bg-red-50">
+                      <AlertTriangle className="h-5 w-5 text-red-600" />
+                      <AlertDescription className="text-red-800">
+                        <strong className="block mb-2">No passwords set yet!</strong>
+                        <div className="flex gap-2 mt-3">
+                          <Select value={newPasswordWeek} onValueChange={setNewPasswordWeek}>
+                            <SelectTrigger className="w-32">
+                              <SelectValue placeholder="Week #" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {/* Generate options based on semester schedule if available, otherwise default to 1-17 */}
+                              {(semesterSchedule.length > 0
+                                ? semesterSchedule.sort((a, b) => a.week_number - b.week_number)
+                                : Array.from({ length: 17 }, (_, i) => ({ week_number: i + 1 }))
+                              ).map((week) => (
+                                <SelectItem key={week.week_number} value={week.week_number.toString()}>
+                                  Week {week.week_number}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="text"
+                            placeholder="Enter password"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            className="flex-1"
+                          />
+                          <Button onClick={handleSetPassword} disabled={savingPassword} size="sm">
+                            {savingPassword ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Save className="h-4 w-4 mr-2" />
+                                Set Password
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+
+                {loadingAttendance ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                    <span className="ml-2 text-slate-500">Loading attendance records...</span>
+                  </div>
+                ) : attendanceRecords.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Calendar className="h-12 w-12 mx-auto text-slate-300 mb-3" />
+                    <p className="text-slate-500">No attendance records yet</p>
+                    <p className="text-sm text-slate-400 mt-1">
+                      Students will submit attendance each week via the Student Portal
+                    </p>
+                  </div>
+                ) : (
+                  <Tabs
+                    defaultValue={`week-${Math.max(...attendanceRecords.map((r) => r.weekNumber))}`}
+                    className="w-full"
+                  >
+                    {/* Week Tabs */}
+                    <TabsList className="flex flex-wrap gap-1 h-auto p-1 bg-slate-100/80 mb-4">
+                      {Array.from(new Set(attendanceRecords.map((r) => r.weekNumber)))
+                        .sort((a, b) => a - b)
+                        .map((weekNum) => {
+                          const weekRecords = attendanceRecords.filter((r) => r.weekNumber === weekNum)
+                          const isCurrentWeek = weekNum === Math.max(...attendanceRecords.map((r) => r.weekNumber))
+                          return (
+                            <TabsTrigger
+                              key={weekNum}
+                              value={`week-${weekNum}`}
+                              className={`gap-2 ${isCurrentWeek ? "bg-blue-50 border-blue-200" : ""}`}
+                            >
+                              <Calendar className="h-4 w-4" />
+                              Week {weekNum}
+                              <span className="ml-1 text-xs text-slate-500">({weekRecords.length})</span>
+                            </TabsTrigger>
+                          )
+                        })}
+                    </TabsList>
+
+                    {/* Week Content */}
+                    {Array.from(new Set(attendanceRecords.map((r) => r.weekNumber)))
+                      .sort((a, b) => a - b)
+                      .map((weekNum) => {
+                        const weekAttendance = attendanceRecords.filter((r) => r.weekNumber === weekNum)
+                        const weekInfo = semesterSchedule.find((w) => w.week_number === weekNum)
+                        const dateRange = weekInfo
+                          ? `${new Date(weekInfo.week_start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${new Date(weekInfo.week_end).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                          : ""
+
+                        if (weekAttendance.length === 0) return null
+
+                        // Group by clinic
+                        const byClinic = weekAttendance.reduce(
+                          (acc, record) => {
+                            const clinic = record.clinic || "Unknown Clinic"
+                            if (!acc[clinic]) acc[clinic] = []
+                            acc[clinic].push(record)
+                            return acc
+                          },
+                          {} as Record<string, typeof weekAttendance>,
+                        )
+
+                        // Calculate absent students for this week
+                        const presentStudentIds = new Set(weekAttendance.map((r) => r.student_id).filter(Boolean))
+                        const absentStudents = rosterData.filter(
+                          (student) => !presentStudentIds.has(student.student_id),
+                        )
+
+                        // Group absent students by clinic
+                        const absentByClinic = absentStudents.reduce(
+                          (acc, student) => {
+                            const clinic = student.student_clinic_name || "Unknown Clinic"
+                            if (!acc[clinic]) acc[clinic] = []
+                            acc[clinic].push(student)
+                            return acc
+                          },
+                          {} as Record<string, typeof absentStudents>,
+                        )
+
+                        return (
+                          <TabsContent key={weekNum} value={`week-${weekNum}`} className="space-y-4">
+                            <div className="flex items-center justify-between mb-4 pb-2 border-b">
+                              <div>
+                                <h3 className="font-semibold text-lg">
+                                  Week {weekNum} {dateRange && `(${dateRange})`}
+                                </h3>
+                                <p className="text-sm text-slate-500">
+                                  {weekAttendance.length > 0 &&
+                                    new Date(weekAttendance[0].classDate).toLocaleDateString("en-US", {
+                                      month: "long",
+                                      day: "numeric",
+                                      year: "numeric",
+                                    })}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-2xl font-bold text-green-600">{weekAttendance.length}</p>
+                                <p className="text-xs text-slate-500">Students Present</p>
+                              </div>
+                            </div>
+
+                            {/* Group by Clinic */}
+                            {Object.entries(byClinic)
+                              .sort(([a], [b]) => a.localeCompare(b))
+                              .map(([clinicName, clinicRecords]) => {
+                                const clinicAbsentStudents = absentByClinic[clinicName] || []
+                                return (
+                                  <div key={clinicName} className="border rounded-lg p-4 bg-slate-50">
+                                    <h4 className="font-semibold text-md mb-3 flex items-center gap-2">
+                                      <Building2 className="h-4 w-4 text-blue-600" />
+                                      {clinicName}
+                                      <span className="text-sm font-normal text-slate-500">
+                                        ({clinicRecords.length} present)
+                                      </span>
+                                    </h4>
+
+                                    {/* Present Students - Concise Badge View */}
+                                    <div className="mb-3">
+                                      <p className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                        Present Students
+                                      </p>
+                                      <div className="flex flex-wrap gap-2">
+                                        {clinicRecords.map((record, idx) => (
+                                          <Badge
+                                            key={idx}
+                                            variant="outline"
+                                            className="bg-white hover:bg-green-50 border-green-200 text-green-700 cursor-pointer transition-colors"
+                                            onClick={() => {
+                                              // Navigate to student profile if exists
+                                              if (record.studentId) {
+                                                window.open(`/student-profile?id=${record.studentId}`, "_blank")
+                                              }
+                                            }}
+                                          >
+                                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                                            {record.studentName}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Absent Students */}
+                                    {clinicAbsentStudents.length > 0 && (
+                                      <div className="pt-3 border-t border-slate-200">
+                                        <p className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+                                          <XCircle className="h-4 w-4 text-red-600" />
+                                          Absent Students ({clinicAbsentStudents.length})
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
+                                          {clinicAbsentStudents.map((student, idx) => (
+                                            <Badge
+                                              key={idx}
+                                              variant="outline"
+                                              className="bg-red-50 border-red-200 text-red-700 cursor-pointer hover:bg-red-100 transition-colors"
+                                              onClick={() => {
+                                                if (student.student_id) {
+                                                  window.open(`/student-profile?id=${student.student_id}`, "_blank")
+                                                }
+                                              }}
+                                            >
+                                              <XCircle className="h-3 w-3 mr-1" />
+                                              {student.student_name}
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                          </TabsContent>
+                        )
+                      })}
+                  </Tabs>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          {/* End of Attendance Tab */}
+
+          <TabsContent value="clinic-agenda">
+            <ClinicAgendaTab />
+          </TabsContent>
         </Tabs>
 
-        {/* Updated Evaluation Dialog */}
+        {/* Evaluation Dialog */}
         <Dialog open={evaluationDialogOpen} onOpenChange={setEvaluationDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <ClipboardList className="h-5 w-5" />
-                {evaluationType === "final" ? "Final" : "Mid-Term"} Presentation Evaluation
+                {evaluationType === "final" ? "Final" : "Mid-Term"} Evaluation
               </DialogTitle>
               <p className="text-sm text-muted-foreground">
                 {evaluationType === "final"

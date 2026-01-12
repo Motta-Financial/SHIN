@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { getCachedData, setCachedData } from "@/lib/api-cache"
 
 function getSupabaseClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -13,13 +14,21 @@ function isValidUUID(str: string | null): boolean {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseClient()
     const { searchParams } = new URL(request.url)
     const studentIdParam = searchParams.get("studentId")
     const clinicIdParam = searchParams.get("clinicId")
 
     const studentId = isValidUUID(studentIdParam) ? studentIdParam : null
     const clinicId = isValidUUID(clinicIdParam) ? clinicIdParam : null
+
+    const cacheKey = `student-notifications:${studentId || "all"}:${clinicId || "all"}`
+    const cached = getCachedData(cacheKey)
+    if (cached) {
+      console.log("[v0] Student-notifications API - Returning cached response")
+      return NextResponse.json(cached)
+    }
+
+    const supabase = getSupabaseClient()
 
     let query = supabase
       .from("notifications")
@@ -43,7 +52,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ notifications: [] })
     }
 
-    return NextResponse.json({ notifications: data || [] })
+    const response = { notifications: data || [] }
+    setCachedData(cacheKey, response)
+    console.log(`[v0] Student-notifications API - Fetched and cached notifications count: ${data?.length || 0}`)
+
+    return NextResponse.json(response)
   } catch (error) {
     console.error("Error in student-notifications GET:", error)
     return NextResponse.json({ notifications: [] })

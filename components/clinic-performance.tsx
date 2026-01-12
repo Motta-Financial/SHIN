@@ -25,6 +25,34 @@ import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
+async function fetchWithRetry(url: string, retries = 3, delay = 500): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    const res = await fetch(url)
+    if (res.ok) return res
+    if (res.status === 429) {
+      // Rate limited - wait and retry with exponential backoff
+      await new Promise((resolve) => setTimeout(resolve, delay * (i + 1)))
+      continue
+    }
+    return res // Return non-429 errors immediately
+  }
+  // Final attempt
+  return fetch(url)
+}
+
+async function fetchSequentially(urls: string[]): Promise<Response[]> {
+  const results: Response[] = []
+  for (const url of urls) {
+    // Add delay between requests to avoid rate limiting
+    if (results.length > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 150))
+    }
+    const res = await fetchWithRetry(url)
+    results.push(res)
+  }
+  return results
+}
+
 interface ClinicData {
   name: string
   hours: number
@@ -122,13 +150,15 @@ export function ClinicPerformance({
             ? `/api/supabase/v-complete-mapping?directorId=${directorId}`
             : "/api/supabase/v-complete-mapping"
 
-        const [debriefsRes, clientsRes, directorsRes, attendanceRes, mappingRes] = await Promise.all([
-          fetch("/api/supabase/debriefs"),
-          fetch("/api/supabase/clients"),
-          fetch("/api/directors"),
-          fetch("/api/supabase/attendance"),
-          fetch(mappingUrl),
-        ])
+        const urls = [
+          "/api/supabase/debriefs",
+          "/api/supabase/clients",
+          "/api/directors",
+          "/api/supabase/attendance",
+          mappingUrl,
+        ]
+
+        const [debriefsRes, clientsRes, directorsRes, attendanceRes, mappingRes] = await fetchSequentially(urls)
 
         if (debriefsRes.ok) {
           const data = await debriefsRes.json()

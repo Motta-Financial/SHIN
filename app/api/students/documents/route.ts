@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
       submissionType,
       description,
       clinic,
-      semester = "Fall 2025",
+      semester = "Spring 2026",
     } = body
 
     if (!studentName || !clientName || !fileUrl || !fileName) {

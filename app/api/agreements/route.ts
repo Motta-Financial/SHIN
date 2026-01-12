@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
+import { getCachedData, setCachedData } from "@/lib/api-cache"
 
 function getSupabaseClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -7,10 +8,18 @@ function getSupabaseClient() {
 
 export async function GET(request: Request) {
   try {
-    const supabase = getSupabaseClient()
     const { searchParams } = new URL(request.url)
     const userEmail = searchParams.get("userEmail")
     const userType = searchParams.get("userType")
+
+    const cacheKey = `agreements:${userEmail || "all"}:${userType || "all"}`
+    const cached = getCachedData(cacheKey)
+    if (cached) {
+      console.log("[v0] Agreements API - Returning cached response")
+      return NextResponse.json(cached)
+    }
+
+    const supabase = getSupabaseClient()
 
     let query = supabase.from("signed_agreements").select("*").order("signed_at", { ascending: false })
 
@@ -25,7 +34,11 @@ export async function GET(request: Request) {
 
     if (error) throw error
 
-    return NextResponse.json({ agreements: data })
+    const response = { agreements: data }
+    setCachedData(cacheKey, response)
+    console.log(`[v0] Agreements API - Fetched and cached agreements count: ${data?.length || 0}`)
+
+    return NextResponse.json(response)
   } catch (error) {
     console.error("Error fetching agreements:", error)
     return NextResponse.json({ agreements: [] })

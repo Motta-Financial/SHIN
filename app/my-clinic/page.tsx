@@ -1,23 +1,43 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { ClinicView } from "@/components/clinic-view"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MainNavigation } from "@/components/main-navigation"
 import { Building2, Loader2 } from "lucide-react"
 import { useDirectors } from "@/hooks/use-directors"
+import { useUserRole } from "@/hooks/use-user-role"
 
 export default function MyClinicPage() {
-  const [selectedDirectorId, setSelectedDirectorId] = useState<string>("all")
-  const { directors, isLoading } = useDirectors()
+  const [selectedDirectorId, setSelectedDirectorId] = useState<string>("")
+  const { directors, isLoading: directorsLoading } = useDirectors()
+  const { userId, email, isLoading: userLoading } = useUserRole()
+  const [currentDirectorId, setCurrentDirectorId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!userLoading && !directorsLoading && directors.length > 0 && email) {
+      // Find the director matching the logged-in user's email
+      const matchingDirector = directors.find((d) => d.email?.toLowerCase() === email.toLowerCase())
+      if (matchingDirector) {
+        setCurrentDirectorId(matchingDirector.id)
+        // Only set the initial selection if not already set
+        if (!selectedDirectorId) {
+          setSelectedDirectorId(matchingDirector.id)
+        }
+      }
+    }
+  }, [userLoading, directorsLoading, directors, email, selectedDirectorId])
+
+  const isLoading = directorsLoading || userLoading
 
   const selectedDirector = directors.find((d) => d.id === selectedDirectorId)
-  const displayName =
-    selectedDirectorId === "all"
-      ? "All Directors"
-      : selectedDirector
-        ? `${selectedDirector.full_name} (${selectedDirector.clinic})`
-        : "Select director"
+  const displayName = selectedDirector
+    ? `${selectedDirector.full_name} (${selectedDirector.clinic})`
+    : "Select director"
+
+  // Filter directors to only show the current user's director record (if not admin)
+  // Admins can see all directors
+  const visibleDirectors = currentDirectorId ? directors.filter((d) => d.id === currentDirectorId) : directors
 
   return (
     <div className="min-h-screen bg-background">
@@ -39,26 +59,27 @@ export default function MyClinicPage() {
               </div>
             </div>
 
-            <Select value={selectedDirectorId} onValueChange={setSelectedDirectorId} disabled={isLoading}>
-              <SelectTrigger className="w-[250px]">
-                {isLoading ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Loading directors...</span>
-                  </div>
-                ) : (
-                  <SelectValue placeholder="Select director">{displayName}</SelectValue>
-                )}
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Directors</SelectItem>
-                {directors.map((d) => (
-                  <SelectItem key={d.id} value={d.id}>
-                    {d.full_name} ({d.clinic})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {visibleDirectors.length > 1 && (
+              <Select value={selectedDirectorId} onValueChange={setSelectedDirectorId} disabled={isLoading}>
+                <SelectTrigger className="w-[250px]">
+                  {isLoading ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Loading...</span>
+                    </div>
+                  ) : (
+                    <SelectValue placeholder="Select director">{displayName}</SelectValue>
+                  )}
+                </SelectTrigger>
+                <SelectContent>
+                  {visibleDirectors.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>
+                      {d.full_name} ({d.clinic})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <ClinicView selectedClinic={selectedDirectorId} selectedWeeks={[]} />

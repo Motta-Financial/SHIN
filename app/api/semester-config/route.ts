@@ -1,32 +1,40 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/service"
 
 export async function GET() {
   try {
-    const supabase = await createClient()
+    const supabase = createServiceClient()
 
-    const { data, error } = await supabase.from("semester_config").select("*").order("start_date", { ascending: false })
+    const { data, error } = await supabase
+      .from("semester_config")
+      .select("id, semester, is_active, start_date, end_date")
+      .order("start_date", { ascending: false })
 
     if (error) {
-      console.error("Error fetching semester config:", error)
+      console.error("[v0] Error fetching semester config:", error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    console.log(
+      "[v0] Semester config fetched:",
+      data?.map((s) => ({ id: s.id, semester: s.semester, is_active: s.is_active })),
+    )
+
     return NextResponse.json({ semesters: data || [] })
   } catch (error) {
-    console.error("Error in semester-config API:", error)
+    console.error("[v0] Error in semester-config API:", error)
     return NextResponse.json({ error: "Failed to fetch semester configuration" }, { status: 500 })
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient()
+    const supabase = createServiceClient()
     const body = await request.json()
 
-    const { semesterName, startDate, endDate, isActive } = body
+    const { semester, startDate, endDate, isActive } = body
 
-    if (!semesterName || !startDate || !endDate) {
+    if (!semester || !startDate || !endDate) {
       return NextResponse.json({ error: "Semester name, start date, and end date are required" }, { status: 400 })
     }
 
@@ -41,7 +49,7 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from("semester_config")
       .insert({
-        semester_name: semesterName,
+        semester: semester,
         start_date: startDate,
         end_date: endDate,
         is_active: isActive || false,

@@ -9,12 +9,15 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useDirectors } from "@/hooks/use-directors"
+import { useGlobalSemester } from "@/contexts/semester-context"
 
 interface WeekSchedule {
   value: string
   label: string
   weekNumber: number
   isBreak: boolean
+  weekStart: string
+  weekEnd: string
 }
 
 interface Director {
@@ -50,6 +53,33 @@ interface DashboardHeaderProps {
   selectedDirectorId?: string
   onDirectorChange?: (directorId: string) => void
   showDirectorFilter?: boolean
+  onCurrentWeekDetected?: (currentWeek: string) => void
+}
+
+// Helper functions for sequential fetching with retry
+async function fetchWithRetry(url: string, retries = 3, delay = 500): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    const res = await fetch(url)
+    if (res.ok) return res
+    if (res.status === 429) {
+      await new Promise((resolve) => setTimeout(resolve, delay * (i + 1)))
+      continue
+    }
+    return res
+  }
+  return fetch(url)
+}
+
+async function fetchSequentially(urls: string[]): Promise<Response[]> {
+  const results: Response[] = []
+  for (const url of urls) {
+    if (results.length > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 150))
+    }
+    const res = await fetchWithRetry(url)
+    results.push(res)
+  }
+  return results
 }
 
 export function DashboardHeader({
@@ -63,6 +93,7 @@ export function DashboardHeader({
   selectedDirectorId = "all",
   onDirectorChange,
   showDirectorFilter = false,
+  onCurrentWeekDetected,
 }: DashboardHeaderProps) {
   const [mounted, setMounted] = useState(false)
   const [schedule, setSchedule] = useState<WeekSchedule[]>([])
@@ -75,6 +106,8 @@ export function DashboardHeader({
   const [clientPickerOpen, setClientPickerOpen] = useState(false)
   const [directorPickerOpen, setDirectorPickerOpen] = useState(false)
 
+  const { selectedSemesterId } = useGlobalSemester()
+
   useEffect(() => {
     setMounted(true)
   }, [])
@@ -82,15 +115,19 @@ export function DashboardHeader({
   useEffect(() => {
     async function fetchData() {
       try {
-        const [scheduleRes, clinicsRes, clientsRes] = await Promise.all([
-          fetch("/api/supabase/weeks"),
-          fetch("/api/supabase/clinics"),
-          fetch("/api/clients"),
-        ])
+        const semesterParam = selectedSemesterId ? `?semesterId=${selectedSemesterId}` : ""
+
+        const urls = ["/api/supabase/weeks", "/api/supabase/clinics", `/api/clients${semesterParam}`]
+
+        const [scheduleRes, clinicsRes, clientsRes] = await fetchSequentially(urls)
 
         const scheduleData = await scheduleRes.json()
         if (scheduleData.success && scheduleData.schedule) {
           setSchedule(scheduleData.schedule)
+
+          if (scheduleData.currentWeek && selectedWeeks.length === 0 && onCurrentWeekDetected) {
+            onCurrentWeekDetected(scheduleData.currentWeek)
+          }
         }
 
         const clinicsData = await clinicsRes.json()
@@ -106,7 +143,9 @@ export function DashboardHeader({
         }
 
         const clientsData = await clientsRes.json()
+        console.log("[v0] DashboardHeader - clientsData:", clientsData)
         if (clientsData.clients) {
+          console.log("[v0] DashboardHeader - Setting clients count:", clientsData.clients.length)
           setClients(clientsData.clients)
           setFilteredClients(clientsData.clients)
         }
@@ -121,7 +160,7 @@ export function DashboardHeader({
       }
     }
     fetchData()
-  }, [])
+  }, [selectedSemesterId])
 
   useEffect(() => {
     if (selectedClinics.length === 0) {
@@ -141,14 +180,15 @@ export function DashboardHeader({
     }
   }, [selectedClinics, clients, clinics])
 
-  const formatWeekLabel = (weekEnding: string) => {
-    const week = schedule.find((s) => s.value === weekEnding)
+  const formatWeekLabel = (weekStart: string) => {
+    const week = schedule.find((s) => s.value === weekStart)
     if (week) {
-      const date = new Date(weekEnding)
-      return `${week.label} (${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })})`
+      const startDate = new Date(week.weekStart)
+      const endDate = new Date(week.weekEnd)
+      return `${week.label} (${startDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${endDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })})`
     }
-    const date = new Date(weekEnding)
-    return `Week ending ${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+    const date = new Date(weekStart)
+    return `Week of ${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
   }
 
   const toggleWeek = (week: string) => {
@@ -365,16 +405,16 @@ export function DashboardHeader({
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
-                className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700 min-w-[160px] justify-between"
+                className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700 min-w-[200px] justify-between"
               >
                 <div className="flex items-center gap-2">
                   <Calendar className="h-4 w-4 text-amber-400" />
-                  <span className="truncate max-w-[100px]">{getWeekSelectorDisplay()}</span>
+                  <span className="truncate max-w-[150px]">{getWeekSelectorDisplay()}</span>
                 </div>
                 <ChevronDown className="h-4 w-4 ml-2 shrink-0" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-72 p-0" align="end">
+            <PopoverContent className="w-80 p-0" align="end">
               <div className="p-3 border-b">
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-sm">Filter by Week</span>
@@ -385,6 +425,7 @@ export function DashboardHeader({
                     </Button>
                   )}
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">Classes are on the week start date (Monday)</p>
               </div>
               <ScrollArea className="h-[300px]">
                 <div className="p-2 space-y-1">
@@ -417,7 +458,12 @@ export function DashboardHeader({
                           )}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {new Date(week.value).toLocaleDateString("en-US", {
+                          {new Date(week.weekStart).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })}{" "}
+                          -{" "}
+                          {new Date(week.weekEnd).toLocaleDateString("en-US", {
                             month: "short",
                             day: "numeric",
                             year: "numeric",

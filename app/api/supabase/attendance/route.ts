@@ -7,6 +7,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const studentId = searchParams.get("studentId")
     const studentEmail = searchParams.get("studentEmail")
+    const semesterId = searchParams.get("semesterId") || "a1b2c3d4-e5f6-7890-abcd-202601120000" // Default to Spring 2026
 
     let query = supabase
       .from("attendance")
@@ -19,8 +20,10 @@ export async function GET(request: Request) {
         week_ending,
         clinic,
         notes,
-        user_id
+        user_id,
+        semester_id
       `)
+      .eq("semester_id", semesterId) // Filter by semester
       .order("class_date", { ascending: false })
 
     // Filter by student if provided
@@ -48,6 +51,7 @@ export async function GET(request: Request) {
       clinic: record.clinic,
       notes: record.notes,
       userId: record.user_id,
+      semesterId: record.semester_id, // Include semester_id in the response
     }))
 
     return NextResponse.json({ attendance: formattedAttendance })
@@ -64,17 +68,28 @@ export async function POST(request: Request) {
 
     const { studentId, studentName, studentEmail, clinic, weekNumber, weekEnding, classDate, password } = body
 
-    // Validate password against semester_schedule
-    const { data: scheduleData } = await supabase
-      .from("semester_schedule")
-      .select("id, week_number, notes")
+    const semesterId = "a1b2c3d4-e5f6-7890-abcd-202601120000"
+
+    const { data: passwordData, error: passwordError } = await supabase
+      .from("attendance_passwords")
+      .select("password, id")
       .eq("week_number", weekNumber)
+      .eq("semester_id", semesterId)
       .single()
 
-    // For now, accept any non-empty password (in production, validate against stored password)
-    // The password could be stored in the notes field or a dedicated password column
-    if (!password || password.trim().length < 3) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 400 })
+    if (passwordError || !passwordData) {
+      return NextResponse.json(
+        { error: "No attendance password set for this week. Please contact your instructor." },
+        { status: 400 },
+      )
+    }
+
+    // Validate the provided password matches the stored password
+    if (password !== passwordData.password) {
+      return NextResponse.json(
+        { error: "Invalid password. Please check the password shared in class." },
+        { status: 400 },
+      )
     }
 
     // Check if attendance already submitted for this week
@@ -83,6 +98,7 @@ export async function POST(request: Request) {
       .select("*")
       .eq("student_id", studentId)
       .eq("week_number", weekNumber)
+      .eq("semester_id", semesterId) // Check for current semester only
       .single()
 
     if (existingAttendance) {
@@ -100,7 +116,8 @@ export async function POST(request: Request) {
         week_number: weekNumber,
         week_ending: weekEnding,
         class_date: classDate,
-        notes: `Password verified: ${new Date().toISOString()}`,
+        semester_id: semesterId, // Store semester_id with attendance
+        notes: `Submitted at ${new Date().toISOString()}`,
       })
       .select()
 

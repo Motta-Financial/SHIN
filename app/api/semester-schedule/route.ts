@@ -3,6 +3,18 @@ import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 
 export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const semester = searchParams.get("semester")
+  const semesterId = searchParams.get("semesterId")
+  const includeAll = searchParams.get("includeAll") === "true"
+
+  // const cacheKey = `semester-schedule:${semesterId || semester || "active"}:${includeAll}`
+  // const cached = getCachedData(cacheKey)
+  // if (cached) {
+  //   console.log("[v0] Semester-schedule API - Returning cached response")
+  //   return NextResponse.json(cached)
+  // }
+
   const cookieStore = await cookies()
   const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     cookies: {
@@ -12,28 +24,52 @@ export async function GET(request: Request) {
     },
   })
 
-  const { searchParams } = new URL(request.url)
-  const semester = searchParams.get("semester") || "Fall 2025"
-
   try {
-    const { data: semesterConfig } = await supabase
-      .from("semester_config")
-      .select("id, semester")
-      .eq("semester", semester)
-      .single()
+    let activeSemesterId = semesterId
+
+    if (!activeSemesterId && !includeAll) {
+      if (semester) {
+        // If semester name provided, look it up
+        const { data: semesterConfig } = await supabase
+          .from("semester_config")
+          .select("id, semester")
+          .eq("semester", semester)
+          .single()
+        activeSemesterId = semesterConfig?.id || null
+        console.log("[v0] Semester-schedule API - Found semester config:", semesterConfig)
+      } else {
+        // Otherwise get the active semester
+        const { data: activeSemester } = await supabase
+          .from("semester_config")
+          .select("id")
+          .eq("is_active", true)
+          .maybeSingle()
+        activeSemesterId = activeSemester?.id || null
+      }
+    }
 
     let query = supabase.from("semester_schedule").select("*").order("week_number", { ascending: true })
 
-    // Filter by semester_id if found, otherwise return all
-    if (semesterConfig?.id) {
-      query = query.eq("semester_id", semesterConfig.id)
+    // Filter by semester_id
+    if (activeSemesterId) {
+      query = query.eq("semester_id", activeSemesterId)
     }
 
     const { data, error } = await query
 
     if (error) throw error
 
-    return NextResponse.json({ schedules: data || [] })
+    const response = { schedules: data || [] }
+
+    // setCachedData(cacheKey, response)
+    console.log(
+      "[v0] Semester-schedule API - Fetched schedules count:",
+      data?.length || 0,
+      "for semester:",
+      semester || activeSemesterId,
+    )
+
+    return NextResponse.json(response)
   } catch (error) {
     console.error("Error fetching semester schedule:", error)
     return NextResponse.json({ error: "Failed to fetch schedule" }, { status: 500 })
@@ -70,7 +106,7 @@ export async function POST(request: Request) {
     const { data: semesterConfig } = await supabase
       .from("semester_config")
       .select("id")
-      .eq("semester", semester || "Fall 2025")
+      .eq("semester", semester || "Spring 2026") // Updated default semester
       .single()
 
     const { data, error } = await supabase

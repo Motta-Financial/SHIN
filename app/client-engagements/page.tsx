@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useState, useEffect } from "react"
+import { Suspense, useState, useEffect, useRef } from "react"
 import { MainNavigation } from "@/components/main-navigation"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { ClientEngagements } from "@/components/client-engagements"
@@ -9,26 +9,18 @@ import { UploadSOWButton } from "@/components/upload-sow-button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 
-function getWeekEnding(date: Date): string {
-  const day = date.getDay()
-  const diff = 6 - day
-  const weekEnding = new Date(date)
-  weekEnding.setDate(date.getDate() + diff)
-  return weekEnding.toISOString().split("T")[0]
-}
-
-async function getAvailableWeeks(): Promise<string[]> {
+async function getAvailableWeeks(): Promise<{ weeks: string[]; currentWeek: string | null }> {
   try {
     const response = await fetch("/api/supabase/weeks")
     const data = await response.json()
 
     if (data.success && data.weeks) {
-      return data.weeks
+      return { weeks: data.weeks, currentWeek: data.currentWeek || null }
     }
-    return []
+    return { weeks: [], currentWeek: null }
   } catch (error) {
     console.error("Error fetching available weeks:", error)
-    return []
+    return { weeks: [], currentWeek: null }
   }
 }
 
@@ -48,18 +40,29 @@ function LoadingSkeleton({ height = "h-48" }: { height?: string }) {
 
 export default function ClientEngagementsPage() {
   const [availableWeeks, setAvailableWeeks] = useState<string[]>([])
-  const [selectedWeeks, setSelectedWeeks] = useState<string[]>(["2025-09-14"])
+  const [selectedWeeks, setSelectedWeeks] = useState<string[]>([])
   const [selectedClinics, setSelectedClinics] = useState<string[]>([])
   const [selectedClients, setSelectedClients] = useState<string[]>([])
+  const currentWeekSetRef = useRef(false)
 
   useEffect(() => {
-    getAvailableWeeks().then((weeks) => {
+    getAvailableWeeks().then(({ weeks, currentWeek }) => {
       setAvailableWeeks(weeks)
-      if (weeks.length > 0 && !weeks.includes(selectedWeeks[0])) {
-        setSelectedWeeks([weeks[0]])
+      if (weeks.length > 0 && !currentWeekSetRef.current) {
+        currentWeekSetRef.current = true
+        // Default to current week if available, otherwise first week
+        const defaultWeek = currentWeek && weeks.includes(currentWeek) ? currentWeek : weeks[0]
+        setSelectedWeeks([defaultWeek])
       }
     })
   }, [])
+
+  const handleCurrentWeekDetected = (currentWeek: string) => {
+    if (!currentWeekSetRef.current && selectedWeeks.length === 0) {
+      currentWeekSetRef.current = true
+      setSelectedWeeks([currentWeek])
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -76,6 +79,7 @@ export default function ClientEngagementsPage() {
           onClinicsChange={setSelectedClinics}
           selectedClients={selectedClients}
           onClientsChange={setSelectedClients}
+          onCurrentWeekDetected={handleCurrentWeekDetected}
         />
 
         <main className="p-4 space-y-4">

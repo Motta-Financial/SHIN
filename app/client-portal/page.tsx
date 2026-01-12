@@ -4,12 +4,27 @@ import { useState, useEffect, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { MainNavigation } from "@/components/main-navigation"
 import { ClientPortalHeader } from "@/components/client-portal-header"
-import { Card } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Building2, Users, FileText, MessageSquare, TrendingUp, HelpCircle, AlertCircle } from "lucide-react"
+import {
+  Building2,
+  Users,
+  FileText,
+  MessageSquare,
+  TrendingUp,
+  HelpCircle,
+  AlertCircle,
+  Eye,
+  Calendar,
+  Clock,
+  MapPin,
+  Video,
+} from "lucide-react"
 import { Triage } from "@/components/triage"
+import { useDemoMode } from "@/contexts/demo-mode-context"
+import { useUserRole, canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
 
 import { ClientTeamCard } from "@/components/client-portal/client-team-card"
 import { ClientTasksCard } from "@/components/client-portal/client-tasks-card"
@@ -18,7 +33,7 @@ import { ClientDocumentUpload } from "@/components/client-portal/client-document
 import { ClientProgressCard } from "@/components/client-portal/client-progress-card"
 import { ClientDeliverablesCard } from "@/components/client-portal/client-deliverables-card"
 
-interface ClientData {
+interface Client {
   id: string
   name: string
   email: string
@@ -58,9 +73,42 @@ interface AvailableClient {
   email: string
 }
 
+interface ClientMeeting {
+  id: string
+  week_number: number
+  week_label: string
+  week_start: string
+  week_end: string
+  client_name: string
+  start_time: string
+  end_time: string
+  minutes: number
+  room_assignment?: string
+  zoom_link?: string
+  notes?: string
+}
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const fetchWithRetry = async (url: string, retries = 3, delayMs = 500): Promise<Response> => {
+  for (let i = 0; i < retries; i++) {
+    const res = await fetch(url)
+    if (res.ok) return res
+    if (res.status === 429 && i < retries - 1) {
+      // Rate limited - wait and retry
+      await delay(delayMs * (i + 1))
+      continue
+    }
+    return res
+  }
+  return fetch(url) // Final attempt
+}
+
 export default function ClientPortalPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const { isDemoMode } = useDemoMode()
+  const { role, email: userEmail, isLoading: roleLoading, isAuthenticated } = useUserRole()
 
   const tabFromUrl = searchParams.get("tab") || "overview"
   const [activeTab, setActiveTab] = useState(tabFromUrl)
@@ -79,11 +127,11 @@ export default function ClientPortalPage() {
     }
   }
 
-  const [availableClients, setAvailableClients] = useState<AvailableClient[]>([])
+  const [availableClients, setAvailableClients] = useState<Array<{ id: string; name: string }>>([])
   const [selectedClientId, setSelectedClientId] = useState<string>("")
 
   const [loading, setLoading] = useState(true)
-  const [client, setClient] = useState<ClientData | null>(null)
+  const [client, setClient] = useState<Client | null>(null)
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [directors, setDirectors] = useState<Director[]>([])
   const [tasks, setTasks] = useState<any[]>([])
@@ -96,36 +144,101 @@ export default function ClientPortalPage() {
     weeklyProgress: [] as any[],
   })
   const [signedAgreements, setSignedAgreements] = useState<string[]>([])
+  const [meetings, setMeetings] = useState<ClientMeeting[]>([]) // Added meetings state
+
+  useEffect(() => {
+    if (!roleLoading && !isDemoMode) {
+      console.log("[v0] ClientPortal - Auth state:", { role, isAuthenticated, roleLoading, isDemoMode })
+
+      // Directors and admins can always access
+      if (role === "director" || role === "admin") {
+        console.log("[v0] ClientPortal - Director/Admin access granted")
+        return
+      }
+      // Students can access client portal
+      if (role === "student") {
+        console.log("[v0] ClientPortal - Student access granted")
+        return
+      }
+      // Clients can access their own portal
+      if (role === "client") {
+        console.log("[v0] ClientPortal - Client access granted")
+        return
+      }
+      // Not authenticated - redirect to login
+      if (!isAuthenticated) {
+        console.log("[v0] ClientPortal - Not authenticated, redirecting to login")
+        router.push("/login")
+        return
+      }
+      // Authenticated but wrong role - redirect to their portal
+      if (!canAccessPortal(role, "client")) {
+        console.log("[v0] ClientPortal - Wrong role, redirecting to:", getDefaultPortal(role))
+        router.push(getDefaultPortal(role))
+        return
+      }
+    }
+  }, [role, roleLoading, isAuthenticated, isDemoMode, router])
+
+  const canSwitchClients = isDemoMode || role === "admin" || role === "director" || role === "student"
 
   useEffect(() => {
     const fetchAvailableClients = async () => {
       try {
-        const res = await fetch("/api/clients")
-        const data = await res.json()
-        if (data.clients && data.clients.length > 0) {
-          setAvailableClients(
-            data.clients.map((c: any) => ({
-              id: c.id,
-              name: c.name,
-              email: c.email,
-            })),
-          )
-          // Auto-select first client
-          setSelectedClientId(data.clients[0].id)
+        // Add small delay to avoid rate limiting from navigation
+        await delay(300)
+
+        if (role === "client" && userEmail && !isDemoMode) {
+          // Fetch client by email
+          const res = await fetchWithRetry(`/api/clients?email=${encodeURIComponent(userEmail)}`)
+          if (!res.ok) {
+            console.error("Error fetching client by email:", res.status)
+            return
+          }
+          const data = await res.json()
+          if (data.clients && data.clients.length > 0) {
+            setAvailableClients([{ id: data.clients[0].id, name: data.clients[0].name }])
+            setSelectedClientId(data.clients[0].id)
+          }
+        } else {
+          // Directors/Admins/Students can see all clients
+          const res = await fetchWithRetry("/api/clients")
+          if (!res.ok) {
+            console.error("Error fetching all clients:", res.status)
+            return
+          }
+          const data = await res.json()
+          if (data.clients && data.clients.length > 0) {
+            setAvailableClients(
+              data.clients.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+              })),
+            )
+            setSelectedClientId(data.clients[0].id)
+          }
         }
       } catch (error) {
         console.error("Error fetching clients:", error)
       }
     }
-    fetchAvailableClients()
-  }, [])
+
+    if (!roleLoading) {
+      fetchAvailableClients()
+    }
+  }, [role, userEmail, roleLoading, isDemoMode])
 
   const fetchClientData = useCallback(async () => {
     if (!selectedClientId) return
 
     setLoading(true)
     try {
-      const teamRes = await fetch(`/api/client-portal/team?clientId=${selectedClientId}`)
+      const teamRes = await fetchWithRetry(`/api/client-portal/team?clientId=${selectedClientId}`)
+      if (!teamRes.ok) {
+        console.error("Error fetching team data:", teamRes.status)
+        setLoading(false)
+        return
+      }
       const teamData = await teamRes.json()
 
       if (teamData.success && teamData.client) {
@@ -136,27 +249,33 @@ export default function ClientPortalPage() {
         const clientId = teamData.client.id
         const clientEmail = teamData.client.email
 
-        // Fetch other data in parallel
-        const [tasksRes, questionsRes, docsRes, deliverablesRes, progressRes] = await Promise.all([
-          fetch(`/api/client-portal/tasks?clientId=${clientId}`),
-          fetch(`/api/client-portal/questions?clientId=${clientId}`),
-          fetch(`/api/client-portal/client-documents?email=${encodeURIComponent(clientEmail)}`),
-          fetch(`/api/client-portal/deliverables?clientId=${clientId}`),
-          fetch(`/api/client-portal/weekly-progress?clientId=${clientId}`),
-        ])
-
-        const [tasksData, questionsData, docsData, deliverablesData, progressData] = await Promise.all([
-          tasksRes.json(),
-          questionsRes.json(),
-          docsRes.json(),
-          deliverablesRes.json(),
-          progressRes.json(),
-        ])
-
+        await delay(150)
+        const tasksRes = await fetchWithRetry(`/api/client-portal/tasks?clientId=${clientId}`)
+        const tasksData = tasksRes.ok ? await tasksRes.json() : { tasks: [] }
         setTasks(tasksData.tasks || [])
+
+        await delay(150)
+        const questionsRes = await fetchWithRetry(`/api/client-portal/questions?clientId=${clientId}`)
+        const questionsData = questionsRes.ok ? await questionsRes.json() : { questions: [] }
         setQuestions(questionsData.questions || [])
+
+        await delay(150)
+        const docsRes = await fetchWithRetry(
+          `/api/client-portal/client-documents?email=${encodeURIComponent(clientEmail)}`,
+        )
+        const docsData = docsRes.ok ? await docsRes.json() : { documents: [] }
         setClientDocuments(docsData.documents || [])
+
+        await delay(150)
+        const deliverablesRes = await fetchWithRetry(`/api/client-portal/deliverables?clientId=${clientId}`)
+        const deliverablesData = deliverablesRes.ok ? await deliverablesRes.json() : { deliverables: [] }
         setDeliverables(deliverablesData.deliverables || [])
+
+        await delay(150)
+        const progressRes = await fetchWithRetry(`/api/client-portal/weekly-progress?clientId=${clientId}`)
+        const progressData = progressRes.ok
+          ? await progressRes.json()
+          : { totalHours: 0, uniqueStudents: 0, weeklyProgress: [] }
         setProgress({
           totalHours: progressData.totalHours || 0,
           uniqueStudents: progressData.uniqueStudents || 0,
@@ -198,6 +317,23 @@ export default function ClientPortalPage() {
     }
     fetchSignedAgreements()
   }, [client?.email])
+
+  const fetchMeetings = useCallback(async () => {
+    if (!selectedClientId) return
+    try {
+      const res = await fetch(`/api/scheduled-client-meetings?clientId=${selectedClientId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setMeetings(data.meetings || [])
+      }
+    } catch (error) {
+      console.error("Error fetching client meetings:", error)
+    }
+  }, [selectedClientId])
+
+  useEffect(() => {
+    fetchMeetings()
+  }, [fetchMeetings])
 
   const refreshTasks = () => {
     if (client?.id) {
@@ -253,27 +389,44 @@ export default function ClientPortalPage() {
         <ClientPortalHeader />
 
         <div className="p-4">
-          <div className="mb-4 flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
-            <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm text-amber-800 font-medium">Demo Mode</p>
-              <p className="text-xs text-amber-600">
-                In production, clients will be authenticated and see only their own portal.
-              </p>
+          {canSwitchClients && availableClients.length > 1 && (
+            <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <Eye className="h-4 w-4 text-blue-600 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm text-blue-800 font-medium">
+                  {role === "student" ? "Client Portal View" : "Viewing as Director/Admin"}
+                </p>
+                <p className="text-xs text-blue-600">
+                  {role === "student" ? "View your assigned client's portal" : "Select a client to view their portal"}
+                </p>
+              </div>
+              <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+                <SelectTrigger className="w-[240px] bg-white">
+                  <SelectValue placeholder="Select a client to preview" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableClients.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-              <SelectTrigger className="w-[240px] bg-white">
-                <SelectValue placeholder="Select a client to preview" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableClients.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          )}
+
+          {/* Legacy demo mode indicator */}
+          {isDemoMode && !canSwitchClients && (
+            <div className="mb-4 flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm text-amber-800 font-medium">Demo Mode</p>
+                <p className="text-xs text-amber-600">
+                  In production, clients will be authenticated and see only their own portal.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="mb-4 bg-gradient-to-r from-slate-800 to-slate-700 rounded-xl p-5 text-white shadow-lg">
             <div className="flex items-center justify-between">
@@ -368,6 +521,15 @@ export default function ClientPortalPage() {
                 <Users className="h-4 w-4" />
                 Your Team
               </TabsTrigger>
+              <TabsTrigger value="meetings" className="flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Meetings
+                {meetings.length > 0 && (
+                  <Badge variant="secondary" className="ml-1 text-xs">
+                    {meetings.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="tasks" className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
                 Tasks & Q&A
@@ -407,6 +569,91 @@ export default function ClientPortalPage() {
 
             <TabsContent value="team">
               <ClientTeamCard teamMembers={teamMembers} directors={directors} loading={loading} />
+            </TabsContent>
+
+            <TabsContent value="meetings" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5 text-primary" />
+                    Scheduled Meetings
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {meetings.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Calendar className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                      <p>No meetings scheduled yet.</p>
+                      <p className="text-sm mt-1">Your team will schedule meetings with you throughout the semester.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {meetings.map((meeting) => (
+                        <div
+                          key={meeting.id}
+                          className="p-4 rounded-lg border bg-gradient-to-r from-teal-50 to-white border-teal-200"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                <Badge variant="outline" className="bg-teal-100 text-teal-800 border-teal-200">
+                                  {meeting.week_label}
+                                </Badge>
+                                <span className="text-sm text-muted-foreground">
+                                  {new Date(meeting.week_start).toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                  })}{" "}
+                                  -{" "}
+                                  {new Date(meeting.week_end).toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                  })}
+                                </span>
+                              </div>
+                              <h4 className="font-semibold text-lg text-slate-800">Client Meeting</h4>
+                              <div className="flex items-center gap-4 mt-2 text-sm">
+                                <span className="flex items-center gap-1 text-slate-600">
+                                  <Clock className="h-4 w-4" />
+                                  {meeting.start_time} - {meeting.end_time}
+                                </span>
+                                <span className="flex items-center gap-1 text-slate-600">
+                                  <Badge variant="outline" className="text-xs">
+                                    {meeting.minutes} min
+                                  </Badge>
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-4 mt-2 text-sm">
+                                {meeting.room_assignment && (
+                                  <span className="flex items-center gap-1 text-slate-600">
+                                    <MapPin className="h-4 w-4" />
+                                    {meeting.room_assignment}
+                                  </span>
+                                )}
+                                {meeting.zoom_link && (
+                                  <a
+                                    href={meeting.zoom_link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1 text-blue-600 hover:underline"
+                                  >
+                                    <Video className="h-4 w-4" />
+                                    Join via Zoom
+                                  </a>
+                                )}
+                              </div>
+                              {meeting.notes && (
+                                <p className="mt-2 text-sm text-slate-500 italic">Note: {meeting.notes}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="tasks" className="space-y-6">

@@ -3,7 +3,9 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { MainNavigation } from "@/components/main-navigation"
+import { useDemoMode } from "@/contexts/demo-mode-context"
 import { StudentPortalHeader } from "@/components/student-portal-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -25,12 +27,12 @@ import {
   AlertCircle,
   Bell,
   Presentation,
-  FileCheck,
   Award,
   Users,
   Lock,
   CalendarClock,
   ChevronDown,
+  Eye,
 } from "lucide-react"
 import { upload } from "@vercel/blob/client"
 import {
@@ -47,6 +49,59 @@ import { ClientServiceTab } from "@/components/client-service-tab"
 import { StudentClinicView } from "@/components/student-clinic-view"
 import { Triage } from "@/components/triage"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useDemoStudent, DEMO_STUDENTS } from "@/components/demo-student-selector"
+import { useUserRole, canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
+
+async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url)
+
+      if (response.status === 429) {
+        // Rate limited - wait with exponential backoff
+        const waitTime = Math.pow(2, attempt + 1) * 1000 // 2s, 4s, 8s
+        console.log(`[v0] Rate limited on ${url}, waiting ${waitTime}ms (attempt ${attempt + 1}/${maxRetries})`)
+        await new Promise((r) => setTimeout(r, waitTime))
+        continue
+      }
+
+      if (!response.ok) {
+        const text = await response.text()
+        if (text.startsWith("Too Many R")) {
+          // Rate limit response without proper status code
+          const waitTime = Math.pow(2, attempt + 1) * 1000
+          console.log(`[v0] Rate limited (text) on ${url}, waiting ${waitTime}ms`)
+          await new Promise((r) => setTimeout(r, waitTime))
+          continue
+        }
+      }
+
+      return response
+    } catch (error) {
+      if (attempt < maxRetries - 1) {
+        const waitTime = Math.pow(2, attempt) * 1000
+        await new Promise((r) => setTimeout(r, waitTime))
+      } else {
+        throw error
+      }
+    }
+  }
+  // Final attempt
+  return fetch(url)
+}
+
+async function fetchSequentially(urls: string[]): Promise<Response[]> {
+  const results: Response[] = []
+  for (let i = 0; i < urls.length; i++) {
+    // Wait 500ms between requests to avoid rate limiting
+    if (i > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    }
+    const res = await fetchWithRetry(urls[i])
+    results.push(res)
+  }
+  return results
+}
 
 interface Student {
   id: string
@@ -111,7 +166,7 @@ interface AvailableStudent {
 
 interface SemesterWeek {
   id: string
-  week_number: number
+  week_number: string // Changed to string to match Supabase schema for week_number
   week_label: string
   week_start: string
   week_end: string
@@ -170,7 +225,7 @@ const DELIVERABLE_INSTRUCTIONS = {
   sow: {
     title: "Statement of Work (SOW)",
     weight: "Part of Final Grade (30%)",
-    icon: FileCheck,
+    icon: FileText,
     description:
       "The Statement of Work outlines the project scope, objectives, deliverables, and timeline agreed upon between the student team and the client. It serves as a formal agreement between your SEED team and the client.",
     instructions: [
@@ -403,9 +458,88 @@ interface TeamGrade {
 
 // export default function StudentPortalPage() { // Changed to StudentPortal
 export default function StudentPortal() {
-  const DEMO_STUDENT_ID = "3f19f7d2-33c4-4637-935e-1aa032012c58" // Collin Merwin
+  const router = useRouter()
+  const { isDemoMode } = useDemoMode()
+  const { role, email: userEmail, isLoading: roleLoading, isAuthenticated } = useUserRole()
 
-  const [selectedStudentId] = useState<string>(DEMO_STUDENT_ID)
+  console.log("[v0] StudentPortal - Auth state:", { role, isAuthenticated, roleLoading, isDemoMode })
+
+  const demoStudentId = useDemoStudent(DEMO_STUDENTS[0].id)
+  const [selectedStudentId, setSelectedStudentId] = useState<string>(demoStudentId)
+
+  const [availableStudents, setAvailableStudents] = useState<AvailableStudent[]>([])
+
+  useEffect(() => {
+    setSelectedStudentId(demoStudentId)
+  }, [demoStudentId])
+
+  useEffect(() => {
+    if (!roleLoading && !isDemoMode) {
+      // Directors and admins can always access
+      if (role === "director" || role === "admin") {
+        console.log("[v0] StudentPortal - Director/Admin access granted")
+        return
+      }
+      // Students can access their own portal
+      if (role === "student") {
+        console.log("[v0] StudentPortal - Student access granted")
+        return
+      }
+      // Not authenticated - redirect to login
+      if (!isAuthenticated) {
+        console.log("[v0] StudentPortal - Not authenticated, redirecting to login")
+        router.push("/login")
+        return
+      }
+      // Authenticated but wrong role - redirect to their portal
+      if (!canAccessPortal(role, "student")) {
+        console.log("[v0] StudentPortal - Wrong role, redirecting to:", getDefaultPortal(role))
+        router.push(getDefaultPortal(role))
+        return
+      }
+    }
+  }, [role, roleLoading, isAuthenticated, isDemoMode, router])
+
+  useEffect(() => {
+    const fetchAvailableStudents = async () => {
+      if (isDemoMode || role === "admin" || role === "director") {
+        try {
+          const res = await fetch("/api/supabase/students/overview")
+          const data = await res.json()
+          if (data.students) {
+            setAvailableStudents(
+              data.students.map((s: any) => ({
+                id: s.id,
+                full_name: s.full_name || s.name,
+                email: s.email,
+                clinic: s.clinic_name || s.clinic,
+              })),
+            )
+          }
+        } catch (error) {
+          console.error("Error fetching students:", error)
+        }
+      } else if (role === "student" && userEmail && !isDemoMode) {
+        // For actual students, find their own ID
+        try {
+          const res = await fetch(`/api/supabase/students/overview?email=${encodeURIComponent(userEmail)}`)
+          const data = await res.json()
+          if (data.students && data.students.length > 0) {
+            setSelectedStudentId(data.students[0].id)
+          }
+        } catch (error) {
+          console.error("Error fetching student:", error)
+        }
+      }
+    }
+
+    if (!roleLoading) {
+      fetchAvailableStudents()
+    }
+  }, [role, userEmail, roleLoading, isDemoMode])
+
+  const canSwitchStudents = isDemoMode || role === "admin" || role === "director"
+
   const [loading, setLoading] = useState(true)
   const [currentStudent, setCurrentStudent] = useState<Student | null>(null)
   const [debriefs, setDebriefs] = useState<Debrief[]>([])
@@ -485,20 +619,24 @@ export default function StudentPortal() {
 
   useEffect(() => {
     async function fetchData() {
-      if (!selectedStudentId) return
+      // Use the determined student ID
+      const currentStudentId = isDemoMode ? demoStudentId : selectedStudentId
+      if (!currentStudentId) return
 
       setLoading(true)
       try {
+        const urls = [
+          `/api/supabase/roster?studentId=${currentStudentId}`,
+          `/api/supabase/debriefs?studentId=${currentStudentId}`,
+          `/api/supabase/attendance?studentId=${currentStudentId}`,
+          `/api/meeting-requests?studentId=${currentStudentId}`,
+          "/api/course-materials",
+          `/api/documents?studentId=${currentStudentId}`,
+          "/api/semester-schedule",
+        ]
+
         const [studentRes, debriefsRes, attendanceRes, meetingRes, materialsRes, docsRes, scheduleRes] =
-          await Promise.all([
-            fetch(`/api/supabase/roster?studentId=${selectedStudentId}`),
-            fetch(`/api/supabase/debriefs?studentId=${selectedStudentId}`),
-            fetch(`/api/supabase/attendance?studentId=${selectedStudentId}`),
-            fetch(`/api/meeting-requests?studentId=${selectedStudentId}`), // fetch meeting requests
-            fetch("/api/course-materials"),
-            fetch(`/api/documents?studentId=${selectedStudentId}`),
-            fetch("/api/semester-schedule"), // Fetch semester schedule
-          ])
+          await fetchSequentially(urls)
 
         const studentData = await studentRes.json()
         const debriefsData = await debriefsRes.json()
@@ -507,7 +645,14 @@ export default function StudentPortal() {
         const materialsData = await materialsRes.json()
 
         const scheduleData = await scheduleRes.json()
-        setSemesterSchedule(scheduleData.schedules || [])
+        // Ensure week_number is treated as a number if it's meant to be
+        setSemesterSchedule(
+          (scheduleData.schedules || []).map((week: any) => ({
+            ...week,
+            // Convert week_number to number for sorting/comparison if necessary, but keep as string if that's the DB type
+            week_number: String(week.week_number),
+          })),
+        )
 
         const student = studentData.students?.[0] || null
         setCurrentStudent(student)
@@ -563,16 +708,26 @@ export default function StudentPortal() {
         // Fetch student notifications (announcements from directors)
         const fetchStudentNotifications = async () => {
           try {
-            const res = await fetch(
+            await new Promise((resolve) => setTimeout(resolve, 1500)) // Longer delay to avoid rate limiting
+            const res = await fetchWithRetry(
               `/api/student-notifications?studentId=${studentData.id}&clinicId=${studentData.clinicId}`,
             )
             if (!res.ok) {
               console.error("Error fetching student notifications: HTTP", res.status)
               return
             }
-            const data = await res.json()
-            if (data.notifications) {
-              setStudentNotifications(data.notifications)
+            const text = await res.text()
+            if (text.startsWith("Too Many R")) {
+              console.error("Error fetching student notifications: Rate limited")
+              return
+            }
+            try {
+              const data = JSON.parse(text)
+              if (data.notifications) {
+                setStudentNotifications(data.notifications)
+              }
+            } catch (parseError) {
+              console.error("Error parsing student notifications:", parseError)
             }
           } catch (error) {
             console.error("Error fetching student notifications:", error)
@@ -587,17 +742,27 @@ export default function StudentPortal() {
     }
 
     fetchData()
-  }, [selectedStudentId])
+  }, [selectedStudentId, demoStudentId, isDemoMode]) // Added dependency for isDemoMode
 
   // Add useEffect to fetch signed agreements
   useEffect(() => {
     const fetchSignedAgreements = async () => {
       if (!currentStudent?.email) return
       try {
-        const response = await fetch(`/api/agreements?userEmail=${encodeURIComponent(currentStudent.email)}`)
-        const data = await response.json()
-        if (data.agreements) {
-          setSignedAgreements(data.agreements.map((a: any) => a.agreement_type))
+        await new Promise((resolve) => setTimeout(resolve, 2000)) // Longer delay to avoid rate limiting
+        const response = await fetchWithRetry(`/api/agreements?userEmail=${encodeURIComponent(currentStudent.email)}`)
+        const text = await response.text()
+        if (text.startsWith("Too Many R")) {
+          console.error("Error fetching agreements: Rate limited")
+          return
+        }
+        try {
+          const data = JSON.parse(text)
+          if (data.agreements) {
+            setSignedAgreements(data.agreements.map((a: any) => a.agreement_type))
+          }
+        } catch (parseError) {
+          console.error("Error parsing agreements:", parseError)
         }
       } catch (error) {
         console.error("Error fetching agreements:", error)
@@ -1025,7 +1190,7 @@ export default function StudentPortal() {
     return debriefWeek === lastWeekEnding
   })
 
-  if (loading) {
+  if (loading || roleLoading) {
     return (
       <div className="min-h-screen bg-background">
         <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
@@ -1041,6 +1206,9 @@ export default function StudentPortal() {
       </div>
     )
   }
+
+  // Removed redeclaration of canSwitchStudents
+  // const canSwitchStudents = isDemoMode || role === "admin" || role === "director"
 
   if (!currentStudent) {
     return (
@@ -1069,16 +1237,39 @@ export default function StudentPortal() {
       <div className="pl-52 pt-14">
         {/* Updated padding from px-6 py-6 to p-4 */}
         <div className="p-4">
-          {/* Reduced margin-bottom from mb-6 to mb-4 */}
-          <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <AlertCircle className="h-4 w-4 text-blue-600 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm text-blue-800 font-medium">Demo Mode - Viewing as Collin Merwin</p>
-              <p className="text-xs text-blue-600">
-                In production, you'll be automatically logged in as yourself and see only your own data.
-              </p>
+          {/* CHANGE: Show student selector for directors/admins viewing student portal */}
+          {canSwitchStudents && availableStudents.length > 1 && (
+            <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <Eye className="h-4 w-4 text-blue-600 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm text-blue-800 font-medium">
+                  {isDemoMode ? "Demo Mode" : "Viewing as Director/Admin"}
+                </p>
+                <p className="text-xs text-blue-600">
+                  {isDemoMode ? "Select a student to preview their portal" : "Select a student to view their portal"}
+                </p>
+              </div>
+              <Select value={selectedStudentId} onValueChange={setSelectedStudentId}>
+                <SelectTrigger className="w-[280px] bg-white">
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <span className="truncate">
+                      {availableStudents.find((s) => s.id === selectedStudentId)?.full_name || "Select a student"}
+                    </span>
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  {availableStudents.map((student) => (
+                    <SelectItem key={student.id} value={student.id}>
+                      {student.full_name} - {student.clinic}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </div>
+          )}
+
+          {/* CHANGE: Removed old demo mode banner - now using unified selector above */}
 
           {/* Header */}
           <StudentPortalHeader
@@ -1122,9 +1313,9 @@ export default function StudentPortal() {
                     <div className="space-y-2 max-h-72 overflow-y-auto">
                       {semesterSchedule.length > 0 ? (
                         semesterSchedule
-                          .sort((a, b) => a.week_number - b.week_number)
+                          .sort((a, b) => Number(a.week_number) - Number(b.week_number)) // Ensure numeric sort
                           .map((week) => {
-                            const weekDebrief = debriefs.find((d) => d.weekNumber === week.week_number)
+                            const weekDebrief = debriefs.find((d) => d.weekNumber === Number(week.week_number)) // Compare numbers
                             const hasHours = !!weekDebrief
                             const isPast = new Date(week.week_end) < new Date()
 
@@ -1232,9 +1423,9 @@ export default function StudentPortal() {
                     <div className="space-y-2 max-h-72 overflow-y-auto">
                       {semesterSchedule.length > 0 ? (
                         semesterSchedule
-                          .sort((a, b) => a.week_number - b.week_number)
+                          .sort((a, b) => Number(a.week_number) - Number(b.week_number)) // Ensure numeric sort
                           .map((week) => {
-                            const weekDebrief = debriefs.find((d) => d.weekNumber === week.week_number)
+                            const weekDebrief = debriefs.find((d) => d.weekNumber === Number(week.week_number)) // Compare numbers
                             const hasDebrief = !!weekDebrief
                             const isReviewed = weekDebrief?.status === "reviewed"
                             const isPending = weekDebrief?.status === "pending"
@@ -1309,7 +1500,8 @@ export default function StudentPortal() {
                     <div className="mt-3 pt-3 border-t border-green-100 flex justify-between items-center">
                       <span className="text-sm font-medium text-slate-600">Completed</span>
                       <span className="text-lg font-bold text-green-600">
-                        {completedDebriefs}/{semesterSchedule.filter((w) => !w.is_break).length}
+                        {completedDebriefs}/
+                        {totalAttendance > 0 ? semesterSchedule.filter((w) => !w.is_break).length : 0}
                       </span>
                     </div>
                   </div>
@@ -1350,9 +1542,9 @@ export default function StudentPortal() {
                       {semesterSchedule.length > 0 ? (
                         semesterSchedule
                           .filter((week) => !week.is_break)
-                          .sort((a, b) => a.week_number - b.week_number)
+                          .sort((a, b) => Number(a.week_number) - Number(b.week_number)) // Ensure numeric sort
                           .map((week) => {
-                            const weekDebrief = debriefs.find((d) => d.weekNumber === week.week_number)
+                            const weekDebrief = debriefs.find((d) => d.weekNumber === Number(week.week_number)) // Compare numbers
                             const isPending = weekDebrief?.status === "pending"
                             const isReviewed = weekDebrief?.status === "reviewed"
                             const isPast = new Date(week.week_end) < new Date()
@@ -1370,11 +1562,8 @@ export default function StudentPortal() {
                                 <div className="flex items-center justify-between mb-1">
                                   <div className="flex items-center gap-2">
                                     <p className="text-sm font-medium text-slate-700">Week {week.week_number}</p>
-                                    {isPending ? (
-                                      <Clock className="h-3.5 w-3.5 text-amber-600" />
-                                    ) : (
-                                      <AlertCircle className="h-3.5 w-3.5 text-red-500" />
-                                    )}
+                                    {isPending && <Clock className="h-3.5 w-3.5 text-amber-600" />}
+                                    {!isPending && <AlertCircle className="h-3.5 w-3.5 text-red-500" />}
                                   </div>
                                   {isPending ? (
                                     <Badge className="bg-amber-100 text-amber-700 text-xs">Pending Review</Badge>
@@ -1453,9 +1642,11 @@ export default function StudentPortal() {
                     <div className="space-y-2 max-h-72 overflow-y-auto">
                       {semesterSchedule.length > 0 ? (
                         semesterSchedule
-                          .sort((a, b) => a.week_number - b.week_number)
+                          .sort((a, b) => Number(a.week_number) - Number(b.week_number)) // Ensure numeric sort
                           .map((week) => {
-                            const weekAttendance = attendanceRecords.find((a) => a.weekNumber === week.week_number)
+                            const weekAttendance = attendanceRecords.find(
+                              (a) => a.weekNumber === Number(week.week_number),
+                            ) // Compare numbers
                             const hasAttendance = !!weekAttendance
                             const isPast = new Date(week.week_end) < new Date()
 
@@ -1779,260 +1970,264 @@ export default function StudentPortal() {
                       {semesterSchedule.length === 0 ? (
                         <p className="text-sm text-slate-500 text-center py-8">No schedule data available</p>
                       ) : (
-                        semesterSchedule.map((week) => {
-                          const hasAttendance = attendanceRecords.some((r) => r.weekNumber === week.week_number)
-                          const weekDebrief = debriefs.find((d) => {
-                            const debriefWeekNumber = d.weekNumber // Assuming debrief has weekNumber
-                            return debriefWeekNumber === week.week_number
-                          })
-                          const hasDebrief = !!weekDebrief
-                          const isPast = new Date(week.week_end) < new Date()
-                          const isCurrent =
-                            new Date(week.week_start) <= new Date() && new Date(week.week_end) >= new Date()
+                        semesterSchedule
+                          .sort((a, b) => Number(a.week_number) - Number(b.week_number)) // Ensure numeric sort
+                          .map((week) => {
+                            const hasAttendance = attendanceRecords.some(
+                              (r) => r.weekNumber === Number(week.week_number),
+                            ) // Compare numbers
+                            const weekDebrief = debriefs.find((d) => {
+                              const debriefWeekNumber = d.weekNumber
+                              return debriefWeekNumber === Number(week.week_number) // Compare numbers
+                            })
+                            const hasDebrief = !!weekDebrief
+                            const isPast = new Date(week.week_end) < new Date()
+                            const isCurrent =
+                              new Date(week.week_start) <= new Date() && new Date(week.week_end) >= new Date()
 
-                          return (
-                            <div
-                              key={week.id}
-                              className={`p-4 rounded-lg border transition-all ${
-                                week.is_break
-                                  ? "bg-amber-50 border-amber-200"
-                                  : isCurrent
-                                    ? "bg-blue-50 border-blue-300 ring-2 ring-blue-200"
-                                    : isPast
-                                      ? hasAttendance && hasDebrief
-                                        ? "bg-green-50 border-green-200"
-                                        : "bg-red-50 border-red-200"
-                                      : "bg-slate-50 border-slate-200"
-                              }`}
-                            >
-                              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                                <div className="flex items-center gap-4">
-                                  <div className="text-center min-w-[60px]">
-                                    <p className="text-xs text-muted-foreground">Week</p>
-                                    <p className="text-xl font-bold">{week.week_number}</p>
-                                  </div>
-                                  <div>
-                                    <div className="flex items-center gap-2">
-                                      <p className="font-medium">{week.week_label || `Week ${week.week_number}`}</p>
-                                      {week.is_break && <Badge className="bg-amber-500">Break</Badge>}
-                                      {isCurrent && <Badge className="bg-blue-600">Current Week</Badge>}
+                            return (
+                              <div
+                                key={week.id}
+                                className={`p-4 rounded-lg border transition-all ${
+                                  week.is_break
+                                    ? "bg-amber-50 border-amber-200"
+                                    : isCurrent
+                                      ? "bg-blue-50 border-blue-300 ring-2 ring-blue-200"
+                                      : isPast
+                                        ? hasAttendance && hasDebrief
+                                          ? "bg-green-50 border-green-200"
+                                          : "bg-red-50 border-red-200"
+                                        : "bg-slate-50 border-slate-200"
+                                }`}
+                              >
+                                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                                  <div className="flex items-center gap-4">
+                                    <div className="text-center min-w-[60px]">
+                                      <p className="text-xs text-muted-foreground">Week</p>
+                                      <p className="text-xl font-bold">{week.week_number}</p>
                                     </div>
-                                    <p className="text-sm text-muted-foreground">
-                                      {new Date(week.week_start).toLocaleDateString("en-US", {
-                                        weekday: "short",
-                                        month: "short",
-                                        day: "numeric",
-                                      })}{" "}
-                                      -{" "}
-                                      {new Date(week.week_end).toLocaleDateString("en-US", {
-                                        weekday: "short",
-                                        month: "short",
-                                        day: "numeric",
-                                      })}
-                                    </p>
-                                    {week.session_focus && (
-                                      <p className="text-xs text-slate-600 mt-1">{week.session_focus}</p>
-                                    )}
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <p className="font-medium">{week.week_label || `Week ${week.week_number}`}</p>
+                                        {week.is_break && <Badge className="bg-amber-500">Break</Badge>}
+                                        {isCurrent && <Badge className="bg-blue-600">Current Week</Badge>}
+                                      </div>
+                                      <p className="text-sm text-muted-foreground">
+                                        {new Date(week.week_start).toLocaleDateString("en-US", {
+                                          weekday: "short",
+                                          month: "short",
+                                          day: "numeric",
+                                        })}{" "}
+                                        -{" "}
+                                        {new Date(week.week_end).toLocaleDateString("en-US", {
+                                          weekday: "short",
+                                          month: "short",
+                                          day: "numeric",
+                                        })}
+                                      </p>
+                                      {week.session_focus && (
+                                        <p className="text-xs text-slate-600 mt-1">{week.session_focus}</p>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
 
-                                {!week.is_break && (
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    {/* Attendance Status/Button */}
-                                    {hasAttendance ? (
-                                      <Badge className="bg-green-600 text-white">
-                                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                                        Attended
-                                      </Badge>
-                                    ) : (
-                                      <Dialog>
-                                        <DialogTrigger asChild>
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="border-blue-300 text-blue-700 hover:bg-blue-50 bg-transparent"
-                                            onClick={() => setSelectedWeekForAttendance(week.id)}
-                                          >
-                                            <Lock className="h-3 w-3 mr-1" />
-                                            Submit Attendance
-                                          </Button>
-                                        </DialogTrigger>
-                                        <DialogContent>
-                                          <DialogHeader>
-                                            <DialogTitle>Submit Attendance - Week {week.week_number}</DialogTitle>
-                                            <DialogDescription>
-                                              Enter the class password provided during class to mark your attendance for{" "}
-                                              {new Date(week.week_start).toLocaleDateString()}.
-                                            </DialogDescription>
-                                          </DialogHeader>
-                                          <div className="space-y-4 py-4">
-                                            <div className="space-y-2">
-                                              <Label>Class Password</Label>
-                                              <Input
-                                                type="password"
-                                                placeholder="Enter today's class password"
-                                                value={attendancePassword}
-                                                onChange={(e) => setAttendancePassword(e.target.value)}
-                                              />
-                                              <p className="text-xs text-muted-foreground">
-                                                The password is shared during class
-                                              </p>
-                                            </div>
-                                          </div>
-                                          <DialogFooter>
+                                  {!week.is_break && (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {/* Attendance Status/Button */}
+                                      {hasAttendance ? (
+                                        <Badge className="bg-green-600 text-white">
+                                          <CheckCircle2 className="h-3 w-3 mr-1" />
+                                          Attended
+                                        </Badge>
+                                      ) : (
+                                        <Dialog>
+                                          <DialogTrigger asChild>
                                             <Button
-                                              onClick={() => {
-                                                setSelectedWeekForAttendance(week.id)
-                                                handleSubmitAttendance()
-                                              }}
-                                              disabled={submittingAttendance || !attendancePassword.trim()}
+                                              variant="outline"
+                                              size="sm"
+                                              className="border-blue-300 text-blue-700 hover:bg-blue-50 bg-transparent"
+                                              onClick={() => setSelectedWeekForAttendance(week.id)}
                                             >
-                                              {submittingAttendance ? "Submitting..." : "Submit"}
+                                              <Lock className="h-3 w-3 mr-1" />
+                                              Submit Attendance
                                             </Button>
-                                          </DialogFooter>
-                                        </DialogContent>
-                                      </Dialog>
-                                    )}
-
-                                    {/* Debrief Status/Button */}
-                                    {hasDebrief ? (
-                                      <Collapsible>
-                                        <CollapsibleTrigger asChild>
-                                          <Badge className="bg-green-600 text-white cursor-pointer hover:bg-green-700">
-                                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                                            Debrief ({weekDebrief?.hoursWorked}h)
-                                            <ChevronDown className="h-3 w-3 ml-1" />
-                                          </Badge>
-                                        </CollapsibleTrigger>
-                                        <CollapsibleContent className="mt-2">
-                                          <Card className="border-green-200">
-                                            <CardContent className="pt-3 text-sm">
+                                          </DialogTrigger>
+                                          <DialogContent>
+                                            <DialogHeader>
+                                              <DialogTitle>Submit Attendance - Week {week.week_number}</DialogTitle>
+                                              <DialogDescription>
+                                                Enter the class password provided during class to mark your attendance
+                                                for {new Date(week.week_start).toLocaleDateString()}.
+                                              </DialogDescription>
+                                            </DialogHeader>
+                                            <div className="space-y-4 py-4">
                                               <div className="space-y-2">
-                                                <div className="flex justify-between">
-                                                  <span className="text-muted-foreground">Hours:</span>
-                                                  <span className="font-medium">{weekDebrief?.hoursWorked}h</span>
-                                                </div>
-                                                <div>
-                                                  <span className="text-muted-foreground">Work Summary:</span>
-                                                  <p className="mt-1">{weekDebrief?.workSummary}</p>
-                                                </div>
-                                                {weekDebrief?.questions && (
-                                                  <div>
-                                                    <span className="text-muted-foreground">Questions:</span>
-                                                    <p className="mt-1 text-amber-700">{weekDebrief.questions}</p>
-                                                  </div>
-                                                )}
+                                                <Label>Class Password</Label>
+                                                <Input
+                                                  type="password"
+                                                  placeholder="Enter today's class password"
+                                                  value={attendancePassword}
+                                                  onChange={(e) => setAttendancePassword(e.target.value)}
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                  The password is shared during class
+                                                </p>
                                               </div>
-                                            </CardContent>
-                                          </Card>
-                                        </CollapsibleContent>
-                                      </Collapsible>
-                                    ) : (
-                                      <Dialog>
-                                        <DialogTrigger asChild>
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="border-purple-300 text-purple-700 hover:bg-purple-50 bg-transparent"
-                                            onClick={() => {
-                                              setSelectedWeekForDebrief(week.id)
-                                              setShowDebriefDialog(true)
-                                            }}
-                                          >
-                                            <FileText className="h-3 w-3 mr-1" />
-                                            Submit Debrief
-                                          </Button>
-                                        </DialogTrigger>
-                                        <DialogContent className="max-w-lg">
-                                          <DialogHeader>
-                                            <DialogTitle>Weekly Debrief - Week {week.week_number}</DialogTitle>
-                                            <DialogDescription>
-                                              Submit your weekly work summary for{" "}
-                                              {new Date(week.week_start).toLocaleDateString()} -{" "}
-                                              {new Date(week.week_end).toLocaleDateString()}
-                                            </DialogDescription>
-                                          </DialogHeader>
-                                          <div className="space-y-4 py-4">
-                                            <div className="space-y-2">
-                                              <Label>Hours Worked This Week *</Label>
-                                              <Input
-                                                type="number"
-                                                step="0.5"
-                                                min="0"
-                                                placeholder="e.g., 5.5"
-                                                value={debriefForm.hoursWorked}
-                                                onChange={(e) =>
-                                                  setDebriefForm({ ...debriefForm, hoursWorked: e.target.value })
-                                                }
-                                              />
                                             </div>
-                                            <div className="space-y-2">
-                                              <Label>Work Summary *</Label>
-                                              <Textarea
-                                                placeholder="Describe what you worked on this week..."
-                                                rows={4}
-                                                value={debriefForm.workSummary}
-                                                onChange={(e) =>
-                                                  setDebriefForm({ ...debriefForm, workSummary: e.target.value })
-                                                }
-                                              />
-                                            </div>
-                                            <div className="space-y-2">
-                                              <Label>Questions or Notes (Optional)</Label>
-                                              <Textarea
-                                                placeholder="Any questions for your clinic director?"
-                                                rows={2}
-                                                value={debriefForm.questions}
-                                                onChange={(e) =>
-                                                  setDebriefForm({ ...debriefForm, questions: e.target.value })
-                                                }
-                                              />
-                                            </div>
-                                          </div>
-                                          <DialogFooter>
+                                            <DialogFooter>
+                                              <Button
+                                                onClick={() => {
+                                                  setSelectedWeekForAttendance(week.id)
+                                                  handleSubmitAttendance()
+                                                }}
+                                                disabled={submittingAttendance || !attendancePassword.trim()}
+                                              >
+                                                {submittingAttendance ? "Submitting..." : "Submit"}
+                                              </Button>
+                                            </DialogFooter>
+                                          </DialogContent>
+                                        </Dialog>
+                                      )}
+
+                                      {/* Debrief Status/Button */}
+                                      {hasDebrief ? (
+                                        <Collapsible>
+                                          <CollapsibleTrigger asChild>
+                                            <Badge className="bg-green-600 text-white cursor-pointer hover:bg-green-700">
+                                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                                              Debrief ({weekDebrief?.hoursWorked}h)
+                                              <ChevronDown className="h-3 w-3 ml-1" />
+                                            </Badge>
+                                          </CollapsibleTrigger>
+                                          <CollapsibleContent className="mt-2">
+                                            <Card className="border-green-200">
+                                              <CardContent className="pt-3 text-sm">
+                                                <div className="space-y-2">
+                                                  <div className="flex justify-between">
+                                                    <span className="text-muted-foreground">Hours:</span>
+                                                    <span className="font-medium">{weekDebrief?.hoursWorked}h</span>
+                                                  </div>
+                                                  <div>
+                                                    <span className="text-muted-foreground">Work Summary:</span>
+                                                    <p className="mt-1">{weekDebrief?.workSummary}</p>
+                                                  </div>
+                                                  {weekDebrief?.questions && (
+                                                    <div>
+                                                      <span className="text-muted-foreground">Questions:</span>
+                                                      <p className="mt-1 text-amber-700">{weekDebrief.questions}</p>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </CardContent>
+                                            </Card>
+                                          </CollapsibleContent>
+                                        </Collapsible>
+                                      ) : (
+                                        <Dialog>
+                                          <DialogTrigger asChild>
                                             <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="border-purple-300 text-purple-700 hover:bg-purple-50 bg-transparent"
                                               onClick={() => {
                                                 setSelectedWeekForDebrief(week.id)
-                                                handleSubmitDebrief()
+                                                setShowDebriefDialog(true)
                                               }}
-                                              disabled={
-                                                submittingDebrief ||
-                                                !debriefForm.hoursWorked ||
-                                                !debriefForm.workSummary
-                                              }
                                             >
-                                              {submittingDebrief ? "Submitting..." : "Submit Debrief"}
+                                              <FileText className="h-3 w-3 mr-1" />
+                                              Submit Debrief
                                             </Button>
-                                          </DialogFooter>
-                                        </DialogContent>
-                                      </Dialog>
-                                    )}
+                                          </DialogTrigger>
+                                          <DialogContent className="max-w-lg">
+                                            <DialogHeader>
+                                              <DialogTitle>Weekly Debrief - Week {week.week_number}</DialogTitle>
+                                              <DialogDescription>
+                                                Submit your weekly work summary for{" "}
+                                                {new Date(week.week_start).toLocaleDateString()} -{" "}
+                                                {new Date(week.week_end).toLocaleDateString()}
+                                              </DialogDescription>
+                                            </DialogHeader>
+                                            <div className="space-y-4 py-4">
+                                              <div className="space-y-2">
+                                                <Label>Hours Worked This Week *</Label>
+                                                <Input
+                                                  type="number"
+                                                  step="0.5"
+                                                  min="0"
+                                                  placeholder="e.g., 5.5"
+                                                  value={debriefForm.hoursWorked}
+                                                  onChange={(e) =>
+                                                    setDebriefForm({ ...debriefForm, hoursWorked: e.target.value })
+                                                  }
+                                                />
+                                              </div>
+                                              <div className="space-y-2">
+                                                <Label>Work Summary *</Label>
+                                                <Textarea
+                                                  placeholder="Describe what you worked on this week..."
+                                                  rows={4}
+                                                  value={debriefForm.workSummary}
+                                                  onChange={(e) =>
+                                                    setDebriefForm({ ...debriefForm, workSummary: e.target.value })
+                                                  }
+                                                />
+                                              </div>
+                                              <div className="space-y-2">
+                                                <Label>Questions or Notes (Optional)</Label>
+                                                <Textarea
+                                                  placeholder="Any questions for your clinic director?"
+                                                  rows={2}
+                                                  value={debriefForm.questions}
+                                                  onChange={(e) =>
+                                                    setDebriefForm({ ...debriefForm, questions: e.target.value })
+                                                  }
+                                                />
+                                              </div>
+                                            </div>
+                                            <DialogFooter>
+                                              <Button
+                                                onClick={() => {
+                                                  setSelectedWeekForDebrief(week.id)
+                                                  handleSubmitDebrief()
+                                                }}
+                                                disabled={
+                                                  submittingDebrief ||
+                                                  !debriefForm.hoursWorked ||
+                                                  !debriefForm.workSummary
+                                                }
+                                              >
+                                                {submittingDebrief ? "Submitting..." : "Submit Debrief"}
+                                              </Button>
+                                            </DialogFooter>
+                                          </DialogContent>
+                                        </Dialog>
+                                      )}
 
-                                    {/* Completion indicator */}
-                                    {isPast && !week.is_break && (
-                                      <div className="flex items-center">
-                                        {hasAttendance && hasDebrief ? (
-                                          <Badge
-                                            variant="outline"
-                                            className="bg-green-100 text-green-700 border-green-300"
-                                          >
-                                            <CheckCircle2 className="h-3 w-3 mr-1" />
-                                            Complete
-                                          </Badge>
-                                        ) : (
-                                          <Badge variant="outline" className="bg-red-100 text-red-700 border-red-300">
-                                            <AlertCircle className="h-3 w-3 mr-1" />
-                                            Incomplete
-                                          </Badge>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
+                                      {/* Completion indicator */}
+                                      {isPast && !week.is_break && (
+                                        <div className="flex items-center">
+                                          {hasAttendance && hasDebrief ? (
+                                            <Badge
+                                              variant="outline"
+                                              className="bg-green-100 text-green-700 border-green-300"
+                                            >
+                                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                                              Complete
+                                            </Badge>
+                                          ) : (
+                                            <Badge variant="outline" className="bg-red-100 text-red-700 border-red-300">
+                                              <AlertCircle className="h-3 w-3 mr-1" />
+                                              Incomplete
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          )
-                        })
+                            )
+                          })
                       )}
                     </div>
                   </CardContent>
@@ -2050,57 +2245,59 @@ export default function StudentPortal() {
                       {debriefs.length === 0 ? (
                         <p className="text-sm text-slate-500 text-center py-8">No debriefs submitted yet</p>
                       ) : (
-                        debriefs.map((debrief) => (
-                          <Collapsible key={debrief.id}>
-                            <CollapsibleTrigger asChild>
-                              <div className="p-3 border rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <div className="text-center min-w-[50px]">
-                                      <p className="text-xs text-muted-foreground">Week</p>
-                                      <p className="font-bold">{debrief.weekNumber || "—"}</p>
+                        debriefs
+                          .sort((a, b) => b.weekNumber - a.weekNumber) // Sort by week number descending
+                          .map((debrief) => (
+                            <Collapsible key={debrief.id}>
+                              <CollapsibleTrigger asChild>
+                                <div className="p-3 border rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <div className="text-center min-w-[50px]">
+                                        <p className="text-xs text-muted-foreground">Week</p>
+                                        <p className="font-bold">{debrief.weekNumber || "—"}</p>
+                                      </div>
+                                      <div>
+                                        <p className="font-medium text-sm">{debrief.clientName}</p>
+                                        <p className="text-xs text-slate-500">
+                                          {new Date(debrief.weekEnding).toLocaleDateString()}
+                                        </p>
+                                      </div>
                                     </div>
-                                    <div>
-                                      <p className="font-medium text-sm">{debrief.clientName}</p>
-                                      <p className="text-xs text-slate-500">
-                                        {new Date(debrief.weekEnding).toLocaleDateString()}
-                                      </p>
+                                    <div className="flex items-center gap-2">
+                                      <Badge
+                                        className={
+                                          debrief.status === "reviewed"
+                                            ? "bg-green-500"
+                                            : debrief.status === "pending"
+                                              ? "bg-amber-500"
+                                              : "bg-slate-500"
+                                        }
+                                      >
+                                        {debrief.status}
+                                      </Badge>
+                                      <div className="flex items-center gap-1 text-sm font-medium">
+                                        <Clock className="h-4 w-4 text-blue-600" />
+                                        {debrief.hoursWorked}h
+                                      </div>
+                                      <ChevronDown className="h-4 w-4 text-slate-400" />
                                     </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Badge
-                                      className={
-                                        debrief.status === "reviewed"
-                                          ? "bg-green-500"
-                                          : debrief.status === "pending"
-                                            ? "bg-amber-500"
-                                            : "bg-slate-500"
-                                      }
-                                    >
-                                      {debrief.status}
-                                    </Badge>
-                                    <div className="flex items-center gap-1 text-sm font-medium">
-                                      <Clock className="h-4 w-4 text-blue-600" />
-                                      {debrief.hoursWorked}h
-                                    </div>
-                                    <ChevronDown className="h-4 w-4 text-slate-400" />
                                   </div>
                                 </div>
-                              </div>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent>
-                              <div className="p-3 border border-t-0 rounded-b-lg bg-slate-50">
-                                <p className="text-sm text-slate-700 mb-2">{debrief.workSummary}</p>
-                                {debrief.questions && (
-                                  <div className="bg-amber-50 border border-amber-200 rounded p-2 mt-2">
-                                    <p className="text-xs font-medium text-amber-800 mb-1">Questions:</p>
-                                    <p className="text-xs text-amber-700">{debrief.questions}</p>
-                                  </div>
-                                )}
-                              </div>
-                            </CollapsibleContent>
-                          </Collapsible>
-                        ))
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <div className="p-3 border border-t-0 rounded-b-lg bg-slate-50">
+                                  <p className="text-sm text-slate-700 mb-2">{debrief.workSummary}</p>
+                                  {debrief.questions && (
+                                    <div className="bg-amber-50 border border-amber-200 rounded p-2 mt-2">
+                                      <p className="text-xs font-medium text-amber-800 mb-1">Questions:</p>
+                                      <p className="text-xs text-amber-700">{debrief.questions}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </CollapsibleContent>
+                            </Collapsible>
+                          ))
                       )}
                     </div>
                   </CardContent>

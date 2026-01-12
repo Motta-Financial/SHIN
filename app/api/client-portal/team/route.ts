@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
+// Spring 2026 semester ID
+const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
@@ -31,81 +34,68 @@ export async function GET(request: Request) {
           directors: [],
         },
         { status: 200 },
-      ) // Return 200 so frontend can handle gracefully
+      )
     }
 
-    // Get team members assigned to this client
-    const { data: assignments, error: assignmentsError } = await supabase
-      .from("client_assignments")
-      .select(`
-        id,
-        role,
-        clinic,
-        assigned_at,
-        student_id,
-        students (
-          id,
-          full_name,
-          email,
-          is_team_leader,
-          clinic,
-          linkedin_profile,
-          academic_level,
-          education
-        )
-      `)
+    const { data: mappingData, error: mappingError } = await supabase
+      .from("v_complete_mapping")
+      .select("*")
       .eq("client_id", client.id)
+      .eq("semester_id", SPRING_2026_SEMESTER_ID)
 
-    if (assignmentsError) {
-      console.error("Error fetching assignments:", assignmentsError)
+    if (mappingError) {
+      console.error("Error fetching from v_complete_mapping:", mappingError)
     }
 
-    // Get directors assigned to this client
-    const { data: clientDirectors, error: directorsError } = await supabase
-      .from("client_directors")
-      .select(`
-        id,
-        is_primary,
-        director_id,
-        directors (
-          id,
-          full_name,
-          email,
-          clinic_id,
-          job_title,
-          role
-        )
-      `)
-      .eq("client_id", client.id)
+    console.log(`[v0] Client Portal Team - Client: ${client.name}, Mapping records: ${mappingData?.length || 0}`)
 
-    if (directorsError) {
-      console.error("Error fetching client directors:", directorsError)
-    }
-
-    // Format team members
-    const teamMembers = (assignments || []).map((a: any) => ({
-      id: a.student_id,
-      name: a.students?.full_name || "Unknown",
-      email: a.students?.email || "",
-      role: a.role || "Team Member",
-      clinic: a.clinic || a.students?.clinic || "",
-      isTeamLeader: a.students?.is_team_leader || a.role === "Team Leader",
-      linkedinProfile: a.students?.linkedin_profile || null,
-      academicLevel: a.students?.academic_level || "",
-      education: a.students?.education || "",
-      assignedAt: a.assigned_at,
+    // Format team members from v_complete_mapping
+    const teamMembers = (mappingData || []).map((m: any) => ({
+      id: m.student_id,
+      name: m.student_name || "Unknown",
+      email: m.student_email || "",
+      role: m.student_role || "Team Member",
+      clinic: m.student_clinic_name || "",
+      isTeamLeader: m.student_role === "Team Leader",
+      linkedinProfile: null,
+      academicLevel: "",
+      education: "",
     }))
 
-    // Format directors
-    const directors = (clientDirectors || []).map((d: any) => ({
-      id: d.director_id,
-      name: d.directors?.full_name || "Unknown",
-      email: d.directors?.email || "",
-      clinicId: d.directors?.clinic_id || null,
-      jobTitle: d.directors?.job_title || "Director",
-      role: d.directors?.role || "Director",
-      isPrimary: d.is_primary,
-    }))
+    // Get unique directors from the mapping data
+    const directorMap = new Map()
+
+    // Add clinic directors
+    for (const m of mappingData || []) {
+      if (m.clinic_director_id && !directorMap.has(m.clinic_director_id)) {
+        directorMap.set(m.clinic_director_id, {
+          id: m.clinic_director_id,
+          name: m.clinic_director_name || "Unknown",
+          email: m.clinic_director_email || "",
+          clinicId: m.student_clinic_id,
+          jobTitle: "Clinic Director",
+          role: "Clinic Director",
+          isPrimary: false,
+        })
+      }
+
+      // Add client director (primary)
+      if (m.client_director_id && !directorMap.has(m.client_director_id)) {
+        directorMap.set(m.client_director_id, {
+          id: m.client_director_id,
+          name: m.client_director_name || "Unknown",
+          email: m.client_director_email || "",
+          clinicId: null,
+          jobTitle: "Client Director",
+          role: "Client Director",
+          isPrimary: true,
+        })
+      }
+    }
+
+    const directors = Array.from(directorMap.values())
+
+    console.log(`[v0] Client Portal Team - Team members: ${teamMembers.length}, Directors: ${directors.length}`)
 
     return NextResponse.json({
       success: true,

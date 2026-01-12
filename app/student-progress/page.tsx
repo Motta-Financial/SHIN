@@ -26,7 +26,7 @@ async function getAvailableWeeks(): Promise<string[]> {
 
 export default function StudentProgressPage() {
   const [availableWeeks, setAvailableWeeks] = useState<string[]>([])
-  const [selectedWeeks, setSelectedWeeks] = useState<string[]>(["2025-09-14"])
+  const [selectedWeeks, setSelectedWeeks] = useState<string[]>(["2026-01-18"])
   const [selectedClinics, setSelectedClinics] = useState<string[]>([])
   const [selectedClients, setSelectedClients] = useState<string[]>([])
 

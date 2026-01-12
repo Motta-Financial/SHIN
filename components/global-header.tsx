@@ -4,15 +4,45 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Building2, GraduationCap, Briefcase } from "lucide-react"
+import { Building2, GraduationCap, Briefcase, LogOut, User, LogIn, CalendarDays } from "lucide-react"
 import { AdvancedSearch } from "@/components/advanced-search"
+import { useUserRole, getAllowedPortals } from "@/hooks/use-user-role"
+import { useDemoMode } from "@/contexts/demo-mode-context"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { createBrowserClient } from "@supabase/ssr"
+import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
 
 export function GlobalHeader() {
   const pathname = usePathname()
+  const router = useRouter()
+  const { role, email, fullName, isLoading, isAuthenticated } = useUserRole()
+  const { isDemoMode, isReady: isDemoReady } = useDemoMode()
+  const [currentDate, setCurrentDate] = useState<string>("")
+
+  useEffect(() => {
+    const now = new Date()
+    const formatted = now.toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
+    setCurrentDate(formatted)
+  }, [])
 
   const isDirectorRoute =
-    pathname === "/" ||
     pathname === "/director" ||
+    pathname === "/" ||
     pathname.startsWith("/client-engagements") ||
     pathname.startsWith("/student-progress") ||
     pathname.startsWith("/documents") ||
@@ -21,7 +51,9 @@ export function GlobalHeader() {
     pathname.startsWith("/archived") ||
     pathname.startsWith("/class-course") ||
     pathname.startsWith("/my-clinic") ||
-    pathname.startsWith("/admin")
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/debriefs") ||
+    pathname.startsWith("/settings")
 
   const isClientRoute = pathname.startsWith("/client-portal")
   const isStudentRoute =
@@ -30,11 +62,34 @@ export function GlobalHeader() {
     pathname.startsWith("/student-class-course") ||
     pathname.startsWith("/student-hours")
 
-  const portalTabs = [
-    { name: "Director", href: "/", icon: Building2 },
-    { name: "Student", href: "/students", icon: GraduationCap },
-    { name: "Client", href: "/client-portal", icon: Briefcase },
+  const allPortalTabs = [
+    { name: "Director", href: "/director", icon: Building2, portal: "director" as const },
+    { name: "Student", href: "/students", icon: GraduationCap, portal: "student" as const },
+    { name: "Client", href: "/client-portal", icon: Briefcase, portal: "client" as const },
   ]
+
+  // This ensures portals are visible during auth check and for privileged users
+  const showAllPortals = isDemoMode || isLoading || role === "admin" || role === "director"
+  const allowedPortals = showAllPortals ? ["director", "student", "client"] : getAllowedPortals(role)
+  const portalTabs = allPortalTabs.filter((tab) => allowedPortals.includes(tab.portal))
+
+  const handleSignOut = async () => {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    )
+    await supabase.auth.signOut()
+    router.push("/login")
+  }
+
+  const initials = fullName
+    ? fullName
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
+    : email?.[0]?.toUpperCase() || "U"
 
   return (
     <header className="fixed top-0 left-0 right-0 h-14 bg-background border-b z-50 flex items-center px-4">
@@ -44,7 +99,7 @@ export function GlobalHeader() {
         <span className="font-semibold text-lg hidden sm:inline">SHIN</span>
       </Link>
 
-      {/* Portal Toggle */}
+      {/* Portal Tabs */}
       <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
         {portalTabs.map((tab) => {
           const isActive =
@@ -73,9 +128,58 @@ export function GlobalHeader() {
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Search */}
-      <div className="flex items-center">
+      <div className="flex items-center gap-4">
+        {currentDate && (
+          <div className="hidden lg:flex items-center gap-2 text-sm text-muted-foreground">
+            <CalendarDays className="h-4 w-4" />
+            <span>{currentDate}</span>
+          </div>
+        )}
+
         <AdvancedSearch />
+
+        {!isAuthenticated && !isLoading && !isDemoMode && (
+          <Button asChild variant="outline" size="sm">
+            <Link href="/login">
+              <LogIn className="mr-2 h-4 w-4" />
+              Sign In
+            </Link>
+          </Button>
+        )}
+
+        {/* User Menu - show when authenticated */}
+        {isAuthenticated && !isLoading && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-primary/10 text-primary text-xs">{initials}</AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56" align="end" forceMount>
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none">{fullName || "User"}</p>
+                  <p className="text-xs leading-none text-muted-foreground">{email}</p>
+                  <p className="text-xs leading-none text-muted-foreground capitalize">Role: {role || "Unknown"}</p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/settings/account" className="cursor-pointer">
+                  <User className="mr-2 h-4 w-4" />
+                  Account Settings
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-red-600">
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign Out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     </header>
   )

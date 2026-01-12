@@ -15,12 +15,24 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const semesterId = searchParams.get("semester_id")
   const weekNumber = searchParams.get("week_number")
+  const includeAll = searchParams.get("includeAll") === "true"
 
   try {
+    let activeSemesterId = semesterId
+
+    if (!activeSemesterId && !includeAll) {
+      const { data: activeSemester } = await supabase
+        .from("semester_config")
+        .select("id")
+        .eq("is_active", true)
+        .maybeSingle()
+      activeSemesterId = activeSemester?.id || null
+    }
+
     let query = supabase.from("class_recordings").select("*").order("week_number", { ascending: false })
 
-    if (semesterId) {
-      query = query.eq("semester_id", semesterId)
+    if (activeSemesterId) {
+      query = query.eq("semester_id", activeSemesterId)
     }
 
     if (weekNumber) {

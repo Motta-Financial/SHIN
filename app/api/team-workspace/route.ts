@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
+const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient()
@@ -9,7 +11,10 @@ export async function GET(req: NextRequest) {
     const studentId = searchParams.get("studentId")
     const includeDebriefs = searchParams.get("includeDebriefs") === "true"
 
-    const { data: allTeamData, error: viewError } = await supabase.from("v_complete_mapping").select("*")
+    const { data: allTeamData, error: viewError } = await supabase
+      .from("v_complete_mapping")
+      .select("*")
+      .eq("semester_id", SPRING_2026_SEMESTER_ID)
 
     if (viewError) {
       console.error("[v0] Error fetching from v_complete_mapping:", viewError)
@@ -33,6 +38,7 @@ export async function GET(req: NextRequest) {
         clientName: "",
         notes: [],
         debriefs: [],
+        deliverables: [],
         totalHours: 0,
       })
     }
@@ -42,11 +48,14 @@ export async function GET(req: NextRequest) {
     const clientId = studentData.client_id
     const clientName = studentData.client_name || ""
 
-    // Get client details
-    const { data: clientData } = await supabase.from("clients").select("*").eq("id", clientId).maybeSingle()
+    let clientData = null
+    if (clientId) {
+      const { data } = await supabase.from("clients").select("*").eq("id", clientId).maybeSingle()
+      clientData = data
+    }
 
     // Get ALL team members for this client from the view data (already fetched)
-    const teamRecords = (allTeamData || []).filter((r: any) => r.client_id === clientId)
+    const teamRecords = clientId ? (allTeamData || []).filter((r: any) => r.client_id === clientId) : [studentData] // If no client, just include the student themselves
 
     // Build unique team members list (dedupe by student_id)
     const teamMemberMap = new Map<string, any>()
@@ -76,6 +85,7 @@ export async function GET(req: NextRequest) {
         .from("debriefs")
         .select("*")
         .in("student_id", teamStudentIds)
+        .eq("client_name", clientName)
         .order("created_at", { ascending: false })
 
       if (teamDebriefs) {
@@ -116,6 +126,52 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    let deliverables: any[] = []
+    if (clientId) {
+      console.log("[v0] Fetching deliverables for clientId:", clientId)
+
+      const { data: clientDeliverables, error: deliverableError } = await supabase
+        .from("documents")
+        .select(`
+          *,
+          document_reviews (
+            id,
+            grade,
+            comment,
+            director_name,
+            created_at
+          )
+        `)
+        .eq("client_id", clientId)
+        .order("uploaded_at", { ascending: false })
+
+      if (deliverableError) {
+        console.error("[v0] Error fetching deliverables:", deliverableError)
+      } else if (clientDeliverables) {
+        console.log("[v0] Found deliverables count:", clientDeliverables.length)
+        deliverables = clientDeliverables.map((d) => ({
+          id: d.id,
+          fileName: d.file_name,
+          fileUrl: d.file_url,
+          fileType: d.file_type,
+          fileSize: d.file_size,
+          submissionType: d.submission_type,
+          studentName: d.student_name,
+          studentId: d.student_id,
+          clientName: d.client_name,
+          uploadedAt: d.uploaded_at,
+          uploadedBy: d.student_name,
+          status: d.document_reviews?.length > 0 ? (d.document_reviews[0].grade ? "graded" : "reviewed") : "submitted",
+          grade: d.document_reviews?.[0]?.grade || null,
+          comment: d.document_reviews?.[0]?.comment || null,
+          reviewedBy: d.document_reviews?.[0]?.director_name || null,
+          reviewedAt: d.document_reviews?.[0]?.created_at || null,
+        }))
+      }
+    } else {
+      console.log("[v0] No clientId found, skipping deliverables fetch")
+    }
+
     return NextResponse.json({
       success: true,
       teamMembers,
@@ -132,6 +188,7 @@ export async function GET(req: NextRequest) {
       clientDirectorName: studentData.client_director_name,
       notes: [],
       debriefs,
+      deliverables, // Include deliverables in response
       totalHours,
       sowProgress: buildSowProgress(debriefs.length, totalHours),
     })
@@ -150,7 +207,7 @@ function buildSowProgress(debriefCount: number, totalHours: number) {
       { name: "Initial Research & Analysis", completed: totalHours >= 10 },
       { name: "Strategy Development", completed: totalHours >= 30 },
       { name: "Implementation", completed: totalHours >= 60 },
-      { name: "Final Deliverable", completed: totalHours >= 90, dueDate: "2025-12-15" },
+      { name: "Final Deliverable", completed: totalHours >= 90, dueDate: "2026-04-20" },
     ],
   }
 }

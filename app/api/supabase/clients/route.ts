@@ -1,12 +1,26 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = createServiceClient()
+    const { searchParams } = new URL(request.url)
+    const semesterId = searchParams.get("semesterId")
+    const includeAll = searchParams.get("includeAll") === "true"
+
+    // Get active semester if not specified and not including all
+    let activeSemesterId = semesterId
+    if (!activeSemesterId && !includeAll) {
+      const { data: activeSemester } = await supabase
+        .from("semester_config")
+        .select("id")
+        .eq("is_active", true)
+        .maybeSingle()
+      activeSemesterId = activeSemester?.id || null
+    }
 
     // Clinic info comes through clinic_clients junction table
-    const { data: clients, error } = await supabase
+    let query = supabase
       .from("clients")
       .select(`
         *,
@@ -14,6 +28,13 @@ export async function GET() {
         clinic_clients(clinic_id, clinics(id, name))
       `)
       .order("name", { ascending: true })
+
+    // Filter by active semester (Spring 2026) by default
+    if (activeSemesterId) {
+      query = query.eq("semester_id", activeSemesterId)
+    }
+
+    const { data: clients, error } = await query
 
     if (error) {
       console.log("[v0] Supabase clients error:", error.message)

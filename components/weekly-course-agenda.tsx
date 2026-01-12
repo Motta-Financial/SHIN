@@ -81,7 +81,7 @@ const assignmentTypeColors: Record<string, string> = {
   other: "bg-gray-100 text-gray-800",
 }
 
-export function WeeklyCourseAgenda({ semester = "Fall 2025" }: WeeklyCourseAgendaProps) {
+export function WeeklyCourseAgenda({ semester = "Spring 2026" }: WeeklyCourseAgendaProps) {
   const [schedules, setSchedules] = useState<WeekSchedule[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedWeek, setSelectedWeek] = useState<number>(1)

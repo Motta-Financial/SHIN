@@ -3,6 +3,8 @@
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Clock, Calendar } from "lucide-react"
+import { DemoStudentSelector } from "./demo-student-selector"
+import { useDemoMode } from "@/contexts/demo-mode-context"
 
 interface StudentPortalHeaderProps {
   loading?: boolean
@@ -17,6 +19,7 @@ interface StudentPortalHeaderProps {
   } | null
   totalHours: number
   totalAttendance: number
+  onStudentChange?: (studentId: string) => void
 }
 
 export function StudentPortalHeader({
@@ -24,7 +27,10 @@ export function StudentPortalHeader({
   currentStudent,
   totalHours,
   totalAttendance,
+  onStudentChange,
 }: StudentPortalHeaderProps) {
+  const { isDemoMode } = useDemoMode()
+
   if (loading) {
     return (
       <div className="bg-gradient-to-r from-slate-50 to-white border-b border-slate-200 py-4 px-6 mb-6">
@@ -73,8 +79,10 @@ export function StudentPortalHeader({
           </div>
         </div>
 
-        {/* Quick Stats */}
+        {/* Demo Selector + Quick Stats */}
         <div className="flex flex-wrap items-center gap-4">
+          {isDemoMode && <DemoStudentSelector onStudentChange={onStudentChange} />}
+
           <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-lg">
             <Clock className="h-4 w-4 text-blue-600" />
             <span className="text-sm font-medium text-blue-700">{totalHours.toFixed(1)} hrs</span>

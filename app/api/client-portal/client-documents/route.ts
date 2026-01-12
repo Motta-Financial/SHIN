@@ -1,19 +1,35 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { getCachedData, setCachedData } from "@/lib/api-cache"
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const email = searchParams.get("email")
 
-    if (!email) {
-      return NextResponse.json({ error: "Email required" }, { status: 400 })
+    if (!email || email === "null" || email === "undefined") {
+      return NextResponse.json({ documents: [] })
+    }
+
+    const cacheKey = `client-documents:${email}`
+    const cachedData = getCachedData(cacheKey)
+    if (cachedData) {
+      console.log("[v0] Client Documents API - Returning cached response")
+      return NextResponse.json(cachedData)
     }
 
     const supabase = await createClient()
 
-    // Get client ID from email
-    const { data: client } = await supabase.from("clients").select("id").eq("email", email).single()
+    const { data: client, error: clientError } = await supabase
+      .from("clients")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle()
+
+    if (clientError) {
+      console.error("Error fetching client:", clientError)
+      return NextResponse.json({ documents: [] })
+    }
 
     if (!client) {
       return NextResponse.json({ documents: [] })
@@ -31,7 +47,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ documents: documents || [] })
+    const response = { documents: documents || [] }
+    setCachedData(cacheKey, response)
+    console.log("[v0] Client Documents API - Fetched and cached documents count:", documents?.length || 0)
+
+    return NextResponse.json(response)
   } catch (error) {
     console.error("Error in client-documents API:", error)
     return NextResponse.json({ error: "Failed to fetch documents" }, { status: 500 })

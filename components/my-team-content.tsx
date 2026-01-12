@@ -27,80 +27,49 @@ import {
   FileSpreadsheet,
   Presentation,
   X,
+  Eye,
+  Check,
+  Pencil,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  HelpCircle,
+  FileUp,
 } from "lucide-react"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { createBrowserClient } from "@supabase/ssr"
+import { useDemoStudent, STORAGE_KEY } from "./demo-student-selector"
+import type { ClientEngagement, Deliverable, TeamNote } from "@/types"
 
-const DEFAULT_STUDENT_ID = "3f19f7d2-33c4-4637-935e-1aa032012c58" // Collin Merwin
-
-interface TeamMember {
-  id: string
-  full_name: string
-  email: string
-  role?: string
-  clinic?: string
-  totalHours?: number
-  debriefCount?: number
+function getSupabaseClient() {
+  return createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 }
 
-interface TeamDebrief {
-  id: string
-  studentName: string
-  studentEmail: string
-  hoursWorked: number
-  workSummary: string
-  questions?: string
-  weekEnding: string
-  createdAt: string
-}
-
-interface Deliverable {
-  id: string
-  fileName: string
-  fileUrl: string
-  fileType: string
-  fileSize?: number
-  submissionType: string
-  uploadedAt: string
-  uploadedBy: string
-  status?: string
-}
-
-interface ClientEngagement {
-  clientId: string
-  clientName: string
-  clientEmail?: string
-  projectType?: string
-  status?: string
-  teamMembers: TeamMember[]
-  totalHours: number
-  debriefs: TeamDebrief[]
-  deliverables?: Deliverable[]
-  sowProgress?: {
-    phase: string
-    percentComplete: number
-    milestones: { name: string; completed: boolean; dueDate?: string }[]
+function getDeliverableTypeLabel(type: string | undefined): string {
+  const labels: Record<string, string> = {
+    sow: "SOW",
+    final: "Final Presentation",
+    progress: "Progress Report",
+    other: "Other Document",
   }
+  return labels[type || "other"] || type || "Document"
 }
 
 export function MyTeamContent() {
   const searchParams = useSearchParams()
   const studentIdFromUrl = searchParams.get("studentId")
 
+  const demoStudentId = useDemoStudent()
+
   const [loading, setLoading] = useState(true)
-  const [currentStudentId, setCurrentStudentId] = useState<string>(DEFAULT_STUDENT_ID)
+  const [currentStudentId, setCurrentStudentId] = useState<string>("") // Initialize with empty string
   const [currentStudentName, setCurrentStudentName] = useState<string>("Loading...")
   const [engagement, setEngagement] = useState<ClientEngagement | null>(null)
   const [newNote, setNewNote] = useState("")
   const [noteCategory, setNoteCategory] = useState("general")
-  const [teamNotes, setTeamNotes] = useState<any[]>([])
+  const [teamNotes, setTeamNotes] = useState<TeamNote[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
@@ -111,19 +80,52 @@ export function MyTeamContent() {
   const [selectedDeliverableType, setSelectedDeliverableType] = useState<string>("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
-  // Resolve the student ID from localStorage or URL params
-  useEffect(() => {
-    // Prefer localStorage (set when user selects a student on dashboard)
-    const storedId = typeof window !== "undefined" ? localStorage.getItem("selectedStudentId") : null
-    const resolvedId = storedId || studentIdFromUrl || DEFAULT_STUDENT_ID
+  const [editingDocId, setEditingDocId] = useState<string | null>(null)
+  const [editingDeliverable, setEditingDeliverable] = useState<string | null>(null)
+  const [editFileName, setEditFileName] = useState("")
+  const [editSubmissionType, setEditSubmissionType] = useState("")
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [expandedTimelineItems, setExpandedTimelineItems] = useState<Set<string>>(new Set())
+  const [savingEdit, setSavingEdit] = useState(false) // Declare savingEdit state
 
-    setCurrentStudentId(resolvedId)
-    loadTeamData(resolvedId)
-  }, [studentIdFromUrl])
+  useEffect(() => {
+    const handleDemoChange = (e: CustomEvent<{ studentId: string }>) => {
+      console.log("[v0] MyTeamContent received demoStudentChanged:", e.detail.studentId)
+      setCurrentStudentId(e.detail.studentId)
+      loadTeamData(e.detail.studentId)
+    }
+
+    window.addEventListener("demoStudentChanged", handleDemoChange as EventListener)
+    return () => {
+      window.removeEventListener("demoStudentChanged", handleDemoChange as EventListener)
+    }
+  }, [])
+
+  useEffect(() => {
+    const storedId = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null
+    const resolvedId = studentIdFromUrl || storedId || demoStudentId
+
+    console.log(
+      "[v0] Student ID resolution - URL:",
+      studentIdFromUrl,
+      "localStorage:",
+      storedId,
+      "demoHook:",
+      demoStudentId,
+      "resolved:",
+      resolvedId,
+    )
+
+    if (resolvedId !== currentStudentId) {
+      setCurrentStudentId(resolvedId)
+      loadTeamData(resolvedId)
+    }
+  }, [studentIdFromUrl, demoStudentId, currentStudentId]) // Added currentStudentId to dependency array
 
   const loadTeamData = async (studentId: string) => {
     try {
       setLoading(true)
+      console.log("[v0] loadTeamData called with studentId:", studentId)
 
       // Fetch from v-complete-mapping to get student info
       const mappingRes = await fetch(`/api/supabase/v-complete-mapping?studentId=${studentId}`)
@@ -136,6 +138,22 @@ export function MyTeamContent() {
         // Fetch team workspace data
         const response = await fetch(`/api/team-workspace?studentId=${studentId}&includeDebriefs=true`)
         const data = await response.json()
+
+        console.log("[v0] Team workspace response - debriefs count:", data.debriefs?.length || 0)
+        console.log(
+          "[v0] Team workspace debriefs:",
+          JSON.stringify(
+            data.debriefs?.slice(0, 3).map((d: any) => ({
+              id: d.id,
+              studentName: d.studentName,
+              workSummary: d.workSummary?.substring(0, 50),
+              clientName: d.clientName,
+            })),
+            null,
+            2,
+          ),
+        )
+        console.log("[v0] Team workspace response - deliverables count:", data.deliverables?.length || 0)
 
         if (data.success) {
           setEngagement({
@@ -152,12 +170,21 @@ export function MyTeamContent() {
           })
           setTeamNotes(data.notes || [])
           setDeliverables(data.deliverables || [])
+          console.log("[v0] Deliverables state set to:", data.deliverables?.length || 0, "items")
         }
       } else {
         setCurrentStudentName("Unknown Student")
+        // Clear engagement data if student is not found
+        setEngagement(null)
+        setTeamNotes([])
+        setDeliverables([])
       }
     } catch (error) {
       console.error("[v0] Error loading team data:", error)
+      // Reset engagement data in case of error
+      setEngagement(null)
+      setTeamNotes([])
+      setDeliverables([])
     } finally {
       setLoading(false)
     }
@@ -182,9 +209,13 @@ export function MyTeamContent() {
         setNoteCategory("general")
         setIsDialogOpen(false)
         await loadTeamData(currentStudentId)
+      } else {
+        const errorData = await response.json()
+        alert(`Failed to add note: ${errorData.error || response.statusText}`)
       }
     } catch (error) {
       console.error("[v0] Error adding note:", error)
+      alert("An unexpected error occurred while adding your note.")
     } finally {
       setSubmitting(false)
     }
@@ -200,60 +231,141 @@ export function MyTeamContent() {
     setUploadProgress(0)
 
     try {
-      const formData = new FormData()
-      formData.append("file", selectedFile)
-      formData.append("studentId", currentStudentId)
-      formData.append("studentName", currentStudentName)
-      formData.append("clientId", engagement.clientId)
-      formData.append("clientName", engagement.clientName)
-      formData.append("submissionType", selectedDeliverableType)
+      const supabase = getSupabaseClient()
 
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => Math.min(prev + 10, 90))
-      }, 200)
+      // Create file path
+      const timestamp = Date.now()
+      const sanitizedFileName = selectedFile.name.replace(/[^a-zA-Z0-9.-]/g, "_")
+      const filePath = `deliverables/${engagement.clientId}/${selectedDeliverableType}/${timestamp}_${sanitizedFileName}`
 
-      const response = await fetch("/api/upload-deliverable", {
+      console.log("[v0] Starting direct Supabase upload:", filePath, "Size:", selectedFile.size)
+
+      // Upload directly to Supabase Storage from client
+      // This bypasses the Next.js API route body size limit
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("SHIN")
+        .upload(filePath, selectedFile, {
+          cacheControl: "3600",
+          upsert: true,
+          // Track progress (works with large files)
+        })
+
+      if (uploadError) {
+        console.error("[v0] Direct upload error:", uploadError)
+        throw new Error(uploadError.message)
+      }
+
+      console.log("[v0] Upload successful:", uploadData?.path)
+      setUploadProgress(50) // File uploaded, now saving record
+
+      // Get public URL
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("SHIN").getPublicUrl(filePath)
+
+      console.log("[v0] Public URL:", publicUrl)
+
+      // Save document record via API (small JSON payload, no file)
+      const response = await fetch("/api/upload-deliverable/save-record", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: selectedFile.name,
+          fileUrl: publicUrl,
+          fileType: selectedFile.type,
+          fileSize: selectedFile.size,
+          filePath: filePath,
+          studentId: currentStudentId,
+          studentName: currentStudentName,
+          clientId: engagement.clientId,
+          clientName: engagement.clientName,
+          submissionType: selectedDeliverableType,
+        }),
       })
-
-      clearInterval(progressInterval)
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || "Upload failed")
+        throw new Error(errorData.error || "Failed to save document record")
       }
 
-      const result = await response.json()
       setUploadProgress(100)
+      console.log("[v0] Document record saved")
 
-      // Add to local state
-      setDeliverables((prev) => [
-        {
-          id: result.documentId || Date.now().toString(),
-          fileName: selectedFile.name,
-          fileUrl: result.url,
-          fileType: selectedFile.type,
-          fileSize: selectedFile.size,
-          submissionType: selectedDeliverableType,
-          uploadedAt: new Date().toISOString(),
-          uploadedBy: currentStudentName,
-          status: "submitted",
-        },
-        ...prev,
-      ])
-
-      // Reset form
+      // Success - refresh deliverables list
+      await loadTeamData(currentStudentId)
       setSelectedFile(null)
       setSelectedDeliverableType("")
       alert("Deliverable uploaded successfully!")
-    } catch (error: any) {
+    } catch (error) {
       console.error("[v0] Upload error:", error)
-      alert(`Upload failed: ${error.message}`)
+      alert(`Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`)
     } finally {
       setUploadingDeliverable(false)
       setUploadProgress(0)
+    }
+  }
+
+  const handleStartEdit = (deliverable: Deliverable) => {
+    setEditingDocId(deliverable.id)
+    setEditFileName(deliverable.fileName)
+    setEditSubmissionType(deliverable.submissionType || "other")
+  }
+
+  const handleCancelEdit = () => {
+    setEditingDocId(null)
+    setEditFileName("")
+    setEditSubmissionType("")
+  }
+
+  const handleSaveEdit = async (docId: string) => {
+    try {
+      setSavingEdit(true) // Use the declared state
+      const response = await fetch(`/api/documents/${docId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: editFileName,
+          submissionType: editSubmissionType,
+        }),
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        // Update local state
+        setDeliverables((prev) =>
+          prev.map((d) => (d.id === docId ? { ...d, fileName: editFileName, submissionType: editSubmissionType } : d)),
+        )
+        setEditingDocId(null)
+        alert("Document updated successfully!")
+      } else {
+        alert("Failed to update document: " + result.error)
+      }
+    } catch (error) {
+      console.error("[v0] Error updating document:", error)
+      alert("Failed to update document")
+    } finally {
+      setSavingEdit(false) // Use the declared state
+    }
+  }
+
+  const handleDeleteDocument = async (docId: string, fileName: string) => {
+    if (!confirm(`Are you sure you want to delete "${fileName}"?`)) return
+
+    try {
+      const response = await fetch(`/api/documents/${docId}`, {
+        method: "DELETE",
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        setDeliverables((prev) => prev.filter((d) => d.id !== docId))
+        alert("Document deleted successfully!")
+      } else {
+        alert("Failed to delete document: " + result.error)
+      }
+    } catch (error) {
+      console.error("[v0] Error deleting document:", error)
+      alert("Failed to delete document")
     }
   }
 
@@ -286,6 +398,70 @@ export function MyTeamContent() {
     return <File className="h-8 w-8 text-[#5f7082]" />
   }
 
+  const toggleTimelineExpand = (id: string) => {
+    setExpandedTimelineItems((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(id)) {
+        newSet.delete(id)
+      } else {
+        newSet.add(id)
+      }
+      return newSet
+    })
+  }
+
+  const buildCombinedTimeline = () => {
+    const items: Array<{
+      id: string
+      type: "debrief" | "deliverable" | "question"
+      date: string
+      studentName: string
+      data: any
+    }> = []
+
+    // Add debriefs
+    if (engagement?.debriefs) {
+      for (const debrief of engagement.debriefs) {
+        items.push({
+          id: `debrief-${debrief.id}`,
+          type: "debrief",
+          date: debrief.weekEnding || debrief.createdAt,
+          studentName: debrief.studentName || "Unknown",
+          data: debrief,
+        })
+
+        // If debrief has a question, add it as a separate item
+        if (debrief.questions) {
+          items.push({
+            id: `question-${debrief.id}`,
+            type: "question",
+            date: debrief.weekEnding || debrief.createdAt,
+            studentName: debrief.studentName || "Unknown",
+            data: debrief,
+          })
+        }
+      }
+    }
+
+    // Add deliverables
+    if (deliverables) {
+      for (const deliverable of deliverables) {
+        items.push({
+          id: `deliverable-${deliverable.id}`,
+          type: "deliverable",
+          date: deliverable.uploadedAt,
+          studentName: deliverable.studentName || deliverable.uploadedBy || "Unknown",
+          data: deliverable,
+        })
+      }
+    }
+
+    // Sort by date descending
+    items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+    return items
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#f5f7f9] to-[#e8eef3]">
@@ -314,47 +490,10 @@ export function MyTeamContent() {
               <h1 className="text-2xl font-bold text-[#2d3a4f]">My Team</h1>
               <p className="text-[#5f7082]">Viewing as {currentStudentName}</p>
             </div>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-[#2d3a4f] hover:bg-[#3d4a5f] text-white">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Note
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add Team Note</DialogTitle>
-                  <DialogDescription>Share updates or questions with your team</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 mt-4">
-                  <Select value={noteCategory} onValueChange={setNoteCategory}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="general">General</SelectItem>
-                      <SelectItem value="question">Question</SelectItem>
-                      <SelectItem value="update">Update</SelectItem>
-                      <SelectItem value="blocker">Blocker</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Textarea
-                    placeholder="Write your note..."
-                    value={newNote}
-                    onChange={(e) => setNewNote(e.target.value)}
-                    rows={4}
-                  />
-                  <Button
-                    onClick={handleAddNote}
-                    disabled={submitting || !newNote.trim()}
-                    className="w-full bg-[#2d3a4f] hover:bg-[#3d4a5f]"
-                  >
-                    <Send className="h-4 w-4 mr-2" />
-                    {submitting ? "Adding..." : "Add Note"}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+            <Button className="bg-[#2d3a4f] hover:bg-[#3d4a5f] text-white" onClick={() => setIsDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Note
+            </Button>
           </div>
 
           {/* Client Engagement Overview Card */}
@@ -509,55 +648,284 @@ export function MyTeamContent() {
               <Card className="border-none shadow-lg">
                 <CardHeader className="border-b border-[#9aacb8]/20 bg-[#f5f7f9]">
                   <CardTitle className="text-[#2d3a4f]">Activity Timeline</CardTitle>
-                  <CardDescription className="text-[#5f7082]">Recent debriefs from all team members</CardDescription>
+                  <CardDescription className="text-[#5f7082]">
+                    Debriefs, questions, and deliverable submissions from all team members
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="p-6">
-                  {engagement?.debriefs && engagement.debriefs.length > 0 ? (
-                    <div className="space-y-4">
-                      {engagement.debriefs.slice(0, 10).map((debrief, index) => (
-                        <div key={debrief.id || index} className="flex gap-4">
-                          <div className="flex flex-col items-center">
-                            <Avatar className="h-10 w-10 border-2 border-[#8fa889]">
-                              <AvatarFallback className="bg-[#2d3a4f] text-white text-xs">
-                                {getInitials(debrief.studentName || "?")}
-                              </AvatarFallback>
-                            </Avatar>
-                            {index < (engagement?.debriefs?.length || 0) - 1 && (
-                              <div className="w-0.5 h-full bg-[#9aacb8]/30 mt-2" />
-                            )}
-                          </div>
-                          <div className="flex-1 pb-4">
-                            <div className="bg-white rounded-lg p-4 border border-[#9aacb8]/30 shadow-sm">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-medium text-[#2d3a4f]">{debrief.studentName}</span>
-                                <div className="flex items-center gap-2">
-                                  <Badge className="bg-[#8fa889]/20 text-[#565f4b] border-none">
-                                    {debrief.hoursWorked}h
-                                  </Badge>
-                                  <span className="text-xs text-[#5f7082]">
-                                    {new Date(debrief.weekEnding || debrief.createdAt).toLocaleDateString()}
-                                  </span>
+                  {(() => {
+                    const timelineItems = buildCombinedTimeline()
+
+                    if (timelineItems.length === 0) {
+                      return (
+                        <div className="text-center py-12">
+                          <FileText className="h-12 w-12 text-[#9aacb8] mx-auto mb-4" />
+                          <p className="text-[#5f7082]">No activity found for this team</p>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div className="space-y-4">
+                        {timelineItems.slice(0, 20).map((item, index) => {
+                          const isExpanded = expandedTimelineItems.has(item.id)
+
+                          return (
+                            <div key={item.id} className="flex gap-4">
+                              <div className="flex flex-col items-center">
+                                <div
+                                  className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
+                                    item.type === "debrief"
+                                      ? "bg-[#2d3a4f] border-[#8fa889]"
+                                      : item.type === "question"
+                                        ? "bg-[#f59e0b] border-[#fbbf24]"
+                                        : "bg-[#565f4b] border-[#8fa889]"
+                                  }`}
+                                >
+                                  {item.type === "debrief" && <FileText className="h-5 w-5 text-white" />}
+                                  {item.type === "question" && <HelpCircle className="h-5 w-5 text-white" />}
+                                  {item.type === "deliverable" && <FileUp className="h-5 w-5 text-white" />}
+                                </div>
+                                {index < timelineItems.length - 1 && (
+                                  <div className="w-0.5 h-full bg-[#9aacb8]/30 mt-2" />
+                                )}
+                              </div>
+                              <div className="flex-1 pb-4">
+                                <div
+                                  className={`bg-white rounded-lg border shadow-sm overflow-hidden transition-all ${
+                                    item.type === "question"
+                                      ? "border-[#f59e0b]/50"
+                                      : item.type === "deliverable"
+                                        ? "border-[#565f4b]/50"
+                                        : "border-[#9aacb8]/30"
+                                  }`}
+                                >
+                                  {/* Clickable Header */}
+                                  <button
+                                    onClick={() => toggleTimelineExpand(item.id)}
+                                    className="w-full p-4 text-left hover:bg-[#f5f7f9]/50 transition-colors"
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-3">
+                                        <Avatar className="h-8 w-8 border border-[#9aacb8]/30">
+                                          <AvatarFallback className="bg-[#2d3a4f] text-white text-xs">
+                                            {getInitials(item.studentName)}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <div>
+                                          <span className="font-medium text-[#2d3a4f]">{item.studentName}</span>
+                                          <Badge
+                                            className={`ml-2 text-xs ${
+                                              item.type === "debrief"
+                                                ? "bg-[#8fa889]/20 text-[#565f4b]"
+                                                : item.type === "question"
+                                                  ? "bg-[#f59e0b]/20 text-[#d97706]"
+                                                  : "bg-[#565f4b]/20 text-[#565f4b]"
+                                            }`}
+                                          >
+                                            {item.type === "debrief" && "Debrief"}
+                                            {item.type === "question" && "Question"}
+                                            {item.type === "deliverable" &&
+                                              getDeliverableTypeLabel(item.data.submissionType)}
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        {item.type === "debrief" && (
+                                          <Badge className="bg-[#8fa889]/20 text-[#565f4b] border-none">
+                                            {item.data.hoursWorked}h
+                                          </Badge>
+                                        )}
+                                        <span className="text-xs text-[#5f7082]">
+                                          {new Date(item.date).toLocaleDateString()}
+                                        </span>
+                                        {isExpanded ? (
+                                          <ChevronUp className="h-4 w-4 text-[#5f7082]" />
+                                        ) : (
+                                          <ChevronDown className="h-4 w-4 text-[#5f7082]" />
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Preview when collapsed */}
+                                    {!isExpanded && (
+                                      <p className="text-sm text-[#5f7082] mt-2 line-clamp-2">
+                                        {item.type === "debrief" && (item.data.workSummary || "No summary provided")}
+                                        {item.type === "question" && item.data.questions}
+                                        {item.type === "deliverable" && `Uploaded: ${item.data.fileName}`}
+                                      </p>
+                                    )}
+                                  </button>
+
+                                  {/* Expanded Content */}
+                                  {isExpanded && (
+                                    <div className="px-4 pb-4 border-t border-[#9aacb8]/20">
+                                      {item.type === "debrief" && (
+                                        <div className="space-y-4 pt-4">
+                                          <div>
+                                            <h4 className="text-sm font-semibold text-[#2d3a4f] mb-2">Work Summary</h4>
+                                            <p className="text-sm text-[#5f7082] whitespace-pre-wrap">
+                                              {item.data.workSummary || "No summary provided"}
+                                            </p>
+                                          </div>
+                                          <div className="grid grid-cols-2 gap-4 text-sm">
+                                            <div>
+                                              <span className="text-[#5f7082]">Hours Worked:</span>
+                                              <span className="ml-2 font-medium text-[#2d3a4f]">
+                                                {item.data.hoursWorked}h
+                                              </span>
+                                            </div>
+                                            <div>
+                                              <span className="text-[#5f7082]">Week Ending:</span>
+                                              <span className="ml-2 font-medium text-[#2d3a4f]">
+                                                {item.data.weekEnding
+                                                  ? new Date(item.data.weekEnding).toLocaleDateString()
+                                                  : "N/A"}
+                                              </span>
+                                            </div>
+                                            {item.data.weekNumber && (
+                                              <div>
+                                                <span className="text-[#5f7082]">Week Number:</span>
+                                                <span className="ml-2 font-medium text-[#2d3a4f]">
+                                                  {item.data.weekNumber}
+                                                </span>
+                                              </div>
+                                            )}
+                                            {item.data.clinic && (
+                                              <div>
+                                                <span className="text-[#5f7082]">Clinic:</span>
+                                                <span className="ml-2 font-medium text-[#2d3a4f]">
+                                                  {item.data.clinic}
+                                                </span>
+                                              </div>
+                                            )}
+                                          </div>
+                                          {item.data.questions && (
+                                            <div className="p-3 bg-[#f59e0b]/10 rounded-lg border-l-4 border-[#f59e0b]">
+                                              <div className="flex items-center gap-2 mb-2">
+                                                <HelpCircle className="h-4 w-4 text-[#d97706]" />
+                                                <span className="text-sm font-semibold text-[#d97706]">
+                                                  Question for Director
+                                                  {item.data.questionType && ` (${item.data.questionType})`}
+                                                </span>
+                                              </div>
+                                              <p className="text-sm text-[#5f7082]">{item.data.questions}</p>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {item.type === "question" && (
+                                        <div className="space-y-3 pt-4">
+                                          <div className="p-3 bg-[#f59e0b]/10 rounded-lg">
+                                            <div className="flex items-center gap-2 mb-2">
+                                              <HelpCircle className="h-4 w-4 text-[#d97706]" />
+                                              <span className="text-sm font-semibold text-[#d97706]">
+                                                {item.data.questionType
+                                                  ? `${item.data.questionType} Question`
+                                                  : "Question for Director"}
+                                              </span>
+                                            </div>
+                                            <p className="text-sm text-[#2d3a4f] whitespace-pre-wrap">
+                                              {item.data.questions}
+                                            </p>
+                                          </div>
+                                          <div className="text-sm text-[#5f7082]">
+                                            <span>From debrief submitted on </span>
+                                            <span className="font-medium">
+                                              {item.data.weekEnding
+                                                ? new Date(item.data.weekEnding).toLocaleDateString()
+                                                : "N/A"}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {item.type === "deliverable" && (
+                                        <div className="space-y-3 pt-4">
+                                          <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-[#565f4b]/10 rounded-lg flex items-center justify-center">
+                                              <FileUp className="h-5 w-5 text-[#565f4b]" />
+                                            </div>
+                                            <div className="flex-1">
+                                              <p className="font-medium text-[#2d3a4f]">{item.data.fileName}</p>
+                                              <p className="text-xs text-[#5f7082]">
+                                                {item.data.fileSize
+                                                  ? `${(item.data.fileSize / 1024 / 1024).toFixed(2)} MB`
+                                                  : "Unknown size"}
+                                                {item.data.fileType && ` • ${item.data.fileType}`}
+                                              </p>
+                                            </div>
+                                            {item.data.fileUrl && (
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="border-[#565f4b] text-[#565f4b] hover:bg-[#565f4b] hover:text-white bg-transparent"
+                                                onClick={(e) => {
+                                                  e.stopPropagation()
+                                                  window.open(item.data.fileUrl, "_blank")
+                                                }}
+                                              >
+                                                View File
+                                              </Button>
+                                            )}
+                                          </div>
+
+                                          {/* Status and Grade */}
+                                          <div className="flex items-center gap-4 text-sm">
+                                            <div>
+                                              <span className="text-[#5f7082]">Status:</span>
+                                              <Badge
+                                                className={`ml-2 ${
+                                                  item.data.status === "graded"
+                                                    ? "bg-green-100 text-green-700"
+                                                    : item.data.status === "reviewed"
+                                                      ? "bg-blue-100 text-blue-700"
+                                                      : "bg-yellow-100 text-yellow-700"
+                                                }`}
+                                              >
+                                                {item.data.status === "graded"
+                                                  ? "Graded"
+                                                  : item.data.status === "reviewed"
+                                                    ? "Reviewed"
+                                                    : "Pending Review"}
+                                              </Badge>
+                                            </div>
+                                            {item.data.grade && (
+                                              <div>
+                                                <span className="text-[#5f7082]">Grade:</span>
+                                                <span className="ml-2 font-semibold text-[#2d3a4f]">
+                                                  {item.data.grade}
+                                                </span>
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* Director Feedback */}
+                                          {item.data.comment && (
+                                            <div className="p-3 bg-[#8fa889]/10 rounded-lg border-l-4 border-[#8fa889]">
+                                              <div className="flex items-center gap-2 mb-2">
+                                                <MessageSquare className="h-4 w-4 text-[#565f4b]" />
+                                                <span className="text-sm font-semibold text-[#565f4b]">
+                                                  Director Feedback
+                                                  {item.data.reviewedBy && ` from ${item.data.reviewedBy}`}
+                                                </span>
+                                              </div>
+                                              <p className="text-sm text-[#5f7082]">{item.data.comment}</p>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
-                              <p className="text-sm text-[#5f7082]">{debrief.workSummary || "No summary provided"}</p>
-                              {debrief.questions && (
-                                <div className="mt-2 p-2 bg-[#f5f7f9] rounded border-l-2 border-[#8fa889]">
-                                  <p className="text-xs text-[#5f7082]">
-                                    <span className="font-medium">Question:</span> {debrief.questions}
-                                  </p>
-                                </div>
-                              )}
                             </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <FileText className="h-12 w-12 text-[#9aacb8] mx-auto mb-4" />
-                      <p className="text-[#5f7082]">No debriefs found for this team</p>
-                    </div>
-                  )}
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -690,51 +1058,146 @@ export function MyTeamContent() {
                     )}
                   </div>
 
-                  {/* Deliverables List */}
                   {deliverables.length > 0 ? (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
+                      <h3 className="text-sm font-semibold text-[#2d3a4f]">
+                        Uploaded Documents ({deliverables.length})
+                      </h3>
                       {deliverables.map((deliverable) => (
                         <div
                           key={deliverable.id}
-                          className="flex items-center gap-4 p-4 rounded-lg border border-[#9aacb8]/30 bg-white hover:shadow-md transition-shadow"
+                          className="p-4 rounded-lg border border-[#9aacb8]/30 bg-white hover:shadow-md transition-shadow"
                         >
-                          {getFileIcon(deliverable.fileType)}
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-[#2d3a4f] truncate">{deliverable.fileName}</p>
-                            <div className="flex items-center gap-2 text-xs text-[#5f7082]">
-                              <Badge className="bg-[#8fa889]/20 text-[#565f4b] border-none">
-                                {deliverable.submissionType.toUpperCase()}
-                              </Badge>
-                              <span>Uploaded by {deliverable.uploadedBy}</span>
-                              <span>•</span>
-                              <span>{new Date(deliverable.uploadedAt).toLocaleDateString()}</span>
-                              {deliverable.fileSize && (
+                          <div className="flex items-start gap-4">
+                            <div className="flex-shrink-0 mt-1">{getFileIcon(deliverable.fileType)}</div>
+                            <div className="flex-1 min-w-0">
+                              {editingDocId === deliverable.id ? (
+                                <div className="space-y-3 mb-2">
+                                  <div>
+                                    <label className="text-xs text-[#5f7082] mb-1 block">File Name</label>
+                                    <Input
+                                      value={editFileName}
+                                      onChange={(e) => setEditFileName(e.target.value)}
+                                      className="h-8 text-sm"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs text-[#5f7082] mb-1 block">Deliverable Type</label>
+                                    <Select value={editSubmissionType} onValueChange={setEditSubmissionType}>
+                                      <SelectTrigger className="h-8 text-sm">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="sow">SOW</SelectItem>
+                                        <SelectItem value="progress">Progress Report</SelectItem>
+                                        <SelectItem value="final">Final Presentation</SelectItem>
+                                        <SelectItem value="other">Other</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleSaveEdit(deliverable.id)}
+                                      disabled={savingEdit}
+                                      className="bg-[#8fa889] hover:bg-[#7a9574]"
+                                    >
+                                      <Check className="h-3 w-3 mr-1" />
+                                      {savingEdit ? "Saving..." : "Save"}
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={handleCancelEdit}>
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
                                 <>
-                                  <span>•</span>
-                                  <span>{formatFileSize(deliverable.fileSize)}</span>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <p className="font-medium text-[#2d3a4f] truncate">{deliverable.fileName}</p>
+                                    <Badge className="bg-[#8fa889]/20 text-[#565f4b] border-none text-xs">
+                                      {getDeliverableTypeLabel(deliverable.submissionType)}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-[#5f7082] mb-2">
+                                    <span>Uploaded by {deliverable.uploadedBy || deliverable.studentName}</span>
+                                    <span>•</span>
+                                    <span>{new Date(deliverable.uploadedAt).toLocaleDateString()}</span>
+                                    {deliverable.fileSize && (
+                                      <>
+                                        <span>•</span>
+                                        <span>{formatFileSize(deliverable.fileSize)}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+
+                              {/* Status and Grade Section */}
+                              {editingDocId !== deliverable.id && (
+                                <div className="flex items-center gap-3 mt-2">
+                                  <Badge
+                                    className={
+                                      deliverable.status === "graded"
+                                        ? "bg-[#8fa889] text-white"
+                                        : deliverable.status === "reviewed"
+                                          ? "bg-[#5f7082] text-white"
+                                          : "bg-[#f5a623]/20 text-[#c68a1a]"
+                                    }
+                                  >
+                                    {deliverable.status === "graded"
+                                      ? `Graded: ${deliverable.grade}`
+                                      : deliverable.status === "reviewed"
+                                        ? "Reviewed"
+                                        : "Pending Review"}
+                                  </Badge>
+                                  {deliverable.reviewedBy && (
+                                    <span className="text-xs text-[#5f7082]">by {deliverable.reviewedBy}</span>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Director Comment */}
+                              {deliverable.comment && editingDocId !== deliverable.id && (
+                                <div className="mt-3 p-3 bg-[#f5f7f9] rounded-md border-l-4 border-[#8fa889]">
+                                  <p className="text-xs font-medium text-[#5f7082] mb-1">Director Feedback:</p>
+                                  <p className="text-sm text-[#2d3a4f]">{deliverable.comment}</p>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex-shrink-0 flex flex-col gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => window.open(deliverable.fileUrl, "_blank")}
+                                className="border-[#9aacb8]/50"
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                View
+                              </Button>
+                              {editingDocId !== deliverable.id && (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleStartEdit(deliverable)}
+                                    className="border-[#9aacb8]/50"
+                                  >
+                                    <Pencil className="h-4 w-4 mr-1" />
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDeleteDocument(deliverable.id, deliverable.fileName)}
+                                    className="border-red-300 text-red-600 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-1" />
+                                    Delete
+                                  </Button>
                                 </>
                               )}
                             </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge
-                              className={
-                                deliverable.status === "graded"
-                                  ? "bg-[#8fa889] text-white"
-                                  : deliverable.status === "reviewed"
-                                    ? "bg-[#5f7082] text-white"
-                                    : "bg-[#9aacb8]/30 text-[#5f7082]"
-                              }
-                            >
-                              {deliverable.status || "Submitted"}
-                            </Badge>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => window.open(deliverable.fileUrl, "_blank")}
-                            >
-                              View
-                            </Button>
                           </div>
                         </div>
                       ))}
@@ -798,6 +1261,33 @@ export function MyTeamContent() {
           </Tabs>
         </div>
       </main>
+
+      {/* Add Note Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Team Note</DialogTitle>
+            <DialogDescription>Share updates or notes with your team</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <Textarea
+              placeholder="Write your note here..."
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+              rows={4}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button className="bg-[#2d3a4f] hover:bg-[#3d4a5f]" onClick={handleAddNote} disabled={!newNote.trim()}>
+                <Send className="h-4 w-4 mr-2" />
+                Post Note
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

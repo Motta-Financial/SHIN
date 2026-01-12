@@ -1,9 +1,10 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Geist, Geist_Mono, Inter } from "next/font/google"
-// import { ClerkProvider } from "@clerk/nextjs"
 import "./globals.css"
 import { GlobalHeader } from "@/components/global-header"
+import { SemesterProvider } from "@/contexts/semester-context"
+import { DemoModeProvider } from "@/contexts/demo-mode-context"
 
 const geistSans = Geist({
   subsets: ["latin"],
@@ -23,6 +24,9 @@ export const metadata: Metadata = {
   title: "SHIN Dashboard",
   description: "SEED SHIN Dashboard for tracking student hours and client engagements",
   generator: "v0.app",
+  icons: {
+    icon: "/images/shin.png",
+  },
 }
 
 export default function RootLayout({
@@ -33,8 +37,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${inter.variable}`}>
       <body className={`font-sans antialiased`}>
-        <GlobalHeader />
-        {children}
+        <DemoModeProvider>
+          <SemesterProvider>
+            <GlobalHeader />
+            {children}
+          </SemesterProvider>
+        </DemoModeProvider>
       </body>
     </html>
   )

@@ -58,10 +58,42 @@ export function OrgChart() {
     fetchOrgData()
   }, [])
 
+  const fetchWithRetry = async (url: string, retries = 3, delay = 2000): Promise<Response> => {
+    for (let i = 0; i < retries; i++) {
+      const response = await fetch(url)
+
+      // Check for rate limiting
+      if (response.status === 429) {
+        console.log(`[v0] Rate limited on ${url}, retrying in ${delay}ms...`)
+        await new Promise((resolve) => setTimeout(resolve, delay))
+        delay *= 2 // Exponential backoff
+        continue
+      }
+
+      // Check if response is "Too Many Requests" text
+      const contentType = response.headers.get("content-type")
+      if (!contentType?.includes("application/json")) {
+        const text = await response.text()
+        if (text.startsWith("Too Many R")) {
+          console.log(`[v0] Rate limited (text) on ${url}, retrying in ${delay}ms...`)
+          await new Promise((resolve) => setTimeout(resolve, delay))
+          delay *= 2
+          continue
+        }
+        throw new Error(`Unexpected response: ${text}`)
+      }
+
+      return response
+    }
+    throw new Error(`Failed after ${retries} retries`)
+  }
+
   const fetchOrgData = async () => {
     setLoading(true)
     try {
-      const response = await fetch("/api/org-chart")
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+
+      const response = await fetchWithRetry("/api/org-chart")
       if (!response.ok) {
         throw new Error("Failed to fetch org chart data")
       }

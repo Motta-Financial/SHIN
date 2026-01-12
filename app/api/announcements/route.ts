@@ -1,32 +1,14 @@
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
+import { createClient } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
 
+const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+
 export async function GET(request: NextRequest) {
   try {
-    const cookieStore = await cookies()
-
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options)
-            })
-          },
-        },
-      },
-    )
-
     // Fetch announcements from notifications table where type is 'announcement' and target is students
-    const { data: notifications, error } = await supabase
+    const { data: notifications, error } = await supabaseAdmin
       .from("notifications")
       .select(`
         id,
@@ -51,7 +33,7 @@ export async function GET(request: NextRequest) {
     let clinicMap: Record<string, string> = {}
 
     if (clinicIds.length > 0) {
-      const { data: clinics } = await supabase.from("clinics").select("id, name").in("id", clinicIds)
+      const { data: clinics } = await supabaseAdmin.from("clinics").select("id, name").in("id", clinicIds)
 
       if (clinics) {
         clinicMap = Object.fromEntries(clinics.map((c) => [c.id, c.name]))
@@ -79,25 +61,6 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies()
-
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set(name, value, options)
-            })
-          },
-        },
-      },
-    )
-
     const body = await request.json()
     const { title, content, clinicId, priority, postedBy } = body
 
@@ -108,13 +71,12 @@ export async function POST(request: NextRequest) {
     // Get clinic name if clinicId provided
     let clinicName = null
     if (clinicId) {
-      const { data: clinic } = await supabase.from("clinics").select("name").eq("id", clinicId).single()
-
+      const { data: clinic } = await supabaseAdmin.from("clinics").select("name").eq("id", clinicId).single()
       clinicName = clinic?.name || null
     }
 
     // Create the announcement notification for students
-    const { data: notification, error: notificationError } = await supabase
+    const { data: notification, error: notificationError } = await supabaseAdmin
       .from("notifications")
       .insert({
         type: "announcement",
