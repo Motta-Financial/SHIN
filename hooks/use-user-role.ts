@@ -65,27 +65,73 @@ async function fetchUserRoleWithRetry(retries = 3, delay = 1000): Promise<UserRo
         }
       }
 
-      try {
-        const response = await fetch("/api/auth/user-role")
-        const roleData = await response.json()
+      const userEmail = user.email || ""
 
-        if (roleData.role) {
-          return {
-            role: roleData.role,
-            userId: user.id,
-            email: user.email || null,
-            fullName: roleData.fullName || null,
-            clinicId: roleData.clinicId || null,
-            clinicName: roleData.clinicName || null,
-            isLoading: false,
-            isAuthenticated: true,
-          }
+      // Check directors table
+      const { data: directorData } = await supabase
+        .from("directors")
+        .select("id, email, role, full_name, clinic_id")
+        .ilike("email", userEmail)
+        .maybeSingle()
+
+      if (directorData) {
+        console.log("[v0] useUserRole - Found director role")
+        return {
+          role: (directorData.role as UserRole) || "director",
+          userId: user.id,
+          email: user.email || null,
+          fullName: directorData.full_name || null,
+          clinicId: directorData.clinic_id || null,
+          clinicName: null,
+          isLoading: false,
+          isAuthenticated: true,
         }
-      } catch (roleError) {
-        console.error("[v0] useUserRole - Error fetching role from database:", roleError)
       }
 
-      // Fallback: return authenticated but no role
+      // Check students table
+      const { data: studentData } = await supabase
+        .from("students")
+        .select("id, email, full_name, clinic_id, clinic")
+        .ilike("email", userEmail)
+        .maybeSingle()
+
+      if (studentData) {
+        console.log("[v0] useUserRole - Found student role")
+        return {
+          role: "student",
+          userId: user.id,
+          email: user.email || null,
+          fullName: studentData.full_name || null,
+          clinicId: studentData.clinic_id || null,
+          clinicName: studentData.clinic || null,
+          isLoading: false,
+          isAuthenticated: true,
+        }
+      }
+
+      // Check clients table
+      const { data: clientData } = await supabase
+        .from("clients")
+        .select("id, name, email")
+        .ilike("email", userEmail)
+        .maybeSingle()
+
+      if (clientData) {
+        console.log("[v0] useUserRole - Found client role")
+        return {
+          role: "client",
+          userId: user.id,
+          email: user.email || null,
+          fullName: clientData.name || null,
+          clinicId: null,
+          clinicName: null,
+          isLoading: false,
+          isAuthenticated: true,
+        }
+      }
+
+      // No role found - user is authenticated but not in system
+      console.log("[v0] useUserRole - No role found for:", userEmail)
       return {
         role: null,
         userId: user.id,
@@ -212,6 +258,6 @@ export function getDefaultPortal(role: UserRole): string {
     case "client":
       return "/client-portal"
     default:
-      return "/"
+      return "/sign-in" // Return sign-in page instead of root
   }
 }

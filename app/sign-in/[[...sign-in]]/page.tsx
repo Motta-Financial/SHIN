@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2 } from "lucide-react"
-import Image from "next/image"
 
 export default function SignInPage() {
   const [email, setEmail] = useState("")
@@ -47,28 +46,52 @@ export default function SignInPage() {
     console.log("[v0] SignIn - Fetching role from database for:", email)
 
     try {
-      const response = await fetch("/api/auth/user-role")
-      const data = await response.json()
+      const { data: directorData, error: directorError } = await supabase
+        .from("directors")
+        .select("id, email, role")
+        .ilike("email", email)
+        .maybeSingle()
 
-      if (data.role) {
-        console.log("[v0] SignIn - User role from database:", data.role)
-        let redirectUrl = "/"
+      console.log("[v0] SignIn - Director check:", { directorData, directorError })
 
-        if (data.role === "client") {
-          redirectUrl = "/client-portal"
-        } else if (data.role === "student") {
-          redirectUrl = "/students"
-        } else if (data.role === "director" || data.role === "admin") {
-          redirectUrl = "/director"
-        }
-
-        console.log("[v0] SignIn - Redirecting to:", redirectUrl)
-        window.location.href = redirectUrl
-      } else {
-        console.error("[v0] SignIn - No role found for user:", data.error)
-        setError("Your account is not properly configured. Please contact support.")
-        setIsLoading(false)
+      if (directorData) {
+        console.log("[v0] SignIn - Found director role, redirecting to /director")
+        window.location.href = "/director"
+        return
       }
+
+      const { data: studentData, error: studentError } = await supabase
+        .from("students")
+        .select("id, email, full_name")
+        .ilike("email", email)
+        .maybeSingle()
+
+      console.log("[v0] SignIn - Student check:", { studentData, studentError })
+
+      if (studentData) {
+        console.log("[v0] SignIn - Found student role, redirecting to /students")
+        window.location.href = "/students"
+        return
+      }
+
+      const { data: clientData, error: clientError } = await supabase
+        .from("clients")
+        .select("id, name, email")
+        .ilike("email", email)
+        .maybeSingle()
+
+      console.log("[v0] SignIn - Client check:", { clientData, clientError })
+
+      if (clientData) {
+        console.log("[v0] SignIn - Found client role, redirecting to /client-portal")
+        window.location.href = "/client-portal"
+        return
+      }
+
+      // No role found
+      console.error("[v0] SignIn - No role found for user:", email)
+      setError("Your account is not properly configured. Please contact support.")
+      setIsLoading(false)
     } catch (error) {
       console.error("[v0] SignIn - Error fetching role:", error)
       setError("Unable to determine account type. Please try again.")
@@ -125,12 +148,10 @@ export default function SignInPage() {
         <div className="mb-8 flex flex-col items-center gap-6">
           {/* SEED Program Logo */}
           <div className="relative w-[360px] h-[130px]">
-            <Image
+            <img
               src="/images/u101224-suffolk-seed-logo-chosen-recreat-1.avif"
               alt="Suffolk SEED Program"
-              fill
-              className="object-contain drop-shadow-md"
-              priority
+              className="w-full h-full object-contain drop-shadow-md"
             />
           </div>
 
@@ -143,12 +164,10 @@ export default function SignInPage() {
 
           {/* SHIN Platform Logo */}
           <div className="relative w-[420px] h-[240px]">
-            <Image
+            <img
               src="/images/shin.png"
               alt="SHIN - SEED Hub & Information Nexus"
-              fill
-              className="object-contain drop-shadow-lg"
-              priority
+              className="w-full h-full object-contain drop-shadow-lg"
             />
           </div>
         </div>

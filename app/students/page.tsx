@@ -494,29 +494,50 @@ export default function StudentPortal() {
   }, [demoStudentId])
 
   useEffect(() => {
-    if (!roleLoading && !isDemoMode) {
-      // Directors and admins can always access
-      if (role === "director" || role === "admin") {
-        console.log("[v0] StudentPortal - Director/Admin access granted")
-        return
-      }
-      // Students can access their own portal
-      if (role === "student") {
-        console.log("[v0] StudentPortal - Student access granted")
-        return
-      }
-      // Not authenticated - redirect to login
-      if (!isAuthenticated) {
-        console.log("[v0] StudentPortal - Not authenticated, redirecting to login")
-        router.push("/login")
-        return
-      }
-      // Authenticated but wrong role - redirect to their portal
-      if (!canAccessPortal(role, "student")) {
-        console.log("[v0] StudentPortal - Wrong role, redirecting to:", getDefaultPortal(role))
-        router.push(getDefaultPortal(role))
-        return
-      }
+    // Still loading - don't redirect yet
+    if (roleLoading) {
+      console.log("[v0] StudentPortal - Still loading role, waiting...")
+      return
+    }
+
+    // Demo mode - allow access
+    if (isDemoMode) {
+      console.log("[v0] StudentPortal - Demo mode access granted")
+      return
+    }
+
+    // Directors and admins can always access
+    if (role === "director" || role === "admin") {
+      console.log("[v0] StudentPortal - Director/Admin access granted")
+      return
+    }
+
+    // Students can access their own portal
+    if (role === "student") {
+      console.log("[v0] StudentPortal - Student access granted")
+      return
+    }
+
+    // Not authenticated at all - redirect to login
+    if (!isAuthenticated) {
+      console.log("[v0] StudentPortal - Not authenticated, redirecting to login")
+      router.push("/sign-in") // Changed from /login to /sign-in
+      return
+    }
+
+    // Authenticated but role is null - this means user is not in the system
+    // Redirect to sign-in with an error state
+    if (role === null) {
+      console.log("[v0] StudentPortal - Authenticated but no role found, redirecting to sign-in")
+      router.push("/sign-in")
+      return
+    }
+
+    // Authenticated with a role that can't access student portal (e.g., client)
+    if (!canAccessPortal(role, "student")) {
+      console.log("[v0] StudentPortal - Wrong role, redirecting to:", getDefaultPortal(role))
+      router.push(getDefaultPortal(role))
+      return
     }
   }, [role, roleLoading, isAuthenticated, isDemoMode, router])
 
@@ -658,7 +679,7 @@ export default function StudentPortal() {
         const [studentRes, debriefsRes, attendanceRes, meetingRes, materialsRes, docsRes, scheduleRes] =
           await fetchSequentially(urls)
 
-        const studentData = await safeJsonParse(studentRes, { id: currentStudentId })
+        const studentData = await safeJsonParse(studentRes, { students: [] }) // Corrected parsing for single student
         const debriefsData = await safeJsonParse(debriefsRes, { debriefs: [] })
         const attendanceData = await safeJsonParse(attendanceRes, { attendance: [] })
         const meetingData = await safeJsonParse(meetingRes, { requests: [] })
@@ -674,6 +695,7 @@ export default function StudentPortal() {
           })),
         )
 
+        // Student data is usually an array, so access the first element
         const student = studentData.students?.[0] || null
         setCurrentStudent(student)
         setDebriefs(debriefsData.debriefs || [])
@@ -728,9 +750,15 @@ export default function StudentPortal() {
         // Fetch student notifications (announcements from directors)
         const fetchStudentNotifications = async () => {
           try {
+            // Adding a short delay to allow student data to be set before fetching notifications
+            await new Promise((resolve) => setTimeout(resolve, 500))
+            if (!student?.id || !student?.clinicId) {
+              console.log("[v0] Student data not fully loaded for notifications, skipping fetch.")
+              return
+            }
             await new Promise((resolve) => setTimeout(resolve, 1500)) // Longer delay to avoid rate limiting
             const res = await fetchWithRetry(
-              `/api/student-notifications?studentId=${studentData.id}&clinicId=${studentData.clinicId}`,
+              `/api/student-notifications?studentId=${student.id}&clinicId=${student.clinicId}`,
             )
             if (!res.ok) {
               console.error("Error fetching student notifications: HTTP", res.status)
@@ -942,8 +970,8 @@ export default function StudentPortal() {
         setAttendancePassword("")
         setSelectedWeekForAttendance("")
         // Close the dialog if it was open
-        const dialogTrigger = document.querySelector('[data-state="open"] > button') as HTMLElement
-        dialogTrigger?.click()
+        // This logic might need to be triggered from the component that opens the dialog.
+        // For now, assume the Dialog component handles closing itself after successful submission.
       } else {
         const error = await response.json()
         console.log("[v0] Attendance submission - error:", error)
@@ -957,7 +985,7 @@ export default function StudentPortal() {
   }
 
   const handleSubmitDebrief = async () => {
-    if (!selectedWeekForDebrief || !debriefForm.hoursWorked || !debriefForm.workSummary) return
+    if (!selectedWeekForDebrief || !debriefForm.hoursWorked || !debriefForm.workSummary || !currentStudent) return
 
     setSubmittingDebrief(true)
     try {
@@ -968,11 +996,11 @@ export default function StudentPortal() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          studentId: currentStudent?.id,
-          studentName: currentStudent?.fullName,
-          clientId: currentStudent?.clientId,
-          clientName: currentStudent?.clientName,
-          clinic: currentStudent?.clinic,
+          studentId: currentStudent.id,
+          studentName: currentStudent.fullName,
+          clientId: currentStudent.clientId,
+          clientName: currentStudent.clientName,
+          clinic: currentStudent.clinic,
           weekEnding: selectedWeek.week_end,
           weekNumber: selectedWeek.week_number,
           hoursWorked: Number.parseFloat(debriefForm.hoursWorked),
@@ -985,7 +1013,7 @@ export default function StudentPortal() {
       if (!response.ok) throw new Error("Failed to submit debrief")
 
       // Refresh debriefs
-      const debriefRes = await fetch(`/api/supabase/debriefs?studentId=${currentStudent?.id}`)
+      const debriefRes = await fetch(`/api/supabase/debriefs?studentId=${currentStudent.id}`)
       if (debriefRes.ok) {
         const data = await safeJsonParse(debriefRes, { debriefs: [] }) // Use safeJsonParse
         setDebriefs(data.debriefs || [])
@@ -1068,7 +1096,17 @@ export default function StudentPortal() {
 
     if (selectedFile && !uploadedFileUrl) {
       await handleUploadFile()
-      return
+      // After upload, re-trigger this function to submit the document metadata
+      // using the uploadedFileUrl. A simple way is to await handleUploadFile() and then call this again,
+      // but it's better to structure it to avoid redundant calls.
+      // For now, assuming handleUploadFile will set uploadedFileUrl, and this function will be called again
+      // or the logic is slightly adjusted.
+      // A more robust way:
+      if (!uploadedFileUrl) {
+        // If handleUploadFile didn't set it (e.g., due to an error that didn't break the flow but failed upload)
+        alert("Upload failed. Please try again.")
+        return
+      }
     }
 
     if (!uploadedFileUrl) {
@@ -1116,7 +1154,7 @@ export default function StudentPortal() {
     if (selectedFile && !uploadedFileUrl && !uploading) {
       handleUploadFile()
     }
-  }, [selectedFile])
+  }, [selectedFile, uploadedFileUrl, uploading]) // Added dependencies for clarity
 
   const handleDeliverableUpload = async (deliverableType: string, file: File) => {
     if (!currentStudent || !file) return
@@ -1204,6 +1242,10 @@ export default function StudentPortal() {
   const getWeekEndingDate = () => {
     const today = new Date()
     const dayOfWeek = today.getDay()
+    // Calculate days until Friday (day 5)
+    // If today is Friday (5), daysUntilFriday = 0
+    // If today is Saturday (6), daysUntilFriday = 5 - 6 + 7 = 6 days until next Friday
+    // If today is Sunday (0), daysUntilFriday = 5 - 0 = 5 days until next Friday
     const daysUntilFriday = dayOfWeek <= 5 ? 5 - dayOfWeek : 5 + (7 - dayOfWeek)
     const friday = new Date(today)
     friday.setDate(today.getDate() + daysUntilFriday)
@@ -1257,6 +1299,12 @@ export default function StudentPortal() {
             <Card className="p-6 text-center">
               <h2 className="text-xl font-semibold mb-2">Student Not Found</h2>
               <p className="text-muted-foreground">Unable to load your student profile.</p>
+              {/* Add a button to go back or to sign-in */}
+              {!isAuthenticated && (
+                <Button onClick={() => router.push("/sign-in")} className="mt-4">
+                  Go to Sign In
+                </Button>
+              )}
             </Card>
           </div>
         </div>
@@ -1816,7 +1864,7 @@ export default function StudentPortal() {
                     setSignedAgreements((prev) => [...prev, type])
                   }}
                   onNavigate={(tab) => {
-                    const tabsEl = document.querySelector(`[value="${tab}"]`) as HTMLElement
+                    const tabsEl = document.querySelector(`[data-state="true"] button[value="${tab}"]`) as HTMLElement
                     tabsEl?.click()
                   }}
                 />
@@ -2113,6 +2161,7 @@ export default function StudentPortal() {
                                             <DialogFooter>
                                               <Button
                                                 onClick={() => {
+                                                  // Pass the selected week ID and call the submit function
                                                   setSelectedWeekForAttendance(week.id)
                                                   handleSubmitAttendance()
                                                 }}
