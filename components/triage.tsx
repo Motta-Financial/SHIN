@@ -267,6 +267,26 @@ export function Triage({
 
     // Student-specific items
     if (userType === "student") {
+      // Monday attendance reminder for today's class at 5:00 PM
+      const today = new Date()
+      const isMonday = today.getDay() === 1
+
+      if (isMonday) {
+        items.push({
+          id: "action-attendance-monday",
+          type: "action",
+          category: "Attendance",
+          priority: "high",
+          title: "Submit Attendance for Today's Class",
+          description:
+            "Class is at 5:00 PM today - Don't forget to mark your attendance using the password shared in class",
+          icon: <Bell className="h-4 w-4" />,
+          iconBg: "bg-blue-100 text-blue-700",
+          action: () => onNavigate?.("attendance"),
+          actionLabel: "Submit Now",
+        })
+      }
+
       // Missing debriefs
       if (!hasSubmittedThisWeek) {
         items.push({

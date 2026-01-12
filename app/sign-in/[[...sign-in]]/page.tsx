@@ -33,8 +33,7 @@ export default function SignInPage() {
 
       if (session?.user) {
         console.log("[v0] SignIn - User already logged in:", session.user.email)
-        const role = session.user.user_metadata?.role
-        redirectByRole(role)
+        await redirectByRole(session.user.id, session.user.email || "")
       } else {
         console.log("[v0] SignIn - No existing session")
         setIsCheckingSession(false)
@@ -44,20 +43,37 @@ export default function SignInPage() {
     checkSession()
   }, [supabase])
 
-  const redirectByRole = (role: string | undefined) => {
-    let redirectUrl = "/"
+  const redirectByRole = async (userId: string, email: string) => {
+    console.log("[v0] SignIn - Fetching role from database for:", email)
 
-    if (role === "client") {
-      redirectUrl = "/client-portal"
-    } else if (role === "student") {
-      redirectUrl = "/students"
-    } else if (role === "director" || role === "admin") {
-      redirectUrl = "/director"
+    try {
+      const response = await fetch("/api/auth/user-role")
+      const data = await response.json()
+
+      if (data.role) {
+        console.log("[v0] SignIn - User role from database:", data.role)
+        let redirectUrl = "/"
+
+        if (data.role === "client") {
+          redirectUrl = "/client-portal"
+        } else if (data.role === "student") {
+          redirectUrl = "/students"
+        } else if (data.role === "director" || data.role === "admin") {
+          redirectUrl = "/director"
+        }
+
+        console.log("[v0] SignIn - Redirecting to:", redirectUrl)
+        window.location.href = redirectUrl
+      } else {
+        console.error("[v0] SignIn - No role found for user:", data.error)
+        setError("Your account is not properly configured. Please contact support.")
+        setIsLoading(false)
+      }
+    } catch (error) {
+      console.error("[v0] SignIn - Error fetching role:", error)
+      setError("Unable to determine account type. Please try again.")
+      setIsLoading(false)
     }
-
-    console.log("[v0] SignIn - Redirecting to:", redirectUrl)
-    // Use window.location for a full page navigation to ensure session is recognized
-    window.location.href = redirectUrl
   }
 
   const handleSignIn = async (e: React.FormEvent) => {
@@ -81,10 +97,8 @@ export default function SignInPage() {
       }
 
       if (data.user) {
-        console.log("[v0] SignIn - Success! User:", data.user.email, "Role:", data.user.user_metadata?.role)
-        const role = data.user.user_metadata?.role
-        redirectByRole(role)
-        // Don't setIsLoading(false) here - let the redirect complete
+        console.log("[v0] SignIn - Success! User:", data.user.email)
+        await redirectByRole(data.user.id, data.user.email || "")
       }
     } catch (err) {
       console.log("[v0] SignIn - Unexpected error:", err)

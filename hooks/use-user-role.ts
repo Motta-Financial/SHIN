@@ -65,20 +65,34 @@ async function fetchUserRoleWithRetry(retries = 3, delay = 1000): Promise<UserRo
         }
       }
 
-      // Get role from user metadata
-      const metadata = user.user_metadata || {}
-      const role = (metadata.role as UserRole) || null
-      const fullName = metadata.full_name || null
-      const clinicId = metadata.clinic_id || null
-      const clinicName = metadata.clinic_name || null
+      try {
+        const response = await fetch("/api/auth/user-role")
+        const roleData = await response.json()
 
+        if (roleData.role) {
+          return {
+            role: roleData.role,
+            userId: user.id,
+            email: user.email || null,
+            fullName: roleData.fullName || null,
+            clinicId: roleData.clinicId || null,
+            clinicName: roleData.clinicName || null,
+            isLoading: false,
+            isAuthenticated: true,
+          }
+        }
+      } catch (roleError) {
+        console.error("[v0] useUserRole - Error fetching role from database:", roleError)
+      }
+
+      // Fallback: return authenticated but no role
       return {
-        role,
+        role: null,
         userId: user.id,
         email: user.email || null,
-        fullName,
-        clinicId,
-        clinicName,
+        fullName: null,
+        clinicId: null,
+        clinicName: null,
         isLoading: false,
         isAuthenticated: true,
       }
