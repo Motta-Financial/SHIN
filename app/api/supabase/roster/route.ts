@@ -21,30 +21,10 @@ export async function GET(request: Request) {
       activeSemesterId = activeSemester?.id
     }
 
-    let query = supabase
-      .from("students")
-      .select(`
-        id,
-        first_name,
-        last_name,
-        full_name,
-        email,
-        university_id,
-        clinic_id,
-        client_id,
-        education,
-        academic_level,
-        business_experience,
-        linkedin_profile,
-        status,
-        semester_id,
-        is_team_leader,
-        clients!students_client_id_fkey(id, name)
-      `)
-      .order("full_name", { ascending: true })
+    let query = supabase.from("v_complete_mapping").select("*").order("student_name", { ascending: true })
 
     if (studentId) {
-      query = query.eq("id", studentId)
+      query = query.eq("student_id", studentId)
     }
 
     if (activeSemesterId && !studentId) {
@@ -58,7 +38,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ students: [] })
     }
 
-    // ... existing code for debriefs and attendance ...
     let debriefsQuery = supabase.from("debriefs").select("student_id, hours_worked")
     let attendanceQuery = supabase.from("attendance").select("student_id")
 
@@ -70,7 +49,6 @@ export async function GET(request: Request) {
     const { data: debriefs } = await debriefsQuery
     const { data: attendance } = await attendanceQuery
 
-    // Calculate total hours per student
     const hoursByStudent = (debriefs || []).reduce(
       (acc, d) => {
         if (d.student_id) {
@@ -91,25 +69,26 @@ export async function GET(request: Request) {
       {} as Record<string, number>,
     )
 
-    const formattedStudents = (students || []).map((student) => ({
-      id: student.id,
-      firstName: student.first_name,
-      lastName: student.last_name,
-      fullName: student.full_name,
-      email: student.email,
-      universityId: student.university_id,
-      clinicId: student.clinic_id,
-      clientId: student.clients?.id || student.client_id,
-      clientName: student.clients?.name,
-      education: student.education,
-      academicLevel: student.academic_level,
-      businessExperience: student.business_experience,
-      linkedinProfile: student.linkedin_profile,
-      status: student.status,
+    const formattedStudents = (students || []).map((student: any) => ({
+      id: student.student_id,
+      firstName: student.student_name?.split(" ")[0] || "",
+      lastName: student.student_name?.split(" ").slice(1).join(" ") || "",
+      fullName: student.student_name,
+      email: student.student_email,
+      universityId: null, // Not in v_complete_mapping
+      clinic: student.student_clinic_name,
+      clinicId: student.student_clinic_id,
+      clientId: student.client_id,
+      clientName: student.client_name,
+      education: null, // Not in v_complete_mapping
+      academicLevel: null, // Not in v_complete_mapping
+      businessExperience: null, // Not in v_complete_mapping
+      linkedinProfile: null, // Not in v_complete_mapping
+      status: null, // Not in v_complete_mapping
       semesterId: student.semester_id,
-      isTeamLeader: student.is_team_leader,
-      totalHours: hoursByStudent[student.id] || 0,
-      attendanceCount: attendanceByStudent[student.id] || 0,
+      isTeamLeader: null, // Not in v_complete_mapping
+      totalHours: hoursByStudent[student.student_id] || 0,
+      attendanceCount: attendanceByStudent[student.student_id] || 0,
     }))
 
     return NextResponse.json({ students: formattedStudents })

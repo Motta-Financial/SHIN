@@ -112,7 +112,7 @@ export default function SignInPage() {
           {/* SEED Program Logo */}
           <div className="relative w-[360px] h-[130px]">
             <Image
-              src="/images/seed-logo.avif"
+              src="/images/u101224-suffolk-seed-logo-chosen-recreat-1.avif"
               alt="Suffolk SEED Program"
               fill
               className="object-contain drop-shadow-md"
@@ -130,7 +130,7 @@ export default function SignInPage() {
           {/* SHIN Platform Logo */}
           <div className="relative w-[420px] h-[240px]">
             <Image
-              src="/images/shin-logo-new.png"
+              src="/images/shin.png"
               alt="SHIN - SEED Hub & Information Nexus"
               fill
               className="object-contain drop-shadow-lg"

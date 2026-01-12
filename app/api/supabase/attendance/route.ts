@@ -70,6 +70,13 @@ export async function POST(request: Request) {
 
     const semesterId = "a1b2c3d4-e5f6-7890-abcd-202601120000"
 
+    if (!studentId || !studentName || !studentEmail || !clinic || !weekNumber) {
+      return NextResponse.json(
+        { error: "Missing required fields. Please ensure you have a clinic assigned." },
+        { status: 400 },
+      )
+    }
+
     const { data: passwordData, error: passwordError } = await supabase
       .from("attendance_passwords")
       .select("password, id")
@@ -92,14 +99,13 @@ export async function POST(request: Request) {
       )
     }
 
-    // Check if attendance already submitted for this week
     const { data: existingAttendance } = await supabase
       .from("attendance")
       .select("*")
       .eq("student_id", studentId)
       .eq("week_number", weekNumber)
-      .eq("semester_id", semesterId) // Check for current semester only
-      .single()
+      .eq("semester_id", semesterId)
+      .maybeSingle()
 
     if (existingAttendance) {
       return NextResponse.json({ error: "Attendance already submitted for this week" }, { status: 400 })
@@ -116,7 +122,7 @@ export async function POST(request: Request) {
         week_number: weekNumber,
         week_ending: weekEnding,
         class_date: classDate,
-        semester_id: semesterId, // Store semester_id with attendance
+        semester_id: semesterId,
         notes: `Submitted at ${new Date().toISOString()}`,
       })
       .select()

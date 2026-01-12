@@ -902,25 +902,40 @@ export default function StudentPortal() {
       const selectedWeek = semesterSchedule.find((w) => w.id === selectedWeekForAttendance)
       if (!selectedWeek) return
 
+      console.log("[v0] Attendance submission - currentStudent:", {
+        id: currentStudent.id,
+        fullName: currentStudent.fullName,
+        email: currentStudent.email,
+        clinic: currentStudent.clinic,
+        clinicId: currentStudent.clinicId,
+        allFields: currentStudent,
+      })
+
+      const attendancePayload = {
+        studentId: currentStudent.id,
+        studentName: currentStudent.fullName,
+        studentEmail: currentStudent.email,
+        clinic: currentStudent.clinic,
+        weekNumber: selectedWeek.week_number,
+        weekEnding: selectedWeek.week_end,
+        classDate: selectedWeek.week_start,
+        password: attendancePassword,
+      }
+
+      console.log("[v0] Attendance submission - payload:", attendancePayload)
+
       const response = await fetch("/api/supabase/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          studentId: currentStudent.id,
-          studentName: currentStudent.fullName,
-          studentEmail: currentStudent.email,
-          clinic: currentStudent.clinic,
-          weekNumber: selectedWeek.week_number,
-          weekEnding: selectedWeek.week_end,
-          classDate: selectedWeek.week_start,
-          password: attendancePassword,
-        }),
+        body: JSON.stringify(attendancePayload),
       })
+
+      console.log("[v0] Attendance submission - response status:", response.status)
 
       if (response.ok) {
         // Refresh attendance records
         const attendanceRes = await fetch(`/api/supabase/attendance?studentId=${currentStudent.id}`)
-        const attendanceData = await safeJsonParse(attendanceRes, { attendance: [] }) // Use safeJsonParse
+        const attendanceData = await safeJsonParse(attendanceRes, { attendance: [] })
         setAttendanceRecords(attendanceData.attendance || [])
 
         // Reset form
@@ -931,6 +946,7 @@ export default function StudentPortal() {
         dialogTrigger?.click()
       } else {
         const error = await response.json()
+        console.log("[v0] Attendance submission - error:", error)
         alert(error.error || "Invalid password or attendance already submitted")
       }
     } catch (error) {
