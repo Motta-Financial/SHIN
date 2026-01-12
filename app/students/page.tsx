@@ -509,10 +509,10 @@ export default function StudentPortal() {
           if (data.students) {
             setAvailableStudents(
               data.students.map((s: any) => ({
-                id: s.id,
-                full_name: s.full_name || s.name,
-                email: s.email,
-                clinic: s.clinic_name || s.clinic,
+                id: s.id || s.student_id,
+                full_name: s.student_name || s.full_name || s.name,
+                email: s.student_email || s.email,
+                clinic: s.clinic || s.clinic_name || s.student_clinic_name,
               })),
             )
           }

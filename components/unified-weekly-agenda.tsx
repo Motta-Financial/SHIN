@@ -937,84 +937,86 @@ export function UnifiedWeeklyAgenda({
       <Card className="border-0 shadow-sm">
         <CardHeader className="border-b bg-muted/30 rounded-t-lg py-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5 text-primary" />
               Unified Course & Weekly Agenda - {semester}
             </CardTitle>
-            <Dialog open={showAddWeekDialog} onOpenChange={setShowAddWeekDialog}>
-              <DialogTrigger asChild>
-                <Button size="sm" className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  Add Week
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add New Week</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 mt-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>Week Number</Label>
-                      <Input
-                        type="number"
-                        value={newWeek.week_number}
-                        onChange={(e) => setNewWeek({ ...newWeek, week_number: Number.parseInt(e.target.value) })}
-                        min={1}
-                        max={16}
-                      />
-                    </div>
-                    <div>
-                      <Label>Week Label</Label>
-                      <Input
-                        value={newWeek.week_label}
-                        onChange={(e) => setNewWeek({ ...newWeek, week_label: e.target.value })}
-                        placeholder={`Week ${newWeek.week_number}`}
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>Start Date</Label>
-                      <Input
-                        type="date"
-                        value={newWeek.week_start}
-                        onChange={(e) => setNewWeek({ ...newWeek, week_start: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <Label>End Date</Label>
-                      <Input
-                        type="date"
-                        value={newWeek.week_end}
-                        onChange={(e) => setNewWeek({ ...newWeek, week_end: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label>Session Focus / Topic</Label>
-                    <Input
-                      value={newWeek.session_focus}
-                      onChange={(e) => setNewWeek({ ...newWeek, session_focus: e.target.value })}
-                      placeholder="e.g., Project Planning & SOW Development"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={newWeek.is_break}
-                      onCheckedChange={(checked) => setNewWeek({ ...newWeek, is_break: checked })}
-                    />
-                    <Label>This is a break week (no class)</Label>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setShowAddWeekDialog(false)}>
-                    Cancel
+            {!isStudentView && (
+              <Dialog open={showAddWeekDialog} onOpenChange={setShowAddWeekDialog}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Add Week
                   </Button>
-                  <Button onClick={addWeek}>Add Week</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add New Week</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 mt-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Week Number</Label>
+                        <Input
+                          type="number"
+                          value={newWeek.week_number}
+                          onChange={(e) => setNewWeek({ ...newWeek, week_number: Number.parseInt(e.target.value) })}
+                          min={1}
+                          max={16}
+                        />
+                      </div>
+                      <div>
+                        <Label>Week Label</Label>
+                        <Input
+                          value={newWeek.week_label}
+                          onChange={(e) => setNewWeek({ ...newWeek, week_label: e.target.value })}
+                          placeholder={`Week ${newWeek.week_number}`}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label>Start Date</Label>
+                        <Input
+                          type="date"
+                          value={newWeek.week_start}
+                          onChange={(e) => setNewWeek({ ...newWeek, week_start: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <Label>End Date</Label>
+                        <Input
+                          type="date"
+                          value={newWeek.week_end}
+                          onChange={(e) => setNewWeek({ ...newWeek, week_end: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Session Focus / Topic</Label>
+                      <Input
+                        value={newWeek.session_focus}
+                        onChange={(e) => setNewWeek({ ...newWeek, session_focus: e.target.value })}
+                        placeholder="e.g., Project Planning & SOW Development"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={newWeek.is_break}
+                        onCheckedChange={(checked) => setNewWeek({ ...newWeek, is_break: checked })}
+                      />
+                      <Label>This is a break week (no class)</Label>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setShowAddWeekDialog(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={addWeek}>Add Week</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-4">
@@ -1083,187 +1085,191 @@ export function UnifiedWeeklyAgenda({
                       Course Agenda
                     </h3>
                     <div className="flex gap-2">
-                      <Dialog
-                        open={showAddActivityDialog && activeWeekForDialog === schedule.week_number}
-                        onOpenChange={(open) => {
-                          setShowAddActivityDialog(open)
-                          if (open) setActiveWeekForDialog(schedule.week_number)
-                        }}
-                      >
-                        <DialogTrigger asChild>
-                          <Button size="sm" variant="outline" className="gap-1 h-7 text-xs bg-transparent">
-                            <Plus className="h-3 w-3" />
-                            Activity {/* This button adds a TimeBlock */}
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>Add Time Block</DialogTitle> {/* Updated Title */}
-                          </DialogHeader>
-                          <div className="space-y-4 mt-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <Label>Time</Label>
-                                <Input
-                                  value={newTimeBlock.time}
-                                  onChange={(e) => setNewTimeBlock({ ...newTimeBlock, time: e.target.value })}
-                                  placeholder="5:00 PM"
-                                />
-                              </div>
-                              <div>
-                                <Label>Duration (min)</Label>
-                                <Input
-                                  type="number"
-                                  value={newTimeBlock.duration}
-                                  onChange={(e) =>
-                                    setNewTimeBlock({ ...newTimeBlock, duration: Number.parseInt(e.target.value) })
-                                  }
-                                  min={5}
-                                  max={180}
-                                />
-                              </div>
-                            </div>
-                            <div>
-                              <Label>Activity Title</Label> {/* Changed from Title to Activity Title */}
-                              <Input
-                                value={newTimeBlock.activity}
-                                onChange={(e) => setNewTimeBlock({ ...newTimeBlock, activity: e.target.value })}
-                                placeholder="e.g., Lecture, Workshop"
-                              />
-                            </div>
-                            <div>
-                              <Label>Type (Color)</Label> {/* This selects the color for the TimeBlock */}
-                              <Select
-                                value={newTimeBlock.color}
-                                onValueChange={(v: string) => setNewTimeBlock({ ...newTimeBlock, color: v })}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="blue">Lecture</SelectItem>
-                                  <SelectItem value="purple">Workshop</SelectItem>
-                                  <SelectItem value="green">Meeting</SelectItem>
-                                  <SelectItem value="amber">Break</SelectItem>
-                                  <SelectItem value="pink">Presentation</SelectItem>
-                                  <SelectItem value="slate">Other</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                          <DialogFooter>
-                            <Button variant="outline" onClick={() => setShowAddActivityDialog(false)}>
-                              Cancel
+                      {!isStudentView && (
+                        <Dialog
+                          open={showAddActivityDialog && activeWeekForDialog === schedule.week_number}
+                          onOpenChange={(open) => {
+                            setShowAddActivityDialog(open)
+                            if (open) setActiveWeekForDialog(schedule.week_number)
+                          }}
+                        >
+                          <DialogTrigger asChild>
+                            <Button size="sm" variant="outline" className="gap-1 bg-transparent">
+                              <Plus className="h-3 w-3" />
+                              Add Activity
                             </Button>
-                            <Button onClick={addTimeBlock}>Add Time Block</Button> {/* Changed function name */}
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-
-                      <Dialog
-                        open={showAddAssignmentDialog && activeWeekForDialog === schedule.week_number}
-                        onOpenChange={(open) => {
-                          setShowAddAssignmentDialog(open)
-                          if (open) setActiveWeekForDialog(schedule.week_number)
-                          if (!open) setAssignmentFile(null) // Reset file upload on close
-                        }}
-                      >
-                        <DialogTrigger asChild>
-                          <Button size="sm" variant="outline" className="gap-1 h-7 text-xs bg-transparent">
-                            <Plus className="h-3 w-3" />
-                            Assignment
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>Add Assignment</DialogTitle>
-                          </DialogHeader>
-                          <div className="space-y-4 mt-4">
-                            <div>
-                              <Label>Title</Label>
-                              <Input
-                                value={newAssignment.title}
-                                onChange={(e) => setNewAssignment({ ...newAssignment, title: e.target.value })}
-                                placeholder="Assignment title"
-                              />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Add Time Block</DialogTitle> {/* Updated Title */}
+                            </DialogHeader>
+                            <div className="space-y-4 mt-4">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <Label>Time</Label>
+                                  <Input
+                                    value={newTimeBlock.time}
+                                    onChange={(e) => setNewTimeBlock({ ...newTimeBlock, time: e.target.value })}
+                                    placeholder="5:00 PM"
+                                  />
+                                </div>
+                                <div>
+                                  <Label>Duration (min)</Label>
+                                  <Input
+                                    type="number"
+                                    value={newTimeBlock.duration}
+                                    onChange={(e) =>
+                                      setNewTimeBlock({ ...newTimeBlock, duration: Number.parseInt(e.target.value) })
+                                    }
+                                    min={5}
+                                    max={180}
+                                  />
+                                </div>
+                              </div>
                               <div>
-                                <Label>Type</Label>
+                                <Label>Activity Title</Label> {/* Changed from Title to Activity Title */}
+                                <Input
+                                  value={newTimeBlock.activity}
+                                  onChange={(e) => setNewTimeBlock({ ...newTimeBlock, activity: e.target.value })}
+                                  placeholder="e.g., Lecture, Workshop"
+                                />
+                              </div>
+                              <div>
+                                <Label>Type (Color)</Label> {/* This selects the color for the TimeBlock */}
                                 <Select
-                                  value={newAssignment.type}
-                                  onValueChange={(v: any) => setNewAssignment({ ...newAssignment, type: v })}
+                                  value={newTimeBlock.color}
+                                  onValueChange={(v: string) => setNewTimeBlock({ ...newTimeBlock, color: v })}
                                 >
                                   <SelectTrigger>
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="reading">Reading</SelectItem>
-                                    <SelectItem value="deliverable">Deliverable</SelectItem>
-                                    <SelectItem value="quiz">Quiz</SelectItem>
-                                    <SelectItem value="presentation">Presentation</SelectItem>
-                                    <SelectItem value="other">Other</SelectItem>
+                                    <SelectItem value="blue">Lecture</SelectItem>
+                                    <SelectItem value="purple">Workshop</SelectItem>
+                                    <SelectItem value="green">Meeting</SelectItem>
+                                    <SelectItem value="amber">Break</SelectItem>
+                                    <SelectItem value="pink">Presentation</SelectItem>
+                                    <SelectItem value="slate">Other</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
-                              <div>
-                                <Label>Due Date</Label>
-                                <Input
-                                  type="date"
-                                  value={newAssignment.dueDate}
-                                  onChange={(e) => setNewAssignment({ ...newAssignment, dueDate: e.target.value })}
-                                />
-                              </div>
                             </div>
-                            <div>
-                              <Label>Description</Label>
-                              <Textarea
-                                value={newAssignment.description}
-                                onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })}
-                                placeholder="Optional description"
-                              />
-                            </div>
+                            <DialogFooter>
+                              <Button variant="outline" onClick={() => setShowAddActivityDialog(false)}>
+                                Cancel
+                              </Button>
+                              <Button onClick={addTimeBlock}>Add Time Block</Button> {/* Changed function name */}
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      )}
 
-                            <div>
-                              <Label>Attachment (Optional)</Label>
-                              <div className="mt-1 border-2 border-dashed border-slate-200 rounded-lg p-3 text-center hover:border-slate-400 transition-colors">
+                      {!isStudentView && (
+                        <Dialog
+                          open={showAddAssignmentDialog && activeWeekForDialog === schedule.week_number}
+                          onOpenChange={(open) => {
+                            setShowAddAssignmentDialog(open)
+                            if (open) setActiveWeekForDialog(schedule.week_number)
+                            if (!open) setAssignmentFile(null) // Reset file upload on close
+                          }}
+                        >
+                          <DialogTrigger asChild>
+                            <Button size="sm" variant="outline" className="gap-1 bg-transparent">
+                              <Plus className="h-3 w-3" />
+                              Add Assignment
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Add Assignment</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-4 mt-4">
+                              <div>
+                                <Label>Title</Label>
                                 <Input
-                                  type="file"
-                                  onChange={(e) => setAssignmentFile(e.target.files?.[0] || null)}
-                                  className="cursor-pointer text-sm"
-                                  accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
+                                  value={newAssignment.title}
+                                  onChange={(e) => setNewAssignment({ ...newAssignment, title: e.target.value })}
+                                  placeholder="Assignment title"
                                 />
-                                {assignmentFile && (
-                                  <p className="text-xs text-muted-foreground mt-1">{assignmentFile.name}</p>
-                                )}
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <Label>Type</Label>
+                                  <Select
+                                    value={newAssignment.type}
+                                    onValueChange={(v: any) => setNewAssignment({ ...newAssignment, type: v })}
+                                  >
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="reading">Reading</SelectItem>
+                                      <SelectItem value="deliverable">Deliverable</SelectItem>
+                                      <SelectItem value="quiz">Quiz</SelectItem>
+                                      <SelectItem value="presentation">Presentation</SelectItem>
+                                      <SelectItem value="other">Other</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div>
+                                  <Label>Due Date</Label>
+                                  <Input
+                                    type="date"
+                                    value={newAssignment.dueDate}
+                                    onChange={(e) => setNewAssignment({ ...newAssignment, dueDate: e.target.value })}
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <Label>Description</Label>
+                                <Textarea
+                                  value={newAssignment.description}
+                                  onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })}
+                                  placeholder="Optional description"
+                                />
+                              </div>
+
+                              <div>
+                                <Label>Attachment (Optional)</Label>
+                                <div className="mt-1 border-2 border-dashed border-slate-200 rounded-lg p-3 text-center hover:border-slate-400 transition-colors">
+                                  <Input
+                                    type="file"
+                                    onChange={(e) => setAssignmentFile(e.target.files?.[0] || null)}
+                                    className="cursor-pointer text-sm"
+                                    accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
+                                  />
+                                  {assignmentFile && (
+                                    <p className="text-xs text-muted-foreground mt-1">{assignmentFile.name}</p>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          <DialogFooter>
-                            <Button
-                              variant="outline"
-                              onClick={() => {
-                                setShowAddAssignmentDialog(false)
-                                setAssignmentFile(null) // Reset file upload on cancel
-                              }}
-                            >
-                              Cancel
-                            </Button>
-                            <Button onClick={addAssignment} disabled={saving || uploadingAssignment}>
-                              {uploadingAssignment ? (
-                                <>
-                                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  Uploading...
-                                </>
-                              ) : saving ? (
-                                "Saving..."
-                              ) : (
-                                "Add Assignment"
-                              )}
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
+                            <DialogFooter>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setShowAddAssignmentDialog(false)
+                                  setAssignmentFile(null) // Reset file upload on cancel
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                              <Button onClick={addAssignment} disabled={saving || uploadingAssignment}>
+                                {uploadingAssignment ? (
+                                  <>
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    Uploading...
+                                  </>
+                                ) : saving ? (
+                                  "Saving..."
+                                ) : (
+                                  "Add Assignment"
+                                )}
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      )}
                       <Button
                         size="sm"
                         variant="ghost"
@@ -1306,91 +1312,62 @@ export function UnifiedWeeklyAgenda({
                           </Button>
                         )}
                       </div>
-                      {!schedule.schedule_data || schedule.schedule_data.length === 0 ? (
-                        <p className="text-sm text-muted-foreground italic">No schedule data available</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {schedule.schedule_data.map((item, index) => (
-                            <div
-                              key={index}
-                              className={`p-3 rounded-lg border ${
-                                item.activity.toLowerCase().includes("break") ||
-                                item.activity.toLowerCase().includes("no class")
-                                  ? "bg-amber-50 border-amber-200"
-                                  : item.activity.toLowerCase().includes("all-hands") ||
-                                      item.activity.toLowerCase().includes("all hands")
-                                    ? "bg-blue-50 border-blue-200"
-                                    : item.activity.toLowerCase().includes("clinic")
-                                      ? "bg-green-50 border-green-200"
-                                      : item.activity.toLowerCase().includes("presentation")
-                                        ? "bg-purple-50 border-purple-200"
-                                        : item.activity.toLowerCase().includes("meeting")
-                                          ? "bg-teal-50 border-teal-200"
-                                          : "bg-slate-50 border-slate-200"
-                              }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  <div className="flex flex-col items-center min-w-[70px]">
-                                    <span className="text-xs font-semibold text-[#3C507D]">{item.start_time}</span>
-                                    <span className="text-[10px] text-muted-foreground">to {item.end_time}</span>
-                                  </div>
-                                  <div className="h-8 w-px bg-slate-200" />
-                                  <div>
-                                    <span className="text-sm font-medium text-slate-800">{item.activity}</span>
-                                    <div className="flex items-center gap-2 mt-1">
-                                      {item.room_assignment && (
-                                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                          <MapPin className="h-3 w-3" />
-                                          {item.room_assignment}
-                                        </span>
-                                      )}
-                                      {item.zoom_link && (
-                                        <a
-                                          href={item.zoom_link}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-                                        >
-                                          <Video className="h-3 w-3" />
-                                          Zoom
-                                        </a>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-xs bg-white">
-                                    {item.minutes} min
-                                  </Badge>
-                                  {!isStudentView && (
-                                    <>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        className="h-6 w-6"
-                                        onClick={() => {
-                                          setEditingScheduleItem({ scheduleId: schedule.id, index, item })
-                                          setShowEditScheduleDialog(true)
-                                        }}
-                                      >
-                                        <Pencil className="h-3 w-3" />
-                                      </Button>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        className="h-6 w-6 text-red-600 hover:text-red-700"
-                                        onClick={() => deleteScheduleDataItem(schedule.id, index)}
-                                      >
-                                        <Trash2 className="h-3 w-3" />
-                                      </Button>
-                                    </>
-                                  )}
-                                </div>
-                              </div>
+                      {/* Schedule Data from Database (fetched from semester_schedule) */}
+                      {schedule.schedule_data && schedule.schedule_data.length > 0 ? (
+                        schedule.schedule_data.map((item: ScheduleDataItem, index: number) => (
+                          <div
+                            key={index}
+                            className={`grid grid-cols-12 gap-0 items-center text-sm border-b last:border-b-0 ${
+                              index % 2 === 0 ? "bg-white" : "bg-slate-50"
+                            }`}
+                          >
+                            <div className="col-span-2 p-3 font-medium text-slate-800">
+                              {item.start_time} - {item.end_time}
                             </div>
-                          ))}
-                        </div>
+                            <div className="col-span-3 p-3 text-slate-600">{item.activity}</div>
+                            <div className="col-span-2 p-3">
+                              <Badge variant="secondary" className="text-xs">
+                                {item.minutes} min
+                              </Badge>
+                            </div>
+                            <div className="col-span-2 p-3 text-slate-600">{item.room_assignment || "-"}</div>
+                            <div className="col-span-2 p-3 text-slate-500 text-xs">
+                              {item.zoom_link ? (
+                                <a
+                                  href={item.zoom_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline flex items-center gap-1"
+                                >
+                                  <Video className="h-3 w-3" /> Join
+                                </a>
+                              ) : (
+                                "-"
+                              )}
+                            </div>
+                            <div className="col-span-1 p-3">
+                              {!isStudentView && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6"
+                                  onClick={() => {
+                                    setEditingScheduleItem({
+                                      scheduleId: schedule.id,
+                                      index,
+                                      item: { ...item },
+                                    })
+                                    setShowEditScheduleDialog(true)
+                                  }}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="p-6 text-center text-muted-foreground">No schedule items for this week</div>
                       )}
                     </div>
 
@@ -1595,211 +1572,72 @@ export function UnifiedWeeklyAgenda({
                       </div>
                     </div>
 
-                    {/* Schedule Grid */}
+                    {/* Schedule Grid - Removed the colored banner header rows */}
                     <div>
                       <div className="grid grid-cols-12 gap-0 bg-slate-100 border-b text-xs font-bold text-slate-600 uppercase tracking-wider">
-                        <div className="col-span-3 p-3">Team</div>
-                        <div className="col-span-4 p-3">Director</div>
+                        <div className="col-span-2 p-3">Time</div>
+                        <div className="col-span-3 p-3">Activity</div>
+                        <div className="col-span-2 p-3">Duration</div>
                         <div className="col-span-2 p-3">Location</div>
                         <div className="col-span-2 p-3">Notes</div>
                         <div className="col-span-1 p-3"></div>
                       </div>
 
-                      {(schedule.activities || []).map(
-                        (
-                          block, // Use 'activities' for TimeBlocks
-                        ) => (
-                          <div key={block.id}>
-                            <div
-                              className={`${getBlockHeaderColor(block.color)} px-3 py-2 flex items-center justify-between`}
-                            >
-                              <div className="flex items-center gap-3">
-                                <span className="text-sm font-bold">{block.time}</span>
-                                <span className="text-white/90 text-sm">{block.activity}</span>{" "}
-                                {/* Use activity as title */}
-                              </div>
-                              <Badge className="bg-white/20 text-white border-0 text-xs">{block.duration} min</Badge>
+                      {schedule.schedule_data && schedule.schedule_data.length > 0 ? (
+                        schedule.schedule_data.map((item: ScheduleDataItem, index: number) => (
+                          <div
+                            key={index}
+                            className={`grid grid-cols-12 gap-0 items-center text-sm border-b last:border-b-0 ${
+                              index % 2 === 0 ? "bg-white" : "bg-slate-50"
+                            }`}
+                          >
+                            <div className="col-span-2 p-3 font-medium text-slate-800">
+                              {item.start_time} - {item.end_time}
                             </div>
-
-                            {/* Render only the first session for each TimeBlock for now, as addActivity created only one. */}
-                            {block.sessions.slice(0, 1).map(
-                              (
-                                session, // Ensured only one session is rendered per block
-                              ) => (
-                                <div
-                                  key={session.id}
-                                  className={`grid grid-cols-12 gap-0 items-center text-sm border-b last:border-b-0 group ${
-                                    (block.id === block.sessions.indexOf(session) % 2) === 0
-                                      ? "bg-white"
-                                      : "bg-slate-50" // Simplified bg logic
-                                  }`}
+                            <div className="col-span-3 p-3 text-slate-600">{item.activity}</div>
+                            <div className="col-span-2 p-3">
+                              <Badge variant="secondary" className="text-xs">
+                                {item.minutes} min
+                              </Badge>
+                            </div>
+                            <div className="col-span-2 p-3 text-slate-600">{item.room_assignment || "-"}</div>
+                            <div className="col-span-2 p-3 text-slate-500 text-xs">
+                              {item.zoom_link ? (
+                                <a
+                                  href={item.zoom_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline flex items-center gap-1"
                                 >
-                                  {/* Editing Mode */}
-                                  {editingScheduleItem?.scheduleId === schedule.id &&
-                                    editingScheduleItem.index === block.sessions.indexOf(session) &&
-                                    editingScheduleItem.scheduleId === schedule.id && (
-                                      <>
-                                        <div className="col-span-3 p-3 font-medium text-slate-800">
-                                          <Input
-                                            value={session.team}
-                                            onChange={(e) =>
-                                              updateSessionInSchedule(
-                                                schedule.week_number,
-                                                block.id,
-                                                session.id,
-                                                "team",
-                                                e.target.value,
-                                              )
-                                            }
-                                            className="h-7 text-xs"
-                                          />
-                                        </div>
-                                        <div className="col-span-4 p-3 text-slate-600">
-                                          <Input
-                                            value={getDirectorName(session.directorInitials)} // Display current name for editing
-                                            onChange={(e) => {
-                                              // Complex logic to update directorInitials based on input if needed
-                                              // For now, assume direct input of initials or a selection mechanism
-                                            }}
-                                            className="h-7 text-xs"
-                                            placeholder="Director Initials (e.g., NV)"
-                                          />
-                                        </div>
-                                        <div className="col-span-2 p-2">
-                                          <div className="flex gap-1">
-                                            <Input
-                                              value={session.room}
-                                              onChange={(e) =>
-                                                updateSessionInSchedule(
-                                                  schedule.week_number,
-                                                  block.id,
-                                                  session.id,
-                                                  "room",
-                                                  e.target.value,
-                                                )
-                                              }
-                                              className="h-7 text-xs"
-                                              placeholder="Room"
-                                            />
-                                            <Input
-                                              value={session.roomNumber}
-                                              onChange={(e) =>
-                                                updateSessionInSchedule(
-                                                  schedule.week_number,
-                                                  block.id,
-                                                  session.id,
-                                                  "roomNumber",
-                                                  e.target.value,
-                                                )
-                                              }
-                                              className="h-7 text-xs w-12"
-                                              placeholder="#"
-                                            />
-                                          </div>
-                                        </div>
-                                        <div className="col-span-2 p-2">
-                                          <Input
-                                            value={session.notes}
-                                            onChange={(e) =>
-                                              updateSessionInSchedule(
-                                                schedule.week_number,
-                                                block.id,
-                                                session.id,
-                                                "notes",
-                                                e.target.value,
-                                              )
-                                            }
-                                            className="h-7 text-xs"
-                                            placeholder="Notes"
-                                          />
-                                        </div>
-                                        <div className="col-span-1 p-2 flex justify-end">
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-7 w-7 p-0"
-                                            onClick={() => {
-                                              // This save logic should update the backend for this specific session
-                                              // For now, it's complex to update just one session without full block update
-                                              // Temporarily, we update the in-memory schedule which will be saved by saveScheduleData if called
-                                              // A more robust solution would involve a dedicated save session API call or batch update
-                                              const updatedSession = {
-                                                ...session,
-                                                team: session.team,
-                                                directorInitials: session.directorInitials,
-                                                room: session.room,
-                                                roomNumber: session.roomNumber,
-                                                notes: session.notes,
-                                              }
-                                              const updatedBlock = {
-                                                ...block,
-                                                sessions: block.sessions.map((s) =>
-                                                  s.id === session.id ? updatedSession : s,
-                                                ),
-                                              }
-                                              const updatedActivities = (schedule.activities || []).map((b) =>
-                                                b.id === block.id ? updatedBlock : b,
-                                              )
-                                              updateSchedule(schedule.id, { activities: updatedActivities })
-                                              setEditingScheduleItem(null) // Exit editing mode
-                                            }}
-                                          >
-                                            <Check className="h-3 w-3 text-green-600" />
-                                          </Button>
-                                        </div>
-                                      </>
-                                    )}
-
-                                  {/* Display Mode */}
-                                  {editingScheduleItem?.scheduleId !== schedule.id ||
-                                    (editingScheduleItem.index !== block.sessions.indexOf(session) && (
-                                      <>
-                                        <div className="col-span-3 p-3 font-medium text-slate-800 text-xs">
-                                          {session.team}
-                                        </div>
-                                        <div className="col-span-4 p-3 text-slate-600">
-                                          {getDirectorName(session.directorInitials) || (
-                                            <span className="text-slate-400 italic">N/A</span>
-                                          )}
-                                        </div>
-                                        <div className="col-span-2 p-3 text-xs">
-                                          <span className="text-slate-600">{session.room}</span>
-                                          <span className="text-slate-400 ml-1">#{session.roomNumber}</span>
-                                        </div>
-                                        <div className="col-span-2 p-3 text-slate-500 text-xs italic">
-                                          {session.notes || "—"}
-                                        </div>
-                                        <div className="col-span-1 p-2 flex justify-end">
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-7 w-7 p-0"
-                                            onClick={() =>
-                                              setEditingScheduleItem({
-                                                scheduleId: schedule.id,
-                                                index: block.sessions.indexOf(session),
-                                                item: {
-                                                  ...session,
-                                                  start_time: block.time,
-                                                  end_time: "",
-                                                  minutes: block.duration,
-                                                  activity: block.activity,
-                                                  room_assignment: session.room,
-                                                  zoom_link: schedule.zoom_link,
-                                                },
-                                              })
-                                            }
-                                          >
-                                            <Pencil className="h-3 w-3 text-slate-400" />
-                                          </Button>
-                                        </div>
-                                      </>
-                                    ))}
-                                </div>
-                              ),
-                            )}
+                                  <Video className="h-3 w-3" /> Join
+                                </a>
+                              ) : (
+                                "-"
+                              )}
+                            </div>
+                            <div className="col-span-1 p-3">
+                              {!isStudentView && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6"
+                                  onClick={() => {
+                                    setEditingScheduleItem({
+                                      scheduleId: schedule.id,
+                                      index,
+                                      item: { ...item },
+                                    })
+                                    setShowEditScheduleDialog(true)
+                                  }}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                        ),
+                        ))
+                      ) : (
+                        <div className="p-6 text-center text-muted-foreground">No schedule items for this week</div>
                       )}
                     </div>
                   </div>

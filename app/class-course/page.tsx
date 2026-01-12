@@ -129,6 +129,7 @@ interface Announcement {
   priority: "high" | "normal"
   clinicId: string | null
   clinicName: string | null
+  targetAudience?: "students" | "directors"
 }
 
 // Director initials mapping - will be populated from database
@@ -450,6 +451,7 @@ export default function ClassCoursePage() {
   const [newAnnouncementContent, setNewAnnouncementContent] = useState("")
   const [newAnnouncementClinic, setNewAnnouncementClinic] = useState<string>("all")
   const [newAnnouncementPriority, setNewAnnouncementPriority] = useState<"high" | "normal">("normal")
+  const [newAnnouncementAudience, setNewAnnouncementAudience] = useState<"students" | "directors">("students")
   const [postingAnnouncement, setPostingAnnouncement] = useState(false)
   const [clinics, setClinics] = useState<Array<{ id: string; name: string }>>([])
   const { isDemoMode } = useDemoMode()
@@ -944,6 +946,7 @@ export default function ClassCoursePage() {
           clinicId: newAnnouncementClinic === "all" ? null : newAnnouncementClinic,
           priority: newAnnouncementPriority,
           postedBy: "Program Director", // This could be dynamic based on logged in user
+          targetAudience: newAnnouncementAudience,
         }),
       })
 
@@ -955,6 +958,7 @@ export default function ClassCoursePage() {
         setNewAnnouncementContent("")
         setNewAnnouncementClinic("all")
         setNewAnnouncementPriority("normal")
+        setNewAnnouncementAudience("students")
       } else {
         const error = await res.json()
         alert(error.error || "Failed to post announcement")
@@ -1445,6 +1449,26 @@ export default function ClassCoursePage() {
                             </SelectContent>
                           </Select>
                         </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="announcement-audience">Target Audience</Label>
+                          <Select
+                            value={newAnnouncementAudience}
+                            onValueChange={(v) => setNewAnnouncementAudience(v as "students" | "directors")}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select audience" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="students">All Students</SelectItem>
+                              <SelectItem value="directors">Directors & Admins Only</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            {newAnnouncementAudience === "directors"
+                              ? "Only directors and admins will see this announcement"
+                              : "Students in the selected clinic(s) will receive this notification"}
+                          </p>
+                        </div>
                         <Button
                           className="w-full gap-2"
                           onClick={handlePostAnnouncement}
@@ -1501,6 +1525,14 @@ export default function ClassCoursePage() {
                               {!announcement.clinicId && (
                                 <Badge variant="outline" className="text-xs">
                                   All Clinics
+                                </Badge>
+                              )}
+                              {announcement.targetAudience === "directors" && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs bg-amber-50 text-amber-700 border-amber-300"
+                                >
+                                  Directors Only
                                 </Badge>
                               )}
                             </div>

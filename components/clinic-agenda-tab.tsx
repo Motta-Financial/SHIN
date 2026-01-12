@@ -127,29 +127,37 @@ export function ClinicAgendaTab({
       try {
         const supabase = createClient()
 
-        // First get director by email
-        const { data: director, error: directorError } = await supabase
+        const { data: directors, error: directorError } = await supabase
           .from("directors")
           .select("id, full_name, clinic_id")
           .eq("email", email)
-          .single()
+          .limit(1)
 
-        if (directorError || !director) {
+        if (directorError) {
           console.error("Error fetching director:", directorError)
           setLoadingDirector(false)
           return
         }
 
+        const director = directors?.[0]
+        if (!director) {
+          console.log("[v0] No director found for email:", email)
+          setLoadingDirector(false)
+          return
+        }
+
         // Then get clinic name
-        const { data: clinic, error: clinicError } = await supabase
+        const { data: clinics, error: clinicError } = await supabase
           .from("clinics")
           .select("id, name")
           .eq("id", director.clinic_id)
-          .single()
+          .limit(1)
 
         if (clinicError) {
           console.error("Error fetching clinic:", clinicError)
         }
+
+        const clinic = clinics?.[0]
 
         setDirectorInfo({
           id: director.id,

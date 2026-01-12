@@ -18,20 +18,13 @@ function getSupabaseAdmin() {
 export async function GET(request: NextRequest) {
   try {
     const supabaseAdmin = getSupabaseAdmin()
+    const { searchParams } = new URL(request.url)
+    const audience = searchParams.get("audience") || "students"
 
-    // Fetch announcements from notifications table where type is 'announcement' and target is students
-    const { data: notifications, error } = await supabaseAdmin
-      .from("notifications")
-      .select(`
-        id,
-        title,
-        message,
-        clinic_id,
-        created_at,
-        type
-      `)
-      .eq("type", "announcement")
-      .eq("target_audience", "students")
+    const { data: announcementsData, error } = await supabaseAdmin
+      .from("announcements")
+      .select("*")
+      .in("target_audience", audience === "all" ? ["students", "directors"] : [audience])
       .order("created_at", { ascending: false })
       .limit(50)
 
@@ -41,7 +34,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch clinic names for announcements that have clinic_id
-    const clinicIds = [...new Set(notifications?.filter((n) => n.clinic_id).map((n) => n.clinic_id))]
+    const clinicIds = [...new Set(announcementsData?.filter((a) => a.clinic_id).map((a) => a.clinic_id))]
     let clinicMap: Record<string, string> = {}
 
     if (clinicIds.length > 0) {
@@ -52,16 +45,17 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Transform notifications to announcements format
-    const announcements = (notifications || []).map((n) => ({
-      id: n.id,
-      title: n.title,
-      content: n.message,
-      postedBy: "Program Director",
-      postedAt: n.created_at,
-      priority: n.title?.toLowerCase().includes("important") ? "high" : "normal",
-      clinicId: n.clinic_id,
-      clinicName: n.clinic_id ? clinicMap[n.clinic_id] || null : null,
+    // Transform to expected format
+    const announcements = (announcementsData || []).map((a) => ({
+      id: a.id,
+      title: a.title,
+      content: a.content,
+      postedBy: a.posted_by || "Program Director",
+      postedAt: a.created_at,
+      priority: a.priority || "normal",
+      clinicId: a.clinic_id,
+      clinicName: a.clinic_id ? clinicMap[a.clinic_id] || null : null,
+      targetAudience: a.target_audience,
     }))
 
     return NextResponse.json({ announcements })
@@ -76,7 +70,7 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = getSupabaseAdmin()
 
     const body = await request.json()
-    const { title, content, clinicId, priority, postedBy } = body
+    const { title, content, clinicId, priority, postedBy, targetAudience } = body
 
     if (!title || !content) {
       return NextResponse.json({ error: "Title and content are required" }, { status: 400 })
@@ -89,39 +83,39 @@ export async function POST(request: NextRequest) {
       clinicName = clinic?.name || null
     }
 
-    // Create the announcement notification for students
-    const { data: notification, error: notificationError } = await supabaseAdmin
-      .from("notifications")
+    const { data: announcement, error: announcementError } = await supabaseAdmin
+      .from("announcements")
       .insert({
-        type: "announcement",
         title: priority === "high" ? `[Important] ${title}` : title,
-        message: content,
+        content: content,
+        posted_by: postedBy || "Program Director",
+        priority: priority || "normal",
         clinic_id: clinicId || null,
-        target_audience: "students",
-        is_read: false,
+        target_audience: targetAudience || "students",
         created_at: new Date().toISOString(),
       })
       .select()
       .single()
 
-    if (notificationError) {
-      console.error("Error creating announcement:", notificationError)
-      return NextResponse.json({ error: notificationError.message }, { status: 500 })
+    if (announcementError) {
+      console.error("Error creating announcement:", announcementError)
+      return NextResponse.json({ error: announcementError.message }, { status: 500 })
     }
 
     // Return the created announcement
-    const announcement = {
-      id: notification.id,
+    const result = {
+      id: announcement.id,
       title: title,
       content: content,
       postedBy: postedBy || "Program Director",
-      postedAt: notification.created_at,
+      postedAt: announcement.created_at,
       priority: priority || "normal",
       clinicId: clinicId || null,
       clinicName: clinicName,
+      targetAudience: targetAudience || "students",
     }
 
-    return NextResponse.json({ success: true, announcement })
+    return NextResponse.json({ success: true, announcement: result })
   } catch (error) {
     console.error("Error in announcements POST:", error)
     return NextResponse.json({ error: "Failed to create announcement" }, { status: 500 })

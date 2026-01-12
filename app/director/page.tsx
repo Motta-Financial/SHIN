@@ -8,10 +8,30 @@ import { ClinicPerformance } from "@/components/clinic-performance"
 import { WeeklyProgramSummary } from "@/components/weekly-program-summary"
 import { DirectorNotifications } from "@/components/director-notifications"
 import { ClinicView } from "@/components/clinic-view"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { OnboardingAgreements } from "@/components/onboarding-agreements"
-import { BarChart3, FileText, Users, Clock, Briefcase, Calendar, Building2 } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Progress } from "@/components/ui/progress"
+import {
+  BarChart3,
+  FileText,
+  Users,
+  Clock,
+  Briefcase,
+  Calendar,
+  Building2,
+  CheckCircle2,
+  AlertCircle,
+  ChevronRight,
+  TrendingUp,
+  MessageSquare,
+  ExternalLink,
+  AlertTriangle,
+  UserCheck,
+  Bell,
+} from "lucide-react"
 import { useDirectors } from "@/hooks/use-directors"
 import { useDemoMode } from "@/contexts/demo-mode-context"
 import { useUserRole, canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
@@ -200,6 +220,44 @@ export default function DirectorDashboard() {
   const [isLoading, setIsLoading] = useState(true)
   const [signedAgreements, setSignedAgreements] = useState<string[]>([])
   const [activeSemesterId, setActiveSemesterId] = useState<string | null>(null) // Added for semesterId
+  const [debriefsData, setDebriefsData] = useState<{
+    total: number
+    pending: number
+    reviewed: number
+    recentDebriefs: any[]
+    byClient: Record<string, number>
+    byWeek: Record<number, number>
+  }>({
+    total: 0,
+    pending: 0,
+    reviewed: 0,
+    recentDebriefs: [],
+    byClient: {},
+    byWeek: {},
+  })
+  const [scheduleData, setScheduleData] = useState<{
+    currentWeek: any
+    upcomingWeeks: any[]
+    assignments: any[]
+  }>({
+    currentWeek: null,
+    upcomingWeeks: [],
+    assignments: [],
+  })
+
+  const [overviewData, setOverviewData] = useState<{
+    urgentItems: Array<{ type: string; message: string; count?: number; action?: string }>
+    attendanceSummary: { present: number; absent: number; rate: number }
+    recentClientActivity: Array<{ client: string; activity: string; time: string; type: string }>
+    studentQuestions: Array<{ student: string; question: string; time: string; answered: boolean }>
+    weeklyProgress: { hoursTarget: number; hoursActual: number; debriefsExpected: number; debriefsSubmitted: number }
+  }>({
+    urgentItems: [],
+    attendanceSummary: { present: 0, absent: 0, rate: 0 },
+    recentClientActivity: [],
+    studentQuestions: [],
+    weeklyProgress: { hoursTarget: 0, hoursActual: 0, debriefsExpected: 0, debriefsSubmitted: 0 },
+  })
 
   useEffect(() => {
     if (roleLoading) return
@@ -274,6 +332,195 @@ export default function DirectorDashboard() {
 
     fetchStats()
   }, [selectedWeeks, selectedDirectorId])
+
+  useEffect(() => {
+    async function fetchDebriefsData() {
+      try {
+        const response = await fetch("/api/supabase/debriefs?semesterId=a1b2c3d4-e5f6-7890-abcd-202601120000")
+        const data = await response.json()
+        if (data.success && data.debriefs) {
+          const debriefs = data.debriefs
+
+          // Filter by director if selected
+          const filteredDebriefs =
+            selectedDirectorId && selectedDirectorId !== "all"
+              ? debriefs.filter((d: any) => {
+                  // Match by clinic or client director
+                  return true // For now include all, can be enhanced with director filtering
+                })
+              : debriefs
+
+          const pending = filteredDebriefs.filter((d: any) => d.status === "pending" || !d.status).length
+          const reviewed = filteredDebriefs.filter((d: any) => d.status === "reviewed").length
+
+          // Group by client
+          const byClient: Record<string, number> = {}
+          filteredDebriefs.forEach((d: any) => {
+            const client = d.client_name || "Unknown"
+            byClient[client] = (byClient[client] || 0) + 1
+          })
+
+          // Group by week
+          const byWeek: Record<number, number> = {}
+          filteredDebriefs.forEach((d: any) => {
+            const week = d.week_number || 0
+            byWeek[week] = (byWeek[week] || 0) + 1
+          })
+
+          // Get recent debriefs (last 5)
+          const recentDebriefs = filteredDebriefs
+            .sort(
+              (a: any, b: any) =>
+                new Date(b.date_submitted || b.created_at).getTime() -
+                new Date(a.date_submitted || a.created_at).getTime(),
+            )
+            .slice(0, 5)
+
+          setDebriefsData({
+            total: filteredDebriefs.length,
+            pending,
+            reviewed,
+            recentDebriefs,
+            byClient,
+            byWeek,
+          })
+        }
+      } catch (error) {
+        console.error("Error fetching debriefs data:", error)
+      }
+    }
+    fetchDebriefsData()
+  }, [selectedDirectorId])
+
+  useEffect(() => {
+    async function fetchScheduleData() {
+      try {
+        const response = await fetch("/api/semester-schedule?semester=Spring%202026")
+        const data = await response.json()
+        if (data.schedules) {
+          const schedules = data.schedules
+          const today = new Date()
+
+          // Find current week
+          const currentWeek = schedules.find((s: any) => {
+            const start = new Date(s.week_start)
+            const end = new Date(s.week_end)
+            return today >= start && today <= end
+          })
+
+          // Get upcoming weeks (next 3)
+          const upcomingWeeks = schedules.filter((s: any) => new Date(s.week_start) > today).slice(0, 3)
+
+          // Collect all assignments from all weeks
+          const allAssignments = schedules
+            .flatMap((s: any) => (s.assignments || []).map((a: any) => ({ ...a, week_number: s.week_number })))
+            .filter((a: any) => new Date(a.dueDate) >= today)
+            .sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+            .slice(0, 5)
+
+          setScheduleData({
+            currentWeek,
+            upcomingWeeks,
+            assignments: allAssignments,
+          })
+        }
+      } catch (error) {
+        console.error("Error fetching schedule data:", error)
+      }
+    }
+    fetchScheduleData()
+  }, [])
+
+  useEffect(() => {
+    async function fetchOverviewData() {
+      try {
+        // Fetch attendance data
+        const attendanceRes = await fetch("/api/attendance")
+        const attendanceData = await attendanceRes.json()
+
+        // Fetch announcements for recent activity
+        const announcementsRes = await fetch("/api/announcements")
+        const announcementsData = await announcementsRes.json()
+
+        // Fetch client meetings
+        const meetingsRes = await fetch("/api/scheduled-client-meetings")
+        const meetingsData = await meetingsRes.json()
+
+        // Calculate attendance summary from current week
+        const currentWeekAttendance =
+          attendanceData.records?.filter((r: any) => {
+            if (!r.date) return false
+            const recordDate = new Date(r.date)
+            const now = new Date()
+            const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+            return recordDate >= weekAgo && recordDate <= now
+          }) || []
+
+        const presentCount = currentWeekAttendance.filter((r: any) => r.status === "present").length
+        const totalCount = currentWeekAttendance.length || 1
+        const attendanceRate = Math.round((presentCount / totalCount) * 100)
+
+        // Build urgent items
+        const urgentItems: Array<{ type: string; message: string; count?: number; action?: string }> = []
+
+        if (debriefsData.pending > 0) {
+          urgentItems.push({
+            type: "warning",
+            message: `${debriefsData.pending} debrief${debriefsData.pending > 1 ? "s" : ""} pending review`,
+            count: debriefsData.pending,
+            action: "Review Now",
+          })
+        }
+
+        if (attendanceRate < 80 && totalCount > 0) {
+          urgentItems.push({
+            type: "alert",
+            message: `Attendance rate at ${attendanceRate}% this week`,
+            action: "View Details",
+          })
+        }
+
+        // Build recent client activity from meetings and announcements
+        const recentActivity: Array<{ client: string; activity: string; time: string; type: string }> = []
+
+        meetingsData.meetings?.slice(0, 3).forEach((meeting: any) => {
+          recentActivity.push({
+            client: meeting.client_name || "Client",
+            activity: `Scheduled meeting - Week ${meeting.week_number}`,
+            time: meeting.start_time || "",
+            type: "meeting",
+          })
+        })
+
+        // Calculate weekly progress
+        const expectedDebriefs = quickStats.activeStudents || 0
+        const weeklyProgress = {
+          hoursTarget: (quickStats.activeStudents || 0) * 3, // Assume 3 hours target per student
+          hoursActual: quickStats.totalHours || 0,
+          debriefsExpected: expectedDebriefs,
+          debriefsSubmitted: quickStats.debriefsSubmitted || 0,
+        }
+
+        setOverviewData({
+          urgentItems,
+          attendanceSummary: {
+            present: presentCount,
+            absent: totalCount - presentCount,
+            rate: attendanceRate,
+          },
+          recentClientActivity: recentActivity,
+          studentQuestions: [],
+          weeklyProgress,
+        })
+      } catch (error) {
+        console.error("Error fetching overview data:", error)
+      }
+    }
+
+    if (!isLoading) {
+      fetchOverviewData()
+    }
+  }, [isLoading, quickStats, debriefsData])
 
   const handleCurrentWeekDetected = (currentWeek: string) => {
     if (!currentWeekSetRef.current && selectedWeeks.length === 0) {
@@ -442,53 +689,314 @@ export default function DirectorDashboard() {
                 />
               )}
 
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total Hours</CardTitle>
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{quickStats.totalHours}</div>
-                    <p className="text-xs text-muted-foreground">
-                      {currentDirector ? "Your students this period" : "This period"}
-                    </p>
+              {/* Urgent Items / Alerts Banner */}
+              {overviewData.urgentItems.length > 0 && (
+                <Card className="border-amber-200 bg-amber-50">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center">
+                        <AlertTriangle className="h-5 w-5 text-amber-600" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-amber-900">Needs Your Attention</h3>
+                        <div className="flex flex-wrap gap-4 mt-1">
+                          {overviewData.urgentItems.map((item, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-sm text-amber-800">
+                              <span>{item.message}</span>
+                              {item.action && (
+                                <Button variant="link" size="sm" className="h-auto p-0 text-amber-700 font-medium">
+                                  {item.action} <ChevronRight className="h-3 w-3 ml-1" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Active Students</CardTitle>
-                    <Users className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{quickStats.activeStudents}</div>
-                    <p className="text-xs text-muted-foreground">Submitted debriefs</p>
+              )}
+
+              {/* Quick Stats Row - Redesigned for faster scanning */}
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">Hours Logged</p>
+                        <p className="text-3xl font-bold text-blue-900 mt-1">{quickStats.totalHours}</p>
+                        <p className="text-xs text-blue-600 mt-1">
+                          {overviewData.weeklyProgress.hoursTarget > 0
+                            ? `${Math.round((quickStats.totalHours / overviewData.weeklyProgress.hoursTarget) * 100)}% of target`
+                            : "This period"}
+                        </p>
+                      </div>
+                      <div className="h-12 w-12 rounded-full bg-blue-200/50 flex items-center justify-center">
+                        <Clock className="h-6 w-6 text-blue-600" />
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Active Clients</CardTitle>
-                    <Briefcase className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{quickStats.activeClients}</div>
-                    <p className="text-xs text-muted-foreground">
-                      {currentDirector ? "Your clients with activity" : "With activity"}
-                    </p>
+
+                <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 border-emerald-200">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-emerald-600 uppercase tracking-wide">Students Active</p>
+                        <p className="text-3xl font-bold text-emerald-900 mt-1">{quickStats.activeStudents}</p>
+                        <p className="text-xs text-emerald-600 mt-1">Submitted work</p>
+                      </div>
+                      <div className="h-12 w-12 rounded-full bg-emerald-200/50 flex items-center justify-center">
+                        <Users className="h-6 w-6 text-emerald-600" />
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Debriefs</CardTitle>
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{quickStats.debriefsSubmitted}</div>
-                    <p className="text-xs text-muted-foreground">This period</p>
+
+                <Card className="bg-gradient-to-br from-purple-50 to-purple-100/50 border-purple-200">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-purple-600 uppercase tracking-wide">Active Clients</p>
+                        <p className="text-3xl font-bold text-purple-900 mt-1">{quickStats.activeClients}</p>
+                        <p className="text-xs text-purple-600 mt-1">With activity</p>
+                      </div>
+                      <div className="h-12 w-12 rounded-full bg-purple-200/50 flex items-center justify-center">
+                        <Briefcase className="h-6 w-6 text-purple-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-amber-50 to-amber-100/50 border-amber-200">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-amber-600 uppercase tracking-wide">Debriefs</p>
+                        <p className="text-3xl font-bold text-amber-900 mt-1">{quickStats.debriefsSubmitted}</p>
+                        <p className="text-xs text-amber-600 mt-1">
+                          {debriefsData.pending > 0 ? `${debriefsData.pending} pending review` : "All reviewed"}
+                        </p>
+                      </div>
+                      <div className="h-12 w-12 rounded-full bg-amber-200/50 flex items-center justify-center">
+                        <FileText className="h-6 w-6 text-amber-600" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-slate-50 to-slate-100/50 border-slate-200">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Attendance</p>
+                        <p className="text-3xl font-bold text-slate-900 mt-1">{overviewData.attendanceSummary.rate}%</p>
+                        <p className="text-xs text-slate-600 mt-1">This week</p>
+                      </div>
+                      <div className="h-12 w-12 rounded-full bg-slate-200/50 flex items-center justify-center">
+                        <UserCheck className="h-6 w-6 text-slate-600" />
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               </div>
 
+              {/* Two Column Layout: Clinic Health & Activity Feed */}
+              <div className="grid gap-6 lg:grid-cols-3">
+                {/* Clinic Health Summary - 2 columns */}
+                <div className="lg:col-span-2 space-y-4">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="text-lg">Clinic Health</CardTitle>
+                          <CardDescription>Quick overview of your clinic's performance</CardDescription>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => router.push("/my-clinic")}>
+                          View Details <ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        {/* Weekly Progress */}
+                        <div className="space-y-3 p-4 rounded-lg bg-slate-50">
+                          <h4 className="font-medium text-sm flex items-center gap-2">
+                            <TrendingUp className="h-4 w-4 text-blue-500" />
+                            Weekly Progress
+                          </h4>
+                          <div className="space-y-2">
+                            <div>
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="text-muted-foreground">Hours Logged</span>
+                                <span className="font-medium">
+                                  {quickStats.totalHours} / {overviewData.weeklyProgress.hoursTarget || "—"} target
+                                </span>
+                              </div>
+                              <Progress
+                                value={
+                                  overviewData.weeklyProgress.hoursTarget > 0
+                                    ? Math.min(
+                                        (quickStats.totalHours / overviewData.weeklyProgress.hoursTarget) * 100,
+                                        100,
+                                      )
+                                    : 0
+                                }
+                                className="h-2"
+                              />
+                            </div>
+                            <div>
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="text-muted-foreground">Debriefs Submitted</span>
+                                <span className="font-medium">
+                                  {quickStats.debriefsSubmitted} / {overviewData.weeklyProgress.debriefsExpected || "—"}{" "}
+                                  expected
+                                </span>
+                              </div>
+                              <Progress
+                                value={
+                                  overviewData.weeklyProgress.debriefsExpected > 0
+                                    ? Math.min(
+                                        (quickStats.debriefsSubmitted / overviewData.weeklyProgress.debriefsExpected) *
+                                          100,
+                                        100,
+                                      )
+                                    : 0
+                                }
+                                className="h-2"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Student Activity Summary */}
+                        <div className="space-y-3 p-4 rounded-lg bg-slate-50">
+                          <h4 className="font-medium text-sm flex items-center gap-2">
+                            <Users className="h-4 w-4 text-emerald-500" />
+                            Student Activity
+                          </h4>
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-muted-foreground">Active this week</span>
+                              <Badge variant="secondary">{quickStats.activeStudents} students</Badge>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-muted-foreground">Attendance rate</span>
+                              <Badge
+                                variant={overviewData.attendanceSummary.rate >= 80 ? "default" : "destructive"}
+                                className={
+                                  overviewData.attendanceSummary.rate >= 80 ? "bg-emerald-100 text-emerald-700" : ""
+                                }
+                              >
+                                {overviewData.attendanceSummary.rate}%
+                              </Badge>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm text-muted-foreground">Avg hours/student</span>
+                              <Badge variant="secondary">
+                                {quickStats.activeStudents > 0
+                                  ? (quickStats.totalHours / quickStats.activeStudents).toFixed(1)
+                                  : 0}{" "}
+                                hrs
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Client Projects Quick View */}
+                      <div className="mt-4 p-4 rounded-lg bg-slate-50">
+                        <h4 className="font-medium text-sm flex items-center gap-2 mb-3">
+                          <Briefcase className="h-4 w-4 text-purple-500" />
+                          Client Projects
+                        </h4>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {Object.entries(debriefsData.byClient)
+                            .slice(0, 4)
+                            .map(([client, count]) => (
+                              <div key={client} className="flex items-center justify-between p-2 rounded bg-white">
+                                <span className="text-sm truncate max-w-[180px]">{client}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">{count} debriefs</span>
+                                </div>
+                              </div>
+                            ))}
+                          {Object.keys(debriefsData.byClient).length === 0 && (
+                            <p className="text-sm text-muted-foreground col-span-2">No client activity yet</p>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Activity Feed - 1 column */}
+                <div className="space-y-4">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Bell className="h-4 w-4" />
+                          Recent Activity
+                        </CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <Suspense fallback={<div className="text-sm text-muted-foreground">Loading...</div>}>
+                        <DirectorNotifications selectedClinic={selectedDirectorId} compact={true} />
+                      </Suspense>
+                    </CardContent>
+                  </Card>
+
+                  {/* Quick Actions */}
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-lg">Quick Actions</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start gap-2 bg-transparent"
+                        onClick={() => router.push("/debriefs")}
+                      >
+                        <FileText className="h-4 w-4" />
+                        Review Debriefs
+                        {debriefsData.pending > 0 && (
+                          <Badge variant="secondary" className="ml-auto">
+                            {debriefsData.pending}
+                          </Badge>
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start gap-2 bg-transparent"
+                        onClick={() => router.push("/class-course")}
+                      >
+                        <Calendar className="h-4 w-4" />
+                        View Schedule
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start gap-2 bg-transparent"
+                        onClick={() => router.push("/client-engagements")}
+                      >
+                        <Briefcase className="h-4 w-4" />
+                        Client Engagements
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start gap-2 bg-transparent"
+                        onClick={() => router.push("/roster")}
+                      >
+                        <Users className="h-4 w-4" />
+                        View Roster
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+
+              {/* Detailed Performance Section */}
               <div className="grid gap-6 lg:grid-cols-2">
                 <Suspense fallback={<div>Loading performance...</div>}>
                   <ClinicPerformance
@@ -497,12 +1005,6 @@ export default function DirectorDashboard() {
                     directorId={selectedDirectorId}
                   />
                 </Suspense>
-                <Suspense fallback={<div>Loading notifications...</div>}>
-                  <DirectorNotifications />
-                </Suspense>
-              </div>
-
-              <div className="grid gap-6 lg:grid-cols-2">
                 <Suspense fallback={<div>Loading summary...</div>}>
                   <WeeklyProgramSummary
                     selectedClinic={selectedDirectorId}
@@ -517,24 +1019,323 @@ export default function DirectorDashboard() {
               <ClinicView selectedClinic={selectedDirectorId} selectedWeeks={selectedWeeks} />
             </TabsContent>
 
-            <TabsContent value="debriefs">
+            <TabsContent value="debriefs" className="space-y-6">
+              {/* Debriefs Summary Cards */}
+              <div className="grid gap-4 md:grid-cols-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Debriefs</CardTitle>
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{debriefsData.total}</div>
+                    <p className="text-xs text-muted-foreground">This semester</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Pending Review</CardTitle>
+                    <AlertCircle className="h-4 w-4 text-amber-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-amber-600">{debriefsData.pending}</div>
+                    <p className="text-xs text-muted-foreground">Awaiting your review</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Reviewed</CardTitle>
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600">{debriefsData.reviewed}</div>
+                    <p className="text-xs text-muted-foreground">Completed reviews</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Completion Rate</CardTitle>
+                    <TrendingUp className="h-4 w-4 text-blue-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">
+                      {debriefsData.total > 0 ? Math.round((debriefsData.reviewed / debriefsData.total) * 100) : 0}%
+                    </div>
+                    <Progress
+                      value={debriefsData.total > 0 ? (debriefsData.reviewed / debriefsData.total) * 100 : 0}
+                      className="h-2 mt-2"
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                {/* Recent Debriefs */}
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle>Recent Debriefs</CardTitle>
+                      <CardDescription>Latest submissions from your students</CardDescription>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => router.push("/debriefs")}>
+                      View All <ExternalLink className="ml-2 h-3 w-3" />
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {debriefsData.recentDebriefs.length === 0 ? (
+                      <p className="text-muted-foreground text-sm">No recent debriefs</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {debriefsData.recentDebriefs.map((debrief: any, index: number) => (
+                          <div
+                            key={debrief.id || index}
+                            className="flex items-center justify-between p-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                <FileText className="h-4 w-4 text-primary" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium">
+                                  {debrief.student_email?.split("@")[0] || "Student"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {debrief.client_name || "Client"} • Week {debrief.week_number}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                variant={debrief.status === "reviewed" ? "default" : "secondary"}
+                                className="text-xs"
+                              >
+                                {debrief.status || "pending"}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">{debrief.hours_worked}h</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Debriefs by Client */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Debriefs by Client</CardTitle>
+                    <CardDescription>Distribution across your client projects</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {Object.keys(debriefsData.byClient).length === 0 ? (
+                      <p className="text-muted-foreground text-sm">No data available</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {Object.entries(debriefsData.byClient)
+                          .sort(([, a], [, b]) => b - a)
+                          .slice(0, 5)
+                          .map(([client, count]) => (
+                            <div key={client} className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Briefcase className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-sm">{client}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Progress value={(count / debriefsData.total) * 100} className="w-20 h-2" />
+                                <span className="text-sm font-medium w-8 text-right">{count}</span>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Questions & Updates Section */}
               <Card>
-                <CardHeader>
-                  <CardTitle>Debrief Management</CardTitle>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <MessageSquare className="h-5 w-5" />
+                      Student Questions & Updates
+                    </CardTitle>
+                    <CardDescription>Questions and updates from recent debriefs</CardDescription>
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-muted-foreground">Debrief review and management coming soon...</p>
+                  {debriefsData.recentDebriefs.filter((d: any) => d.questions).length === 0 ? (
+                    <p className="text-muted-foreground text-sm">No questions or updates this period</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {debriefsData.recentDebriefs
+                        .filter((d: any) => d.questions)
+                        .slice(0, 3)
+                        .map((debrief: any, index: number) => (
+                          <div key={index} className="p-3 rounded-lg border bg-amber-50/50 border-amber-200">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Badge variant="outline" className="text-xs">
+                                Week {debrief.week_number}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {debrief.student_email?.split("@")[0]}
+                              </span>
+                            </div>
+                            <p className="text-sm">{debrief.questions}</p>
+                          </div>
+                        ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
 
-            <TabsContent value="schedule">
+            <TabsContent value="schedule" className="space-y-6">
+              <div className="grid gap-6 lg:grid-cols-3">
+                {/* Current Week */}
+                <Card className="lg:col-span-2">
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle>Current Week</CardTitle>
+                      <CardDescription>
+                        {scheduleData.currentWeek
+                          ? `${scheduleData.currentWeek.week_label} (${new Date(scheduleData.currentWeek.week_start).toLocaleDateString()} - ${new Date(scheduleData.currentWeek.week_end).toLocaleDateString()})`
+                          : "No active week"}
+                      </CardDescription>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => router.push("/class-course")}>
+                      Full Schedule <ExternalLink className="ml-2 h-3 w-3" />
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {scheduleData.currentWeek ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-4">
+                          <Badge variant="secondary" className="text-sm">
+                            {scheduleData.currentWeek.session_focus || "No focus set"}
+                          </Badge>
+                          {scheduleData.currentWeek.is_break && (
+                            <Badge variant="outline" className="text-amber-600 border-amber-300">
+                              Break Week
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Schedule Data Summary */}
+                        {scheduleData.currentWeek.schedule_data &&
+                          scheduleData.currentWeek.schedule_data.length > 0 && (
+                            <div className="space-y-2">
+                              <p className="text-sm font-medium text-muted-foreground">Today's Sessions:</p>
+                              {scheduleData.currentWeek.schedule_data.slice(0, 4).map((item: any, index: number) => (
+                                <div key={index} className="flex items-center justify-between p-2 rounded bg-slate-50">
+                                  <div className="flex items-center gap-2">
+                                    <Clock className="h-4 w-4 text-muted-foreground" />
+                                    <span className="text-sm font-medium">
+                                      {item.start_time} - {item.end_time}
+                                    </span>
+                                    <span className="text-sm text-muted-foreground">{item.activity}</span>
+                                  </div>
+                                  <Badge variant="outline" className="text-xs">
+                                    {item.minutes} min
+                                  </Badge>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                        {scheduleData.currentWeek.notes && (
+                          <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+                            <p className="text-sm text-blue-800">{scheduleData.currentWeek.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">No schedule data for current week</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Upcoming Weeks */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Upcoming Weeks</CardTitle>
+                    <CardDescription>Next 3 weeks preview</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {scheduleData.upcomingWeeks.length === 0 ? (
+                      <p className="text-muted-foreground text-sm">No upcoming weeks</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {scheduleData.upcomingWeeks.map((week: any, index: number) => (
+                          <div
+                            key={week.id || index}
+                            className="p-3 rounded-lg border hover:bg-slate-50 transition-colors cursor-pointer"
+                            onClick={() => router.push("/class-course")}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium text-sm">{week.week_label}</span>
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {new Date(week.week_start).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                              })}{" "}
+                              -{" "}
+                              {new Date(week.week_end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            </p>
+                            {week.session_focus && (
+                              <Badge variant="secondary" className="mt-2 text-xs">
+                                {week.session_focus}
+                              </Badge>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Upcoming Assignments */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Schedule Management</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5" />
+                    Upcoming Assignments & Deadlines
+                  </CardTitle>
+                  <CardDescription>Assignments due in the coming weeks</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-muted-foreground">Schedule management coming soon...</p>
+                  {scheduleData.assignments.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">No upcoming assignments</p>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                      {scheduleData.assignments.map((assignment: any, index: number) => (
+                        <div key={assignment.id || index} className="p-3 rounded-lg border">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="font-medium text-sm">{assignment.title}</p>
+                              <p className="text-xs text-muted-foreground mt-1">{assignment.description}</p>
+                            </div>
+                            <Badge variant="outline" className="text-xs whitespace-nowrap">
+                              Week {assignment.week_number}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-2 mt-2">
+                            <Calendar className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">
+                              Due:{" "}
+                              {new Date(assignment.dueDate).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                              })}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

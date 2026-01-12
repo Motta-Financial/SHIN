@@ -13,24 +13,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
-import {
-  User,
-  Mail,
-  Phone,
-  Camera,
-  Save,
-  Building2,
-  Calendar,
-  AlertCircle,
-  CheckCircle2,
-  FlaskConical,
-  Settings,
-} from "lucide-react"
-import { useDemoStudent } from "@/hooks/use-demo-student"
-import { useDemoDirector } from "@/hooks/use-demo-director"
-import { useDemoMode } from "@/contexts/demo-mode-context"
+import { User, Mail, Phone, Camera, Save, Building2, Calendar, AlertCircle, CheckCircle2, Settings } from "lucide-react"
+import { useUserRole } from "@/hooks/use-user-role"
 import { useGlobalSemester } from "@/contexts/semester-context"
+import { createClient } from "@/lib/supabase/client"
 
 interface UserProfile {
   id: string
@@ -41,13 +27,11 @@ interface UserProfile {
   bio?: string
   profile_picture_url?: string
   clinic_name?: string
-  role: "student" | "director" | "client"
+  role: "student" | "director" | "client" | "admin"
 }
 
 export default function AccountManagementPage() {
-  const { isDemoMode, setDemoMode, isReady: demoReady } = useDemoMode()
-  const { student: demoStudent } = useDemoStudent()
-  const { director: demoDirector } = useDemoDirector()
+  const { role, userId, email, fullName, clinicId, clinicName, isLoading: authLoading, isAuthenticated } = useUserRole()
   const {
     semesters,
     selectedSemester,
@@ -66,36 +50,128 @@ export default function AccountManagementPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Form state
   const [formData, setFormData] = useState({
     full_name: "",
     phone: "",
     bio: "",
   })
 
-  // Determine user type and ID based on demo mode
-  const userType = demoDirector ? "director" : demoStudent ? "student" : null
-  const userId = demoDirector?.id || demoStudent?.id || null
-
   const isViewingArchived = selectedSemester && activeSemester && selectedSemester.id !== activeSemester.id
 
   useEffect(() => {
     async function fetchProfile() {
-      if (!userId || !userType) {
+      if (authLoading) return
+
+      if (!isAuthenticated || !email) {
         setIsLoading(false)
         return
       }
 
       try {
-        const response = await fetch(`/api/settings/profile?userId=${userId}&userType=${userType}`)
-        if (!response.ok) throw new Error("Failed to fetch profile")
+        const supabase = createClient()
 
-        const data = await response.json()
-        setProfile(data.profile)
+        const { data: directorData, error: directorError } = await supabase
+          .from("directors")
+          .select("id, full_name, email, clinic_id")
+          .eq("email", email)
+          .limit(1)
+
+        if (directorData && directorData.length > 0) {
+          const director = directorData[0]
+          let clinicNameValue = clinicName
+          if (director.clinic_id && !clinicNameValue) {
+            const { data: clinicData } = await supabase
+              .from("clinics")
+              .select("name")
+              .eq("id", director.clinic_id)
+              .limit(1)
+            clinicNameValue = clinicData?.[0]?.name || null
+          }
+
+          setProfile({
+            id: director.id,
+            full_name: director.full_name || fullName || "",
+            email: director.email || email,
+            role: "director",
+            clinic_name: clinicNameValue || undefined,
+          })
+          setFormData({
+            full_name: director.full_name || fullName || "",
+            phone: "",
+            bio: "",
+          })
+          setIsLoading(false)
+          return
+        }
+
+        const { data: studentData, error: studentError } = await supabase
+          .from("students")
+          .select("id, full_name, email, clinic_id")
+          .eq("email", email)
+          .limit(1)
+
+        if (studentData && studentData.length > 0) {
+          const student = studentData[0]
+          let clinicNameValue = null
+          if (student.clinic_id) {
+            const { data: clinicData } = await supabase
+              .from("clinics")
+              .select("name")
+              .eq("id", student.clinic_id)
+              .limit(1)
+            clinicNameValue = clinicData?.[0]?.name || null
+          }
+
+          setProfile({
+            id: student.id,
+            full_name: student.full_name || fullName || "",
+            email: student.email || email,
+            role: "student",
+            clinic_name: clinicNameValue || undefined,
+          })
+          setFormData({
+            full_name: student.full_name || fullName || "",
+            phone: "",
+            bio: "",
+          })
+          setIsLoading(false)
+          return
+        }
+
+        const { data: clientData, error: clientError } = await supabase
+          .from("clients")
+          .select("id, name, email")
+          .eq("email", email)
+          .limit(1)
+
+        if (clientData && clientData.length > 0) {
+          const client = clientData[0]
+          setProfile({
+            id: client.id,
+            full_name: client.name || fullName || "",
+            email: client.email || email,
+            role: "client",
+          })
+          setFormData({
+            full_name: client.name || fullName || "",
+            phone: "",
+            bio: "",
+          })
+          setIsLoading(false)
+          return
+        }
+
+        setProfile({
+          id: userId || "",
+          full_name: fullName || "",
+          email: email,
+          role: (role as "student" | "director" | "client" | "admin") || "student",
+          clinic_name: clinicName || undefined,
+        })
         setFormData({
-          full_name: data.profile.full_name || "",
-          phone: data.profile.phone || "",
-          bio: data.profile.bio || "",
+          full_name: fullName || "",
+          phone: "",
+          bio: "",
         })
       } catch (err) {
         console.error("[v0] Error fetching profile:", err)
@@ -106,14 +182,14 @@ export default function AccountManagementPage() {
     }
 
     fetchProfile()
-  }, [userId, userType])
+  }, [authLoading, isAuthenticated, email, userId, fullName, role, clinicName])
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
   const handleSaveProfile = async () => {
-    if (!userId || !userType) return
+    if (!userId || !role) return
 
     setIsSaving(true)
     setError(null)
@@ -125,7 +201,7 @@ export default function AccountManagementPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId,
-          userType,
+          role,
           ...formData,
         }),
       })
@@ -147,15 +223,13 @@ export default function AccountManagementPage() {
 
   const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file || !userId || !userType) return
+    if (!file || !userId || !role) return
 
-    // Validate file type
     if (!file.type.startsWith("image/")) {
       setError("Please select an image file")
       return
     }
 
-    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       setError("Image must be less than 5MB")
       return
@@ -168,7 +242,7 @@ export default function AccountManagementPage() {
       const formData = new FormData()
       formData.append("file", file)
       formData.append("userId", userId)
-      formData.append("userType", userType)
+      formData.append("role", role)
 
       const response = await fetch("/api/settings/profile/upload-photo", {
         method: "POST",
@@ -207,13 +281,11 @@ export default function AccountManagementPage() {
 
       <div className="pl-52 pt-14">
         <main className="p-6 max-w-4xl mx-auto space-y-6">
-          {/* Page Header */}
           <div>
             <h1 className="text-2xl font-bold text-foreground">Account Management</h1>
             <p className="text-muted-foreground mt-1">Update your profile information and platform settings</p>
           </div>
 
-          {/* Success/Error Messages */}
           {successMessage && (
             <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-green-800">{successMessage}</div>
           )}
@@ -243,14 +315,11 @@ export default function AccountManagementPage() {
           ) : !profile ? (
             <Card>
               <CardContent className="pt-6">
-                <p className="text-muted-foreground text-center py-8">
-                  Please select a user from the demo selector to view account settings.
-                </p>
+                <p className="text-muted-foreground text-center py-8">Please log in to view account settings.</p>
               </CardContent>
             </Card>
           ) : (
             <>
-              {/* Profile Photo Card */}
               <Card>
                 <CardHeader>
                   <div className="flex items-center gap-2">
@@ -292,7 +361,6 @@ export default function AccountManagementPage() {
                 </CardContent>
               </Card>
 
-              {/* Personal Information Card */}
               <Card>
                 <CardHeader>
                   <div className="flex items-center gap-2">
@@ -358,7 +426,6 @@ export default function AccountManagementPage() {
                 </CardContent>
               </Card>
 
-              {/* Account Details Card (Read-only) */}
               <Card>
                 <CardHeader>
                   <div className="flex items-center gap-2">
@@ -383,7 +450,6 @@ export default function AccountManagementPage() {
                 </CardContent>
               </Card>
 
-              {/* Save Button for Profile */}
               <div className="flex justify-end">
                 <Button onClick={handleSaveProfile} disabled={isSaving} className="bg-[#3d4559] hover:bg-[#2d3545]">
                   <Save className="h-4 w-4 mr-2" />
@@ -468,7 +534,6 @@ export default function AccountManagementPage() {
                     </Select>
                   </div>
 
-                  {/* Status Indicator */}
                   {isViewingArchived ? (
                     <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
                       <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
@@ -493,7 +558,6 @@ export default function AccountManagementPage() {
                     </div>
                   ) : null}
 
-                  {/* Semester Info */}
                   {selectedSemester && (
                     <div className="grid grid-cols-2 gap-4 pt-4 border-t">
                       <div>
@@ -518,59 +582,6 @@ export default function AccountManagementPage() {
                                 day: "numeric",
                               })
                             : "Not set"}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <FlaskConical className="h-5 w-5 text-amber-600" />
-                <CardTitle>Demo Mode</CardTitle>
-              </div>
-              <CardDescription>
-                Enable demo mode to test the platform with simulated user selection. When disabled, the platform shows
-                live data based on actual user authentication.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {!demoReady ? (
-                <Skeleton className="h-10 w-full max-w-md" />
-              ) : (
-                <>
-                  <div className="flex items-center justify-between max-w-md">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="demo-mode">Enable Demo Mode</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Shows user selection dropdowns for testing purposes
-                      </p>
-                    </div>
-                    <Switch id="demo-mode" checked={isDemoMode} onCheckedChange={setDemoMode} />
-                  </div>
-
-                  {isDemoMode ? (
-                    <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                      <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
-                      <div>
-                        <p className="font-medium text-amber-800">Demo Mode Active</p>
-                        <p className="text-sm text-amber-700 mt-1">
-                          You can select different users to view the platform from their perspective. This is useful for
-                          testing and demonstrations.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-start gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
-                      <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
-                      <div>
-                        <p className="font-medium text-green-800">Live Mode Active</p>
-                        <p className="text-sm text-green-700 mt-1">
-                          The platform is showing live data. User selection is based on actual authentication.
                         </p>
                       </div>
                     </div>

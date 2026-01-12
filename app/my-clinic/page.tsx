@@ -13,30 +13,38 @@ export default function MyClinicPage() {
   const { directors, isLoading: directorsLoading } = useDirectors()
   const { userId, email, isLoading: userLoading } = useUserRole()
   const [currentDirectorId, setCurrentDirectorId] = useState<string | null>(null)
+  const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
     if (!userLoading && !directorsLoading && directors.length > 0 && email) {
       // Find the director matching the logged-in user's email
       const matchingDirector = directors.find((d) => d.email?.toLowerCase() === email.toLowerCase())
+      console.log("[v0] MyClinic - Looking for director with email:", email)
+      console.log(
+        "[v0] MyClinic - Directors available:",
+        directors.map((d) => ({ id: d.id, email: d.email, clinic: d.clinic })),
+      )
+      console.log("[v0] MyClinic - Matching director found:", matchingDirector)
+
       if (matchingDirector) {
         setCurrentDirectorId(matchingDirector.id)
-        // Only set the initial selection if not already set
-        if (!selectedDirectorId) {
-          setSelectedDirectorId(matchingDirector.id)
-        }
+        setSelectedDirectorId(matchingDirector.id)
+        setIsInitialized(true)
+      } else {
+        // If no matching director (maybe admin viewing), still mark as initialized
+        setIsInitialized(true)
       }
     }
-  }, [userLoading, directorsLoading, directors, email, selectedDirectorId])
+  }, [userLoading, directorsLoading, directors, email])
 
-  const isLoading = directorsLoading || userLoading
+  const isLoading = directorsLoading || userLoading || !isInitialized
 
   const selectedDirector = directors.find((d) => d.id === selectedDirectorId)
   const displayName = selectedDirector
     ? `${selectedDirector.full_name} (${selectedDirector.clinic})`
     : "Select director"
 
-  // Filter directors to only show the current user's director record (if not admin)
-  // Admins can see all directors
+  // Filter directors to only show the current user's director record
   const visibleDirectors = currentDirectorId ? directors.filter((d) => d.id === currentDirectorId) : directors
 
   return (
@@ -54,7 +62,9 @@ export default function MyClinicPage() {
                 <Building2 className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-slate-900">My Clinic</h1>
+                <h1 className="text-2xl font-bold text-slate-900">
+                  {selectedDirector ? `${selectedDirector.clinic} Clinic` : "My Clinic"}
+                </h1>
                 <p className="text-sm text-slate-500">Manage your clinic team, clients, and materials</p>
               </div>
             </div>
@@ -82,7 +92,17 @@ export default function MyClinicPage() {
             )}
           </div>
 
-          <ClinicView selectedClinic={selectedDirectorId} selectedWeeks={[]} />
+          {isLoading ? (
+            <div className="flex items-center justify-center h-64">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : selectedDirectorId ? (
+            <ClinicView selectedClinic={selectedDirectorId} selectedWeeks={[]} />
+          ) : (
+            <div className="flex items-center justify-center h-64 text-muted-foreground">
+              No clinic assigned to your account
+            </div>
+          )}
         </main>
       </div>
     </div>
