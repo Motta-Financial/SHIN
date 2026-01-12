@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2 } from "lucide-react"
+import Image from "next/image"
 
 export default function SignInPage() {
   const [email, setEmail] = useState("")
@@ -107,6 +108,18 @@ export default function SignInPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
       <div className="w-full max-w-md px-4">
+        <div className="mb-6 flex justify-center">
+          <div className="relative w-48 h-48">
+            <Image
+              src="/images/shin-logo-cropped.png"
+              alt="SHIN Logo"
+              fill
+              className="object-contain drop-shadow-lg"
+              priority
+            />
+          </div>
+        </div>
+
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold text-slate-800 mb-2">SEED SHIN Dashboard</h1>
           <p className="text-slate-600">Sign in to your account</p>

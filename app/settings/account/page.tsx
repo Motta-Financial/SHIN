@@ -11,9 +11,22 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { User, Mail, Phone, Camera, Save, Building2, Calendar, AlertCircle, CheckCircle2, Settings } from "lucide-react"
+import {
+  User,
+  Mail,
+  Phone,
+  Camera,
+  Save,
+  Building2,
+  Calendar,
+  AlertCircle,
+  CheckCircle2,
+  Settings,
+  Lock,
+  Eye,
+  EyeOff,
+} from "lucide-react"
 import { useUserRole } from "@/hooks/use-user-role"
 import { useGlobalSemester } from "@/contexts/semester-context"
 import { createClient } from "@/lib/supabase/client"
@@ -56,6 +69,17 @@ export default function AccountManagementPage() {
     bio: "",
   })
 
+  const [showPasswordSection, setShowPasswordSection] = useState(false)
+  const [passwordData, setPasswordData] = useState({
+    newPassword: "",
+    confirmPassword: "",
+  })
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null)
+
   const isViewingArchived = selectedSemester && activeSemester && selectedSemester.id !== activeSemester.id
 
   useEffect(() => {
@@ -72,7 +96,7 @@ export default function AccountManagementPage() {
 
         const { data: directorData, error: directorError } = await supabase
           .from("directors")
-          .select("id, full_name, email, clinic_id")
+          .select("id, full_name, email, clinic_id, phone, bio, profile_picture_url")
           .eq("email", email)
           .limit(1)
 
@@ -92,13 +116,16 @@ export default function AccountManagementPage() {
             id: director.id,
             full_name: director.full_name || fullName || "",
             email: director.email || email,
+            phone: director.phone || "",
+            bio: director.bio || "",
+            profile_picture_url: director.profile_picture_url || "",
             role: "director",
             clinic_name: clinicNameValue || undefined,
           })
           setFormData({
             full_name: director.full_name || fullName || "",
-            phone: "",
-            bio: "",
+            phone: director.phone || "",
+            bio: director.bio || "",
           })
           setIsLoading(false)
           return
@@ -106,7 +133,7 @@ export default function AccountManagementPage() {
 
         const { data: studentData, error: studentError } = await supabase
           .from("students")
-          .select("id, full_name, email, clinic_id")
+          .select("id, full_name, email, clinic_id, phone, bio, profile_picture_url")
           .eq("email", email)
           .limit(1)
 
@@ -126,13 +153,16 @@ export default function AccountManagementPage() {
             id: student.id,
             full_name: student.full_name || fullName || "",
             email: student.email || email,
+            phone: student.phone || "",
+            bio: student.bio || "",
+            profile_picture_url: student.profile_picture_url || "",
             role: "student",
             clinic_name: clinicNameValue || undefined,
           })
           setFormData({
             full_name: student.full_name || fullName || "",
-            phone: "",
-            bio: "",
+            phone: student.phone || "",
+            bio: student.bio || "",
           })
           setIsLoading(false)
           return
@@ -140,7 +170,7 @@ export default function AccountManagementPage() {
 
         const { data: clientData, error: clientError } = await supabase
           .from("clients")
-          .select("id, name, email")
+          .select("id, name, email, phone, profile_picture_url")
           .eq("email", email)
           .limit(1)
 
@@ -150,11 +180,13 @@ export default function AccountManagementPage() {
             id: client.id,
             full_name: client.name || fullName || "",
             email: client.email || email,
+            phone: client.phone || "",
+            profile_picture_url: client.profile_picture_url || "",
             role: "client",
           })
           setFormData({
             full_name: client.name || fullName || "",
-            phone: "",
+            phone: client.phone || "",
             bio: "",
           })
           setIsLoading(false)
@@ -189,7 +221,10 @@ export default function AccountManagementPage() {
   }
 
   const handleSaveProfile = async () => {
-    if (!userId || !role) return
+    if (!profile?.id || !profile?.role) {
+      setError("Profile not loaded")
+      return
+    }
 
     setIsSaving(true)
     setError(null)
@@ -200,22 +235,25 @@ export default function AccountManagementPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId,
-          role,
+          userId: profile.id,
+          userType: profile.role,
           ...formData,
         }),
       })
 
-      if (!response.ok) throw new Error("Failed to update profile")
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to update profile")
+      }
 
       const data = await response.json()
       setProfile(data.profile)
       setSuccessMessage("Profile updated successfully!")
 
       setTimeout(() => setSuccessMessage(null), 3000)
-    } catch (err) {
+    } catch (err: any) {
       console.error("[v0] Error saving profile:", err)
-      setError("Failed to save profile changes")
+      setError(err.message || "Failed to save profile changes")
     } finally {
       setIsSaving(false)
     }
@@ -223,7 +261,7 @@ export default function AccountManagementPage() {
 
   const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file || !userId || !role) return
+    if (!file || !profile?.id || !profile?.role) return
 
     if (!file.type.startsWith("image/")) {
       setError("Please select an image file")
@@ -239,28 +277,74 @@ export default function AccountManagementPage() {
     setError(null)
 
     try {
-      const formData = new FormData()
-      formData.append("file", file)
-      formData.append("userId", userId)
-      formData.append("role", role)
+      const uploadFormData = new FormData()
+      uploadFormData.append("file", file)
+      uploadFormData.append("userId", profile.id)
+      uploadFormData.append("userType", profile.role)
 
       const response = await fetch("/api/settings/profile/upload-photo", {
         method: "POST",
-        body: formData,
+        body: uploadFormData,
       })
 
-      if (!response.ok) throw new Error("Failed to upload photo")
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to upload photo")
+      }
 
       const data = await response.json()
       setProfile((prev) => (prev ? { ...prev, profile_picture_url: data.url } : null))
       setSuccessMessage("Profile photo updated!")
 
       setTimeout(() => setSuccessMessage(null), 3000)
-    } catch (err) {
+    } catch (err: any) {
       console.error("[v0] Error uploading photo:", err)
-      setError("Failed to upload photo")
+      setError(err.message || "Failed to upload photo")
     } finally {
       setIsUploading(false)
+    }
+  }
+
+  const handleChangePassword = async () => {
+    setPasswordError(null)
+    setPasswordSuccess(null)
+
+    if (passwordData.newPassword.length < 6) {
+      setPasswordError("Password must be at least 6 characters")
+      return
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPasswordError("Passwords do not match")
+      return
+    }
+
+    setIsChangingPassword(true)
+
+    try {
+      const response = await fetch("/api/settings/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          newPassword: passwordData.newPassword,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to change password")
+      }
+
+      setPasswordSuccess("Password changed successfully!")
+      setPasswordData({ newPassword: "", confirmPassword: "" })
+      setShowPasswordSection(false)
+
+      setTimeout(() => setPasswordSuccess(null), 3000)
+    } catch (err: any) {
+      console.error("[v0] Error changing password:", err)
+      setPasswordError(err.message || "Failed to change password")
+    } finally {
+      setIsChangingPassword(false)
     }
   }
 
@@ -273,203 +357,286 @@ export default function AccountManagementPage() {
       .slice(0, 2)
   }
 
-  return (
-    <div className="min-h-screen bg-background">
-      <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
-        <MainNavigation />
-      </aside>
+  const getRoleBadgeColor = (role: string) => {
+    switch (role) {
+      case "director":
+        return "bg-blue-100 text-blue-800"
+      case "student":
+        return "bg-green-100 text-green-800"
+      case "client":
+        return "bg-purple-100 text-purple-800"
+      case "admin":
+        return "bg-red-100 text-red-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
 
-      <div className="pl-52 pt-14">
-        <main className="p-6 max-w-4xl mx-auto space-y-6">
+  if (isLoading || authLoading) {
+    return (
+      <div className="flex min-h-screen bg-background">
+        <MainNavigation />
+        <main className="flex-1 p-6 md:p-8 lg:p-10 overflow-auto">
+          <div className="max-w-4xl mx-auto space-y-6">
+            <Skeleton className="h-10 w-64" />
+            <Skeleton className="h-48 w-full" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex min-h-screen bg-background">
+      <MainNavigation />
+      <main className="flex-1 p-6 md:p-8 lg:p-10 overflow-auto">
+        <div className="max-w-4xl mx-auto space-y-6">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Account Management</h1>
-            <p className="text-muted-foreground mt-1">Update your profile information and platform settings</p>
+            <p className="text-muted-foreground">Update your profile information and platform settings</p>
           </div>
 
-          {successMessage && (
-            <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-green-800">{successMessage}</div>
-          )}
-          {error && <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">{error}</div>}
-
-          {isLoading ? (
-            <div className="space-y-6">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-6">
-                    <Skeleton className="h-24 w-24 rounded-full" />
-                    <div className="space-y-2">
-                      <Skeleton className="h-6 w-48" />
-                      <Skeleton className="h-4 w-32" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6 space-y-4">
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                </CardContent>
-              </Card>
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              {error}
             </div>
-          ) : !profile ? (
-            <Card>
-              <CardContent className="pt-6">
-                <p className="text-muted-foreground text-center py-8">Please log in to view account settings.</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Camera className="h-5 w-5 text-[#3d4559]" />
-                    <CardTitle>Profile Photo</CardTitle>
-                  </div>
-                  <CardDescription>Upload a profile photo to personalize your account</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-6">
+          )}
+
+          {successMessage && (
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4" />
+              {successMessage}
+            </div>
+          )}
+
+          {passwordSuccess && (
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4" />
+              {passwordSuccess}
+            </div>
+          )}
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Camera className="h-5 w-5 text-muted-foreground" />
+                <CardTitle>Profile Photo</CardTitle>
+              </div>
+              <CardDescription>Upload a profile photo to personalize your account</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-6">
+                <Avatar className="h-20 w-20">
+                  <AvatarImage src={profile?.profile_picture_url || ""} />
+                  <AvatarFallback className="text-lg">{getInitials(profile?.full_name || "U")}</AvatarFallback>
+                </Avatar>
+                <div className="space-y-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoUpload}
+                    className="hidden"
+                  />
+                  <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                    <Camera className="h-4 w-4 mr-2" />
+                    {isUploading ? "Uploading..." : "Change Photo"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">JPG, PNG or GIF. Max size 5MB.</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <User className="h-5 w-5 text-muted-foreground" />
+                <CardTitle>Personal Information</CardTitle>
+              </div>
+              <CardDescription>Update your personal details and contact information</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="full_name" className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Full Name
+                  </Label>
+                  <Input
+                    id="full_name"
+                    value={formData.full_name}
+                    onChange={(e) => handleInputChange("full_name", e.target.value)}
+                    placeholder="Enter your full name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="flex items-center gap-2">
+                    <Mail className="h-4 w-4" />
+                    Email Address
+                  </Label>
+                  <Input id="email" value={profile?.email || ""} disabled className="bg-muted" />
+                  <p className="text-xs text-muted-foreground">Email cannot be changed</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="flex items-center gap-2">
+                  <Phone className="h-4 w-4" />
+                  Phone Number
+                </Label>
+                <Input
+                  id="phone"
+                  value={formData.phone}
+                  onChange={(e) => handleInputChange("phone", e.target.value)}
+                  placeholder="(555) 123-4567"
+                />
+              </div>
+              {profile?.role !== "client" && (
+                <div className="space-y-2">
+                  <Label htmlFor="bio">Bio</Label>
+                  <Textarea
+                    id="bio"
+                    value={formData.bio}
+                    onChange={(e) => handleInputChange("bio", e.target.value)}
+                    placeholder="Tell us a bit about yourself..."
+                    rows={3}
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-muted-foreground" />
+                <CardTitle>Account Details</CardTitle>
+              </div>
+              <CardDescription>Your account information managed by the system</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">ACCOUNT TYPE</p>
+                <p className="font-medium capitalize">{profile?.role || "Unknown"}</p>
+              </div>
+              {profile?.clinic_name && (
+                <div className="p-4 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">CLINIC</p>
+                  <p className="font-medium">{profile.clinic_name}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Lock className="h-5 w-5 text-muted-foreground" />
+                <CardTitle>Security</CardTitle>
+              </div>
+              <CardDescription>Manage your password and security settings</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!showPasswordSection ? (
+                <Button variant="outline" onClick={() => setShowPasswordSection(true)}>
+                  <Lock className="h-4 w-4 mr-2" />
+                  Change Password
+                </Button>
+              ) : (
+                <div className="space-y-4 p-4 border rounded-lg">
+                  <h4 className="font-medium">Change Password</h4>
+
+                  {passwordError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4" />
+                      {passwordError}
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="newPassword">New Password</Label>
                     <div className="relative">
-                      <Avatar className="h-24 w-24 border-2 border-border">
-                        <AvatarImage src={profile.profile_picture_url || "/placeholder.svg"} alt={profile.full_name} />
-                        <AvatarFallback className="text-xl bg-[#3d4559] text-white">
-                          {getInitials(profile.full_name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      {isUploading && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
-                          <div className="h-6 w-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handlePhotoUpload}
-                        className="hidden"
+                      <Input
+                        id="newPassword"
+                        type={showNewPassword ? "text" : "password"}
+                        value={passwordData.newPassword}
+                        onChange={(e) => setPasswordData((prev) => ({ ...prev, newPassword: e.target.value }))}
+                        placeholder="Enter new password"
                       />
-                      <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
-                        <Camera className="h-4 w-4 mr-2" />
-                        {isUploading ? "Uploading..." : "Change Photo"}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                      >
+                        {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
-                      <p className="text-xs text-muted-foreground">JPG, PNG or GIF. Max size 5MB.</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <User className="h-5 w-5 text-[#3d4559]" />
-                    <CardTitle>Personal Information</CardTitle>
-                  </div>
-                  <CardDescription>Update your personal details and contact information</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="full_name">
-                        <span className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                          Full Name
-                        </span>
-                      </Label>
-                      <Input
-                        id="full_name"
-                        value={formData.full_name}
-                        onChange={(e) => handleInputChange("full_name", e.target.value)}
-                        placeholder="Enter your full name"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="email">
-                        <span className="flex items-center gap-2">
-                          <Mail className="h-4 w-4 text-muted-foreground" />
-                          Email Address
-                        </span>
-                      </Label>
-                      <Input id="email" value={profile.email} disabled className="bg-muted" />
-                      <p className="text-xs text-muted-foreground">Email cannot be changed</p>
-                    </div>
-
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="phone">
-                        <span className="flex items-center gap-2">
-                          <Phone className="h-4 w-4 text-muted-foreground" />
-                          Phone Number
-                        </span>
-                      </Label>
-                      <Input
-                        id="phone"
-                        value={formData.phone}
-                        onChange={(e) => handleInputChange("phone", e.target.value)}
-                        placeholder="(555) 123-4567"
-                      />
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="bio">Bio</Label>
-                    <Textarea
-                      id="bio"
-                      value={formData.bio}
-                      onChange={(e) => handleInputChange("bio", e.target.value)}
-                      placeholder="Tell us a bit about yourself..."
-                      rows={4}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-5 w-5 text-[#3d4559]" />
-                    <CardTitle>Account Details</CardTitle>
-                  </div>
-                  <CardDescription>Your account information managed by the system</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-4 bg-muted/50 rounded-lg">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Account Type</p>
-                      <p className="font-medium capitalize mt-1">{profile.role}</p>
+                    <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="confirmPassword"
+                        type={showConfirmPassword ? "text" : "password"}
+                        value={passwordData.confirmPassword}
+                        onChange={(e) => setPasswordData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                        placeholder="Confirm new password"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
                     </div>
-                    {profile.clinic_name && (
-                      <div className="p-4 bg-muted/50 rounded-lg">
-                        <p className="text-xs text-muted-foreground uppercase tracking-wide">Assigned Clinic</p>
-                        <p className="font-medium mt-1">{profile.clinic_name}</p>
-                      </div>
-                    )}
                   </div>
-                </CardContent>
-              </Card>
 
-              <div className="flex justify-end">
-                <Button onClick={handleSaveProfile} disabled={isSaving} className="bg-[#3d4559] hover:bg-[#2d3545]">
-                  <Save className="h-4 w-4 mr-2" />
-                  {isSaving ? "Saving..." : "Save Changes"}
-                </Button>
-              </div>
-            </>
-          )}
+                  <div className="flex gap-2">
+                    <Button onClick={handleChangePassword} disabled={isChangingPassword}>
+                      {isChangingPassword ? "Changing..." : "Update Password"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowPasswordSection(false)
+                        setPasswordData({ newPassword: "", confirmPassword: "" })
+                        setPasswordError(null)
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-          <div className="border-t pt-6 mt-6">
-            <div className="flex items-center gap-2 mb-6">
-              <Settings className="h-5 w-5 text-[#3d4559]" />
-              <h2 className="text-xl font-semibold text-foreground">Platform Settings</h2>
-            </div>
+          <div className="flex justify-end">
+            <Button onClick={handleSaveProfile} disabled={isSaving}>
+              <Save className="h-4 w-4 mr-2" />
+              {isSaving ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+
+          <hr className="my-6" />
+
+          <div className="flex items-center gap-2 mb-4">
+            <Settings className="h-5 w-5 text-muted-foreground" />
+            <h2 className="text-xl font-semibold">Platform Settings</h2>
           </div>
 
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-[#3d4559]" />
+                <Calendar className="h-5 w-5 text-muted-foreground" />
                 <CardTitle>Active Semester View</CardTitle>
               </div>
               <CardDescription>
@@ -477,121 +644,39 @@ export default function AccountManagementPage() {
                 students, clients, and data from the selected semester.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent>
               {semesterLoading ? (
-                <Skeleton className="h-10 w-full max-w-md" />
+                <Skeleton className="h-10 w-full max-w-xs" />
               ) : semesterError ? (
-                <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-red-800">Error Loading Semesters</p>
-                    <p className="text-sm text-red-700 mt-1">
-                      Unable to load semester data from the database. Please refresh the page or contact support.
-                    </p>
-                  </div>
-                </div>
-              ) : semesters.length === 0 ? (
-                <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                  <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-amber-800">No Semesters Found</p>
-                    <p className="text-sm text-amber-700 mt-1">
-                      No semesters have been configured in the database. Please add semesters to the semester_config
-                      table.
-                    </p>
-                  </div>
-                </div>
+                <p className="text-red-500 text-sm">{semesterError}</p>
               ) : (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="semester-select">Select Semester</Label>
-                    <Select
-                      value={selectedSemesterId || ""}
-                      onValueChange={(value) => {
-                        setSelectedSemesterId(value)
-                      }}
-                    >
-                      <SelectTrigger id="semester-select" className="w-full max-w-md">
-                        <SelectValue placeholder="Select a semester" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {semesters.map((semester) => (
-                          <SelectItem key={semester.id} value={semester.id}>
-                            <div className="flex items-center gap-2">
-                              <span>{semester.semester}</span>
-                              {semester.is_active && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-xs bg-green-50 text-green-700 border-green-200"
-                                >
-                                  Current
-                                </Badge>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {isViewingArchived ? (
-                    <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                      <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
-                      <div>
-                        <p className="font-medium text-amber-800">Viewing Archived Data</p>
-                        <p className="text-sm text-amber-700 mt-1">
-                          You are currently viewing data from <strong>{selectedSemester?.semester}</strong>. This is
-                          historical data for reference purposes. The current active semester is{" "}
-                          <strong>{activeSemester?.semester}</strong>.
-                        </p>
-                      </div>
-                    </div>
-                  ) : selectedSemester ? (
-                    <div className="flex items-start gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
-                      <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
-                      <div>
-                        <p className="font-medium text-green-800">Viewing Current Semester</p>
-                        <p className="text-sm text-green-700 mt-1">
-                          You are viewing data from the active semester: <strong>{selectedSemester?.semester}</strong>.
-                        </p>
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {selectedSemester && (
-                    <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-                      <div>
-                        <Label className="text-muted-foreground text-xs">Start Date</Label>
-                        <p className="font-medium">
-                          {selectedSemester.start_date
-                            ? new Date(selectedSemester.start_date).toLocaleDateString("en-US", {
-                                year: "numeric",
-                                month: "long",
-                                day: "numeric",
-                              })
-                            : "Not set"}
-                        </p>
-                      </div>
-                      <div>
-                        <Label className="text-muted-foreground text-xs">End Date</Label>
-                        <p className="font-medium">
-                          {selectedSemester.end_date
-                            ? new Date(selectedSemester.end_date).toLocaleDateString("en-US", {
-                                year: "numeric",
-                                month: "long",
-                                day: "numeric",
-                              })
-                            : "Not set"}
-                        </p>
-                      </div>
+                <div className="space-y-4">
+                  <Select value={selectedSemesterId || ""} onValueChange={(value) => setSelectedSemesterId(value)}>
+                    <SelectTrigger className="w-full max-w-xs">
+                      <SelectValue placeholder="Select a semester" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {semesters.map((sem) => (
+                        <SelectItem key={sem.id} value={sem.id}>
+                          {sem.semester} {sem.is_active && "(Active)"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {isViewingArchived && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <p className="text-sm text-amber-800">
+                        You are viewing archived data from <strong>{selectedSemester?.semester}</strong>. Some features
+                        may be limited.
+                      </p>
                     </div>
                   )}
-                </>
+                </div>
               )}
             </CardContent>
           </Card>
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   )
 }

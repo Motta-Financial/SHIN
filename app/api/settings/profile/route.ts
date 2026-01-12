@@ -1,10 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/utils/supabase/server"
 
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const userId = searchParams.get("userId")
-  const userType = searchParams.get("userType")
+  const userType = searchParams.get("userType") || searchParams.get("role") // Accept both userType and role
 
   if (!userId || !userType) {
     return NextResponse.json({ error: "Missing userId or userType" }, { status: 400 })
@@ -25,16 +28,22 @@ export async function GET(request: NextRequest) {
           phone,
           bio,
           profile_picture_url,
-          clinics (name)
+          clinic_id
         `)
         .eq("id", userId)
         .single()
 
       if (error) throw error
 
+      let clinic_name = null
+      if (data.clinic_id) {
+        const { data: clinicData } = await supabase.from("clinics").select("name").eq("id", data.clinic_id).single()
+        clinic_name = clinicData?.name
+      }
+
       profile = {
         ...data,
-        clinic_name: data.clinics?.name,
+        clinic_name,
         role: "student",
       }
     } else if (userType === "director") {
@@ -46,6 +55,33 @@ export async function GET(request: NextRequest) {
           email,
           phone,
           bio,
+          profile_picture_url,
+          clinic_id
+        `)
+        .eq("id", userId)
+        .single()
+
+      if (error) throw error
+
+      let clinic_name = null
+      if (data.clinic_id) {
+        const { data: clinicData } = await supabase.from("clinics").select("name").eq("id", data.clinic_id).single()
+        clinic_name = clinicData?.name
+      }
+
+      profile = {
+        ...data,
+        clinic_name,
+        role: "director",
+      }
+    } else if (userType === "client") {
+      const { data, error } = await supabase
+        .from("clients")
+        .select(`
+          id,
+          name,
+          email,
+          phone,
           profile_picture_url
         `)
         .eq("id", userId)
@@ -53,18 +89,10 @@ export async function GET(request: NextRequest) {
 
       if (error) throw error
 
-      // Get clinic name from clinic_directors
-      const { data: clinicData } = await supabase
-        .from("clinic_directors")
-        .select("clinics (name)")
-        .eq("director_id", userId)
-        .limit(1)
-        .single()
-
       profile = {
         ...data,
-        clinic_name: clinicData?.clinics?.name,
-        role: "director",
+        full_name: data.name,
+        role: "client",
       }
     }
 
@@ -78,50 +106,69 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, userType, full_name, phone, bio } = body
+    const { userId, userType, role, full_name, phone, bio } = body
+    const actualUserType = userType || role
 
-    if (!userId || !userType) {
-      return NextResponse.json({ error: "Missing userId or userType" }, { status: 400 })
+    if (!userId || !actualUserType) {
+      return NextResponse.json({ error: "Missing userId or userType/role" }, { status: 400 })
     }
 
     const supabase = await createClient()
 
-    const tableName = userType === "student" ? "students" : "directors"
+    let tableName: string
+    let updateData: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    }
 
-    const { data, error } = await supabase
-      .from(tableName)
-      .update({
+    if (actualUserType === "student") {
+      tableName = "students"
+      updateData = {
+        ...updateData,
         full_name,
         phone,
         bio,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", userId)
-      .select()
-      .single()
+      }
+    } else if (actualUserType === "director") {
+      tableName = "directors"
+      updateData = {
+        ...updateData,
+        full_name,
+        phone,
+        bio,
+      }
+    } else if (actualUserType === "client") {
+      tableName = "clients"
+      updateData = {
+        ...updateData,
+        name: full_name,
+        phone,
+      }
+    } else {
+      return NextResponse.json({ error: "Invalid user type" }, { status: 400 })
+    }
 
-    if (error) throw error
+    const { data, error } = await supabase.from(tableName).update(updateData).eq("id", userId).select().single()
+
+    if (error) {
+      console.error("[v0] Supabase update error:", error)
+      throw error
+    }
 
     // Get clinic name
     let clinic_name = null
-    if (userType === "student") {
-      const { data: clinicData } = await supabase.from("clinics").select("name").eq("id", data.clinic_id).single()
-      clinic_name = clinicData?.name
-    } else {
-      const { data: clinicData } = await supabase
-        .from("clinic_directors")
-        .select("clinics (name)")
-        .eq("director_id", userId)
-        .limit(1)
-        .single()
-      clinic_name = clinicData?.clinics?.name
+    if (actualUserType === "student" || actualUserType === "director") {
+      if (data.clinic_id) {
+        const { data: clinicData } = await supabase.from("clinics").select("name").eq("id", data.clinic_id).single()
+        clinic_name = clinicData?.name
+      }
     }
 
     return NextResponse.json({
       profile: {
         ...data,
+        full_name: actualUserType === "client" ? data.name : data.full_name,
         clinic_name,
-        role: userType,
+        role: actualUserType,
       },
     })
   } catch (error) {

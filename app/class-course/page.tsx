@@ -346,8 +346,8 @@ export default function ClassCoursePage() {
     password: string
     created_at: string
     updated_at: string
-    week_start: string // Added for date range
-    week_end: string // Added for date range
+    week_start: string | null // Added for date range
+    week_end: string | null // Added for date range
     semesterId: string // Added for semester association
   }
   const [weekPasswords, setWeekPasswords] = useState<WeekPassword[]>([])
@@ -1139,7 +1139,6 @@ export default function ClassCoursePage() {
     console.log("[v0] Setting password - newPasswordWeek:", newPasswordWeek)
     console.log("[v0] Setting password - weekNumber:", weekNumber)
     console.log("[v0] Setting password - semesterSchedule length:", semesterSchedule.length)
-    console.log("[v0] Setting password - semesterSchedule:", JSON.stringify(semesterSchedule.slice(0, 3)))
 
     if (!newPasswordWeek || !newPassword.trim()) {
       alert("Please enter both week number and password")
@@ -1151,20 +1150,27 @@ export default function ClassCoursePage() {
       return
     }
 
-    const uniqueWeeks = Array.from(new Map(semesterSchedule.map((w) => [w.week_number, w])).values())
+    const uniqueWeeks =
+      semesterSchedule.length > 0
+        ? Array.from(new Map(semesterSchedule.map((w: any) => [w.week_number, w])).values())
+        : Array.from({ length: 17 }, (_, i) => ({
+            week_number: i + 1,
+            week_start: null,
+            week_end: null,
+          }))
 
     console.log(
       "[v0] Unique weeks:",
-      uniqueWeeks.map((w) => w.week_number),
+      uniqueWeeks.map((w: any) => w.week_number),
     )
 
-    const weekInfo = uniqueWeeks.find((w) => w.week_number === weekNumber)
+    const weekInfo = uniqueWeeks.find((w: any) => w.week_number === weekNumber)
 
     console.log("[v0] Found weekInfo:", weekInfo ? `Week ${weekInfo.week_number}` : "NOT FOUND")
 
     if (!weekInfo) {
       alert(
-        `Invalid week number. Please select a valid week from the dropdown. Available weeks: ${uniqueWeeks.map((w) => w.week_number).join(", ")}`,
+        `Invalid week number. Please select a valid week from the dropdown. Available weeks: ${uniqueWeeks.map((w: any) => w.week_number).join(", ")}`,
       )
       return
     }
@@ -1178,9 +1184,8 @@ export default function ClassCoursePage() {
           weekNumber: weekNumber,
           semesterId: SPRING_2026_SEMESTER_ID,
           password: newPassword,
-          weekStart: weekInfo.week_start,
-          weekEnd: weekInfo.week_end,
-          createdByName: "Admin",
+          weekStart: weekInfo.week_start || null,
+          weekEnd: weekInfo.week_end || null,
         }),
       })
 
@@ -2390,8 +2395,14 @@ export default function ClassCoursePage() {
                                 {(() => {
                                   const uniqueWeeks =
                                     semesterSchedule.length > 0
-                                      ? Array.from(new Map(semesterSchedule.map((w) => [w.week_number, w])).values())
-                                      : Array.from({ length: 17 }, (_, i) => ({ week_number: i + 1 }))
+                                      ? Array.from(
+                                          new Map(semesterSchedule.map((w: any) => [w.week_number, w])).values(),
+                                        )
+                                      : Array.from({ length: 17 }, (_, i) => ({
+                                          week_number: i + 1,
+                                          week_start: null,
+                                          week_end: null,
+                                        }))
 
                                   return uniqueWeeks
                                     .sort((a, b) => a.week_number - b.week_number)
@@ -2439,15 +2450,20 @@ export default function ClassCoursePage() {
                               <SelectValue placeholder="Week #" />
                             </SelectTrigger>
                             <SelectContent>
-                              {/* Generate options based on semesterSchedule if available, otherwise default to 1-17 */}
-                              {(semesterSchedule.length > 0
-                                ? semesterSchedule.sort((a, b) => a.week_number - b.week_number)
-                                : Array.from({ length: 17 }, (_, i) => ({ week_number: i + 1 }))
-                              ).map((week) => (
-                                <SelectItem key={week.week_number} value={week.week_number.toString()}>
-                                  Week {week.week_number}
-                                </SelectItem>
-                              ))}
+                              {(() => {
+                                const uniqueWeeks =
+                                  semesterSchedule.length > 0
+                                    ? Array.from(new Map(semesterSchedule.map((w: any) => [w.week_number, w])).values())
+                                    : Array.from({ length: 17 }, (_, i) => ({ week_number: i + 1 }))
+
+                                return uniqueWeeks
+                                  .sort((a, b) => a.week_number - b.week_number)
+                                  .map((week) => (
+                                    <SelectItem key={week.week_number} value={week.week_number.toString()}>
+                                      Week {week.week_number}
+                                    </SelectItem>
+                                  ))
+                              })()}
                             </SelectContent>
                           </Select>
                           <Input

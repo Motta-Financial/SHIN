@@ -434,17 +434,41 @@ export default function DirectorDashboard() {
   useEffect(() => {
     async function fetchOverviewData() {
       try {
-        // Fetch attendance data
-        const attendanceRes = await fetch("/api/attendance")
-        const attendanceData = await attendanceRes.json()
+        // Fetch attendance data from correct endpoint
+        const attendanceRes = await fetch("/api/supabase/attendance")
+        let attendanceData = { records: [] }
+        if (attendanceRes.ok) {
+          const text = await attendanceRes.text()
+          try {
+            attendanceData = JSON.parse(text)
+          } catch {
+            console.error("Attendance API returned non-JSON response")
+          }
+        }
 
         // Fetch announcements for recent activity
         const announcementsRes = await fetch("/api/announcements")
-        const announcementsData = await announcementsRes.json()
+        let announcementsData = { announcements: [] }
+        if (announcementsRes.ok) {
+          const text = await announcementsRes.text()
+          try {
+            announcementsData = JSON.parse(text)
+          } catch {
+            console.error("Announcements API returned non-JSON response")
+          }
+        }
 
         // Fetch client meetings
         const meetingsRes = await fetch("/api/scheduled-client-meetings")
-        const meetingsData = await meetingsRes.json()
+        let meetingsData = { meetings: [] }
+        if (meetingsRes.ok) {
+          const text = await meetingsRes.text()
+          try {
+            meetingsData = JSON.parse(text)
+          } catch {
+            console.error("Meetings API returned non-JSON response")
+          }
+        }
 
         // Calculate attendance summary from current week
         const currentWeekAttendance =

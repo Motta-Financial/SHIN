@@ -2,15 +2,18 @@ import { type NextRequest, NextResponse } from "next/server"
 import { put } from "@vercel/blob"
 import { createClient } from "@/utils/supabase/server"
 
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const file = formData.get("file") as File
     const userId = formData.get("userId") as string
-    const userType = formData.get("userType") as string
+    const userType = (formData.get("userType") || formData.get("role")) as string
 
     if (!file || !userId || !userType) {
-      return NextResponse.json({ error: "Missing file, userId, or userType" }, { status: 400 })
+      return NextResponse.json({ error: "Missing file, userId, or userType/role" }, { status: 400 })
     }
 
     // Validate file type
@@ -25,7 +28,17 @@ export async function POST(request: NextRequest) {
 
     // Update database with new photo URL
     const supabase = await createClient()
-    const tableName = userType === "student" ? "students" : "directors"
+
+    let tableName: string
+    if (userType === "student") {
+      tableName = "students"
+    } else if (userType === "director") {
+      tableName = "directors"
+    } else if (userType === "client") {
+      tableName = "clients"
+    } else {
+      return NextResponse.json({ error: "Invalid user type" }, { status: 400 })
+    }
 
     const { error } = await supabase
       .from(tableName)
@@ -35,7 +48,10 @@ export async function POST(request: NextRequest) {
       })
       .eq("id", userId)
 
-    if (error) throw error
+    if (error) {
+      console.error("[v0] Database update error:", error)
+      throw error
+    }
 
     return NextResponse.json({ url: blob.url })
   } catch (error) {

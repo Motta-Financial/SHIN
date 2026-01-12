@@ -57,22 +57,27 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
     try {
       const response = await fetch(url)
 
+      // Check for rate limiting via status code
       if (response.status === 429) {
-        // Rate limited - wait with exponential backoff
-        const waitTime = Math.pow(2, attempt + 1) * 1000 // 2s, 4s, 8s
-        console.log(`[v0] Rate limited on ${url}, waiting ${waitTime}ms (attempt ${attempt + 1}/${maxRetries})`)
+        const waitTime = Math.pow(2, attempt + 1) * 1000
+        console.log(`[v0] Rate limited (429) on ${url}, waiting ${waitTime}ms (attempt ${attempt + 1}/${maxRetries})`)
         await new Promise((r) => setTimeout(r, waitTime))
         continue
       }
 
+      // For non-OK responses, clone before checking body to avoid consuming stream
       if (!response.ok) {
-        const text = await response.text()
-        if (text.startsWith("Too Many R")) {
-          // Rate limit response without proper status code
-          const waitTime = Math.pow(2, attempt + 1) * 1000
-          console.log(`[v0] Rate limited (text) on ${url}, waiting ${waitTime}ms`)
-          await new Promise((r) => setTimeout(r, waitTime))
-          continue
+        const clonedResponse = response.clone()
+        try {
+          const text = await clonedResponse.text()
+          if (text.startsWith("Too Many R") || text.includes("rate limit")) {
+            const waitTime = Math.pow(2, attempt + 1) * 1000
+            console.log(`[v0] Rate limited (text) on ${url}, waiting ${waitTime}ms`)
+            await new Promise((r) => setTimeout(r, waitTime))
+            continue
+          }
+        } catch {
+          // Ignore text parsing errors
         }
       }
 
@@ -80,6 +85,7 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
     } catch (error) {
       if (attempt < maxRetries - 1) {
         const waitTime = Math.pow(2, attempt) * 1000
+        console.log(`[v0] Fetch error on ${url}, retrying in ${waitTime}ms`)
         await new Promise((r) => setTimeout(r, waitTime))
       } else {
         throw error
@@ -93,14 +99,28 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
 async function fetchSequentially(urls: string[]): Promise<Response[]> {
   const results: Response[] = []
   for (let i = 0; i < urls.length; i++) {
-    // Wait 500ms between requests to avoid rate limiting
+    // Wait 1000ms between requests to avoid rate limiting (increased from 500ms)
     if (i > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      await new Promise((resolve) => setTimeout(resolve, 1000))
     }
     const res = await fetchWithRetry(urls[i])
     results.push(res)
   }
   return results
+}
+
+async function safeJsonParse<T>(response: Response, defaultValue: T): Promise<T> {
+  try {
+    const text = await response.text()
+    if (!text || text.startsWith("<!DOCTYPE") || text.startsWith("Too Many R")) {
+      console.log("[v0] Invalid response body, returning default value")
+      return defaultValue
+    }
+    return JSON.parse(text) as T
+  } catch (error) {
+    console.error("[v0] JSON parse error:", error)
+    return defaultValue
+  }
 }
 
 interface Student {
@@ -505,7 +525,7 @@ export default function StudentPortal() {
       if (isDemoMode || role === "admin" || role === "director") {
         try {
           const res = await fetch("/api/supabase/students/overview")
-          const data = await res.json()
+          const data = await safeJsonParse(res, { students: [] })
           if (data.students) {
             setAvailableStudents(
               data.students.map((s: any) => ({
@@ -523,7 +543,7 @@ export default function StudentPortal() {
         // For actual students, find their own ID
         try {
           const res = await fetch(`/api/supabase/students/overview?email=${encodeURIComponent(userEmail)}`)
-          const data = await res.json()
+          const data = await safeJsonParse(res, { students: [] })
           if (data.students && data.students.length > 0) {
             setSelectedStudentId(data.students[0].id)
           }
@@ -638,13 +658,13 @@ export default function StudentPortal() {
         const [studentRes, debriefsRes, attendanceRes, meetingRes, materialsRes, docsRes, scheduleRes] =
           await fetchSequentially(urls)
 
-        const studentData = await studentRes.json()
-        const debriefsData = await debriefsRes.json()
-        const attendanceData = await attendanceRes.json()
-        const meetingData = await meetingRes.json()
-        const materialsData = await materialsRes.json()
+        const studentData = await safeJsonParse(studentRes, { id: currentStudentId })
+        const debriefsData = await safeJsonParse(debriefsRes, { debriefs: [] })
+        const attendanceData = await safeJsonParse(attendanceRes, { attendance: [] })
+        const meetingData = await safeJsonParse(meetingRes, { requests: [] })
+        const materialsData = await safeJsonParse(materialsRes, { materials: [] })
 
-        const scheduleData = await scheduleRes.json()
+        const scheduleData = await safeJsonParse(scheduleRes, { schedules: [] }) // Use safeJsonParse
         // Ensure week_number is treated as a number if it's meant to be
         setSemesterSchedule(
           (scheduleData.schedules || []).map((week: any) => ({
@@ -666,7 +686,7 @@ export default function StudentPortal() {
         setRecentCourseMaterials(recentMaterials)
 
         if (docsRes.ok) {
-          const docsData = await docsRes.json()
+          const docsData = await safeJsonParse(docsRes, { documents: [] }) // Use safeJsonParse
           const deliverableDocs = (docsData.documents || [])
             .filter((doc: any) => ["sow", "midterm", "final"].includes(doc.submission_type))
             .map((doc: any) => ({
@@ -684,9 +704,9 @@ export default function StudentPortal() {
 
         if (student?.clientId) {
           try {
-            const gradesRes = await fetch(`/api/evaluations?clientId=${student.clientId}&finalized=true`)
+            const gradesRes = await fetchWithRetry(`/api/evaluations?clientId=${student.clientId}&finalized=true`)
             if (gradesRes.ok) {
-              const gradesData = await gradesRes.json()
+              const gradesData = await safeJsonParse(gradesRes, { evaluations: [] }) // Use safeJsonParse
               // Process finalized grades
               const grades: TeamGrade[] = (gradesData.evaluations || [])
                 .filter((e: any) => e.final_grade !== null)
@@ -810,7 +830,7 @@ export default function StudentPortal() {
 
         // Refresh debriefs
         const debriefsRes = await fetch(`/api/supabase/debriefs?studentId=${currentStudent.id}`)
-        const debriefsData = await debriefsRes.json()
+        const debriefsData = await safeJsonParse(debriefsRes, { debriefs: [] }) // Use safeJsonParse
         setDebriefs(debriefsData.debriefs || [])
         setQuestionText("")
       }
@@ -859,7 +879,7 @@ export default function StudentPortal() {
 
         // Refresh meeting requests
         const meetingRes = await fetch(`/api/meeting-requests?studentId=${currentStudent.id}`)
-        const meetingData = await meetingRes.json()
+        const meetingData = await safeJsonParse(meetingRes, { requests: [] }) // Use safeJsonParse
         setMeetingRequests(meetingData.requests || [])
 
         // Reset form
@@ -900,7 +920,7 @@ export default function StudentPortal() {
       if (response.ok) {
         // Refresh attendance records
         const attendanceRes = await fetch(`/api/supabase/attendance?studentId=${currentStudent.id}`)
-        const attendanceData = await attendanceRes.json()
+        const attendanceData = await safeJsonParse(attendanceRes, { attendance: [] }) // Use safeJsonParse
         setAttendanceRecords(attendanceData.attendance || [])
 
         // Reset form
@@ -951,7 +971,7 @@ export default function StudentPortal() {
       // Refresh debriefs
       const debriefRes = await fetch(`/api/supabase/debriefs?studentId=${currentStudent?.id}`)
       if (debriefRes.ok) {
-        const data = await debriefRes.json()
+        const data = await safeJsonParse(debriefRes, { debriefs: [] }) // Use safeJsonParse
         setDebriefs(data.debriefs || [])
       }
 
