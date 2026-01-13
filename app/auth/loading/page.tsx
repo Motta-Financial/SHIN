@@ -28,7 +28,11 @@ export default function AuthLoadingPage() {
           error: userError,
         } = await supabase.auth.getUser()
 
-        console.log("[v0] AuthLoading - User check:", { hasUser: !!user, error: userError?.message })
+        console.log("[v0] AuthLoading - User check:", {
+          hasUser: !!user,
+          email: user?.email,
+          error: userError?.message,
+        })
 
         if (userError || !user) {
           console.log("[v0] AuthLoading - No user found, redirecting to sign-in")
@@ -39,18 +43,37 @@ export default function AuthLoadingPage() {
         setStatus("Loading your profile...")
         clearAuthCache()
 
-        // Call API route that uses service role to bypass RLS
         console.log("[v0] AuthLoading - Calling detect-role API for:", user.email)
 
-        const response = await fetch("/api/auth/detect-role", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: user.email }),
-        })
+        let response: Response
+        try {
+          response = await fetch("/api/auth/detect-role", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: user.email }),
+            credentials: "include",
+          })
+        } catch (fetchError) {
+          console.error("[v0] AuthLoading - Fetch failed:", fetchError)
+          setStatus("Network error. Please try again.")
+          setTimeout(() => router.push("/sign-in"), 2000)
+          return
+        }
 
         console.log("[v0] AuthLoading - API response status:", response.status)
 
-        const data = await response.json()
+        let data: any
+        try {
+          const text = await response.text()
+          console.log("[v0] AuthLoading - API response text:", text.substring(0, 200))
+          data = JSON.parse(text)
+        } catch (parseError) {
+          console.error("[v0] AuthLoading - Failed to parse response:", parseError)
+          setStatus("Server error. Please try again.")
+          setTimeout(() => router.push("/sign-in"), 2000)
+          return
+        }
+
         console.log("[v0] AuthLoading - API response data:", data)
 
         if (response.ok && data.redirect) {
@@ -59,8 +82,10 @@ export default function AuthLoadingPage() {
           return
         }
 
-        // No role found
-        console.error("[v0] AuthLoading - No role found for:", user.email, data.error)
+        // No role found - but user is authenticated, try to figure out where to send them
+        console.error("[v0] AuthLoading - No role found for:", user.email, "Error:", data.error)
+
+        // For now, redirect to sign-in with a message
         setStatus("Account not configured. Please contact support.")
         setTimeout(() => router.push("/sign-in"), 3000)
       } catch (error) {

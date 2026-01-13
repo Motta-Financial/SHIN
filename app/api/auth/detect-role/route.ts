@@ -2,6 +2,12 @@ import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
+
+export async function GET() {
+  console.log("[v0] detect-role GET - Health check")
+  return NextResponse.json({ status: "ok", message: "detect-role API is running" })
+}
 
 export async function POST(request: Request) {
   console.log("[v0] detect-role - API called")
@@ -14,7 +20,6 @@ export async function POST(request: Request) {
     console.log("[v0] detect-role - Env check:", {
       hasUrl: !!supabaseUrl,
       hasKey: !!supabaseServiceKey,
-      urlPrefix: supabaseUrl?.substring(0, 30),
     })
 
     if (!supabaseUrl || !supabaseServiceKey) {
@@ -42,19 +47,16 @@ export async function POST(request: Request) {
     const normalizedEmail = email.toLowerCase().trim()
     console.log("[v0] detect-role - Normalized email:", normalizedEmail)
 
-    // Check directors first - use eq with lowercase comparison
+    // Check directors first
     console.log("[v0] detect-role - Querying directors table...")
     const { data: directors, error: directorError } = await supabaseAdmin
       .from("directors")
       .select("id, email, role, full_name")
 
-    console.log("[v0] detect-role - Directors query result:", {
-      count: directors?.length,
-      error: directorError?.message,
-    })
-
     if (directorError) {
       console.error("[v0] detect-role - Director query error:", directorError)
+    } else {
+      console.log("[v0] detect-role - Directors found:", directors?.length)
     }
 
     // Find matching director by case-insensitive email
@@ -77,13 +79,10 @@ export async function POST(request: Request) {
       .from("students")
       .select("id, email, full_name, clinic")
 
-    console.log("[v0] detect-role - Students query result:", {
-      count: students?.length,
-      error: studentError?.message,
-    })
-
     if (studentError) {
       console.error("[v0] detect-role - Student query error:", studentError)
+    } else {
+      console.log("[v0] detect-role - Students found:", students?.length)
     }
 
     // Find matching student by case-insensitive email
@@ -104,13 +103,10 @@ export async function POST(request: Request) {
     console.log("[v0] detect-role - Querying clients table...")
     const { data: clients, error: clientError } = await supabaseAdmin.from("clients").select("id, name, email")
 
-    console.log("[v0] detect-role - Clients query result:", {
-      count: clients?.length,
-      error: clientError?.message,
-    })
-
     if (clientError) {
       console.error("[v0] detect-role - Client query error:", clientError)
+    } else {
+      console.log("[v0] detect-role - Clients found:", clients?.length)
     }
 
     // Find matching client by case-insensitive email
@@ -128,7 +124,6 @@ export async function POST(request: Request) {
 
     // No role found
     console.log("[v0] detect-role - No role found for email:", normalizedEmail)
-    console.log("[v0] detect-role - Available directors:", directors?.map((d) => d.email).join(", "))
 
     return NextResponse.json(
       {

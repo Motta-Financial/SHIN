@@ -64,7 +64,7 @@ export default function SignInPage() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
       <div className="w-full max-w-md px-4">
         <div className="mb-8 flex flex-col items-center gap-6">
-          <div className="relative w-[360px] h-[130px]">
+          <div className="relative w-[360px] h-[100px]">
             <Image
               src="/images/seed-20logo.png"
               alt="Suffolk SEED Program"
