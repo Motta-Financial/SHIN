@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -17,87 +17,9 @@ export default function SignInPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [isCheckingSession, setIsCheckingSession] = useState(true)
   const router = useRouter()
 
   const supabase = createClient()
-
-  // Check if user is already logged in
-  useEffect(() => {
-    const checkSession = async () => {
-      console.log("[v0] SignIn - Checking existing session...")
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (session?.user) {
-        console.log("[v0] SignIn - User already logged in:", session.user.email)
-        await redirectByRole(session.user.id, session.user.email || "")
-      } else {
-        console.log("[v0] SignIn - No existing session")
-        setIsCheckingSession(false)
-      }
-    }
-
-    checkSession()
-  }, [supabase])
-
-  const redirectByRole = async (userId: string, email: string) => {
-    console.log("[v0] SignIn - Fetching role from database for:", email)
-
-    try {
-      const { data: directorData, error: directorError } = await supabase
-        .from("directors")
-        .select("id, email, role")
-        .ilike("email", email)
-        .maybeSingle()
-
-      console.log("[v0] SignIn - Director check:", { directorData, directorError })
-
-      if (directorData) {
-        console.log("[v0] SignIn - Found director role, redirecting to /director")
-        window.location.href = "/director"
-        return
-      }
-
-      const { data: studentData, error: studentError } = await supabase
-        .from("students")
-        .select("id, email, full_name")
-        .ilike("email", email)
-        .maybeSingle()
-
-      console.log("[v0] SignIn - Student check:", { studentData, studentError })
-
-      if (studentData) {
-        console.log("[v0] SignIn - Found student role, redirecting to /students")
-        window.location.href = "/students"
-        return
-      }
-
-      const { data: clientData, error: clientError } = await supabase
-        .from("clients")
-        .select("id, name, email")
-        .ilike("email", email)
-        .maybeSingle()
-
-      console.log("[v0] SignIn - Client check:", { clientData, clientError })
-
-      if (clientData) {
-        console.log("[v0] SignIn - Found client role, redirecting to /client-portal")
-        window.location.href = "/client-portal"
-        return
-      }
-
-      // No role found
-      console.error("[v0] SignIn - No role found for user:", email)
-      setError("Your account is not properly configured. Please contact support.")
-      setIsLoading(false)
-    } catch (error) {
-      console.error("[v0] SignIn - Error fetching role:", error)
-      setError("Unable to determine account type. Please try again.")
-      setIsLoading(false)
-    }
-  }
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -107,39 +29,34 @@ export default function SignInPage() {
     console.log("[v0] SignIn - Attempting sign in for:", email)
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
 
-      if (error) {
-        console.log("[v0] SignIn - Error:", error.message)
-        setError(error.message)
+      if (authError) {
+        console.log("[v0] SignIn - Auth error:", authError.message)
+        setError(authError.message)
         setIsLoading(false)
         return
       }
 
-      if (data.user) {
-        console.log("[v0] SignIn - Success! User:", data.user.email)
-        await redirectByRole(data.user.id, data.user.email || "")
+      if (!data.user) {
+        console.log("[v0] SignIn - No user data returned")
+        setError("Authentication failed. Please try again.")
+        setIsLoading(false)
+        return
       }
+
+      console.log("[v0] SignIn - Auth success! User:", data.user.email)
+
+      router.push("/auth/loading")
     } catch (err) {
-      console.log("[v0] SignIn - Unexpected error:", err)
-      setError("An unexpected error occurred. Please try again.")
+      console.error("[v0] SignIn - Error:", err)
+      const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred"
+      setError(errorMessage)
       setIsLoading(false)
     }
-  }
-
-  // Show loading while checking session
-  if (isCheckingSession) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto text-slate-600" />
-          <p className="mt-2 text-slate-600">Loading...</p>
-        </div>
-      </div>
-    )
   }
 
   return (

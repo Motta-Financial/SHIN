@@ -480,18 +480,27 @@ interface TeamGrade {
 export default function StudentPortal() {
   const router = useRouter()
   const { isDemoMode } = useDemoMode()
-  const { role, email: userEmail, isLoading: roleLoading, isAuthenticated } = useUserRole()
+  const { role, email: userEmail, studentId: authStudentId, isLoading: roleLoading, isAuthenticated } = useUserRole()
+  const isAdminOrDirector = role === "admin" || role === "director"
+  const allowDemoMode = isDemoMode && isAdminOrDirector
 
-  console.log("[v0] StudentPortal - Auth state:", { role, isAuthenticated, roleLoading, isDemoMode })
+  console.log("[v0] StudentPortal - Auth state:", {
+    role,
+    isAuthenticated,
+    roleLoading,
+    isDemoMode,
+    allowDemoMode,
+    authStudentId,
+  })
 
   const demoStudentId = useDemoStudent(DEMO_STUDENTS[0].id)
-  const [selectedStudentId, setSelectedStudentId] = useState<string>(demoStudentId)
+  const [selectedStudentId, setSelectedStudentId] = useState<string>(authStudentId || demoStudentId)
 
   const [availableStudents, setAvailableStudents] = useState<AvailableStudent[]>([])
 
-  useEffect(() => {
-    setSelectedStudentId(demoStudentId)
-  }, [demoStudentId])
+  // useEffect(() => {
+  //   setSelectedStudentId(demoStudentId)
+  // }, [demoStudentId])
 
   useEffect(() => {
     // Still loading - don't redirect yet
@@ -500,9 +509,8 @@ export default function StudentPortal() {
       return
     }
 
-    // Demo mode - allow access
-    if (isDemoMode) {
-      console.log("[v0] StudentPortal - Demo mode access granted")
+    if (allowDemoMode) {
+      console.log("[v0] StudentPortal - Demo mode access granted for admin/director")
       return
     }
 
@@ -539,37 +547,34 @@ export default function StudentPortal() {
       router.push(getDefaultPortal(role))
       return
     }
-  }, [role, roleLoading, isAuthenticated, isDemoMode, router])
+  }, [role, roleLoading, isAuthenticated, allowDemoMode, router]) // Removed isDemoMode dependency
 
   useEffect(() => {
     const fetchAvailableStudents = async () => {
-      if (isDemoMode || role === "admin" || role === "director") {
+      // Use Vercel-specific API for complete mapping of students to admins/directors
+      if (isAdminOrDirector) {
         try {
-          const res = await fetch("/api/supabase/students/overview")
+          const res = await fetch("/api/supabase/v-complete-mapping")
           const data = await safeJsonParse(res, { students: [] })
-          if (data.students) {
+          if (data.students && data.students.length > 0) {
             setAvailableStudents(
               data.students.map((s: any) => ({
-                id: s.id || s.student_id,
-                full_name: s.student_name || s.full_name || s.name,
-                email: s.student_email || s.email,
-                clinic: s.clinic || s.clinic_name || s.student_clinic_name,
+                id: s.student_id,
+                full_name: s.student_name,
+                email: s.student_email,
+                clinic: s.student_clinic_name || "No Clinic",
               })),
             )
           }
         } catch (error) {
           console.error("Error fetching students:", error)
         }
-      } else if (role === "student" && userEmail && !isDemoMode) {
-        // For actual students, find their own ID
-        try {
-          const res = await fetch(`/api/supabase/students/overview?email=${encodeURIComponent(userEmail)}`)
-          const data = await safeJsonParse(res, { students: [] })
-          if (data.students && data.students.length > 0) {
-            setSelectedStudentId(data.students[0].id)
-          }
-        } catch (error) {
-          console.error("Error fetching student:", error)
+      } else if (role === "student") {
+        if (authStudentId) {
+          console.log("[v0] StudentPortal - Using student ID from auth:", authStudentId)
+          setSelectedStudentId(authStudentId)
+        } else {
+          console.error("[v0] StudentPortal - Student role detected but no student ID available")
         }
       }
     }
@@ -577,9 +582,9 @@ export default function StudentPortal() {
     if (!roleLoading) {
       fetchAvailableStudents()
     }
-  }, [role, userEmail, roleLoading, isDemoMode])
+  }, [role, userEmail, authStudentId, roleLoading, isAdminOrDirector]) // Removed isDemoMode
 
-  const canSwitchStudents = isDemoMode || role === "admin" || role === "director"
+  const canSwitchStudents = isAdminOrDirector
 
   const [loading, setLoading] = useState(true)
   const [currentStudent, setCurrentStudent] = useState<Student | null>(null)
@@ -660,8 +665,7 @@ export default function StudentPortal() {
 
   useEffect(() => {
     async function fetchData() {
-      // Use the determined student ID
-      const currentStudentId = isDemoMode ? demoStudentId : selectedStudentId
+      const currentStudentId = role === "student" ? authStudentId : selectedStudentId
       if (!currentStudentId) return
 
       setLoading(true)
@@ -790,15 +794,23 @@ export default function StudentPortal() {
     }
 
     fetchData()
-  }, [selectedStudentId, demoStudentId, isDemoMode]) // Added dependency for isDemoMode
+  }, [selectedStudentId, authStudentId, role]) // Removed demoStudentId and isDemoMode dependencies
 
   // Add useEffect to fetch signed agreements
   useEffect(() => {
     const fetchSignedAgreements = async () => {
-      if (!currentStudent?.email) return
+      const currentStudentId = role === "student" ? authStudentId : selectedStudentId
+      if (!currentStudentId) return
       try {
+        // Fetch student details to get email
+        const studentRes = await fetchWithRetry(`/api/supabase/roster?studentId=${currentStudentId}`)
+        const studentData = await safeJsonParse(studentRes, { students: [] })
+        const studentEmail = studentData.students?.[0]?.email
+
+        if (!studentEmail) return
+
         await new Promise((resolve) => setTimeout(resolve, 2000)) // Longer delay to avoid rate limiting
-        const response = await fetchWithRetry(`/api/agreements?userEmail=${encodeURIComponent(currentStudent.email)}`)
+        const response = await fetchWithRetry(`/api/agreements?userEmail=${encodeURIComponent(studentEmail)}`)
         const text = await response.text()
         if (text.startsWith("Too Many R")) {
           console.error("Error fetching agreements: Rate limited")
@@ -817,7 +829,7 @@ export default function StudentPortal() {
       }
     }
     fetchSignedAgreements()
-  }, [currentStudent?.email])
+  }, [selectedStudentId, authStudentId, role]) // Removed demoStudentId and isDemoMode dependencies
 
   const handleSubmitQuestion = async () => {
     if (!questionText.trim() || !currentStudent) return
@@ -1285,9 +1297,6 @@ export default function StudentPortal() {
     )
   }
 
-  // Removed redeclaration of canSwitchStudents
-  // const canSwitchStudents = isDemoMode || role === "admin" || role === "director"
-
   if (!currentStudent) {
     return (
       <div className="min-h-screen bg-background">
@@ -1321,17 +1330,12 @@ export default function StudentPortal() {
       <div className="pl-52 pt-14">
         {/* Updated padding from px-6 py-6 to p-4 */}
         <div className="p-4">
-          {/* CHANGE: Show student selector for directors/admins viewing student portal */}
-          {canSwitchStudents && availableStudents.length > 1 && (
+          {canSwitchStudents && availableStudents.length > 0 && (
             <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
               <Eye className="h-4 w-4 text-blue-600 flex-shrink-0" />
               <div className="flex-1">
-                <p className="text-sm text-blue-800 font-medium">
-                  {isDemoMode ? "Demo Mode" : "Viewing as Director/Admin"}
-                </p>
-                <p className="text-xs text-blue-600">
-                  {isDemoMode ? "Select a student to preview their portal" : "Select a student to view their portal"}
-                </p>
+                <p className="text-sm text-blue-800 font-medium">Viewing as Director/Admin</p>
+                <p className="text-xs text-blue-600">Select a student to view their portal</p>
               </div>
               <Select value={selectedStudentId} onValueChange={setSelectedStudentId}>
                 <SelectTrigger className="w-[280px] bg-white">
@@ -1345,7 +1349,7 @@ export default function StudentPortal() {
                 <SelectContent>
                   {availableStudents.map((student) => (
                     <SelectItem key={student.id} value={student.id}>
-                      {student.full_name} - {student.clinic}
+                      {student.full_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1422,7 +1426,6 @@ export default function StudentPortal() {
                                       Week {week.week_number}
                                       {week.is_break && <span className="text-slate-500 ml-1">(Break)</span>}
                                     </p>
-                                    {hasHours && <CheckCircle2 className="h-3.5 w-3.5 text-blue-600" />}
                                     {!hasHours && isPast && !week.is_break && (
                                       <AlertCircle className="h-3.5 w-3.5 text-red-500" />
                                     )}
@@ -1753,7 +1756,6 @@ export default function StudentPortal() {
                                       Week {week.week_number}
                                       {week.is_break && <span className="text-slate-500 ml-1">(Break)</span>}
                                     </p>
-                                    {hasAttendance && <CheckCircle2 className="h-3.5 w-3.5 text-purple-600" />}
                                     {!hasAttendance && isPast && !week.is_break && (
                                       <AlertCircle className="h-3.5 w-3.5 text-red-500" />
                                     )}

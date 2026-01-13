@@ -1,26 +1,36 @@
 import { Suspense } from "react"
 import { MyTeamContent } from "@/components/my-team-content"
+import { GlobalHeader } from "@/components/global-header"
 import { MainNavigation } from "@/components/main-navigation"
+import { StudentPortalHeader } from "@/components/student-portal-header"
 
 function MyTeamLoading() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f5f7f9] to-[#e8eef3]">
-      <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
-        <MainNavigation />
-      </aside>
-      <main className="pl-52 pt-14 p-4">
-        <div className="flex items-center justify-center h-[calc(100vh-2rem)]">
-          <div className="animate-pulse text-[#5f7082]">Loading team data...</div>
-        </div>
-      </main>
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="animate-pulse text-muted-foreground">Loading team data...</div>
     </div>
   )
 }
 
 export default function MyTeamPage() {
   return (
-    <Suspense fallback={<MyTeamLoading />}>
-      <MyTeamContent />
-    </Suspense>
+    <>
+      <GlobalHeader />
+      <div className="flex h-screen pt-14">
+        <aside className="w-64 border-r bg-card">
+          <MainNavigation />
+        </aside>
+        <main className="flex-1 overflow-y-auto">
+          <div className="container mx-auto p-6">
+            <StudentPortalHeader />
+            <div className="mt-6">
+              <Suspense fallback={<MyTeamLoading />}>
+                <MyTeamContent />
+              </Suspense>
+            </div>
+          </div>
+        </main>
+      </div>
+    </>
   )
 }

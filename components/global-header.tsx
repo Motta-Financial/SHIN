@@ -1,12 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Building2, GraduationCap, Briefcase, LogOut, User, LogIn, CalendarDays } from "lucide-react"
 import { AdvancedSearch } from "@/components/advanced-search"
-import { useUserRole, getAllowedPortals } from "@/hooks/use-user-role"
+import { useUserRole, getAllowedPortals, clearAuthCache } from "@/hooks/use-user-role"
 import { useDemoMode } from "@/contexts/demo-mode-context"
 import { Button } from "@/components/ui/button"
 import {
@@ -68,12 +67,12 @@ export function GlobalHeader() {
     { name: "Client", href: "/client-portal", icon: Briefcase, portal: "client" as const },
   ]
 
-  // This ensures portals are visible during auth check and for privileged users
-  const showAllPortals = isDemoMode || isLoading || role === "admin" || role === "director"
+  const showAllPortals = isDemoMode || role === "admin" || role === "director"
   const allowedPortals = showAllPortals ? ["director", "student", "client"] : getAllowedPortals(role)
   const portalTabs = allPortalTabs.filter((tab) => allowedPortals.includes(tab.portal))
 
   const handleSignOut = async () => {
+    clearAuthCache()
     const supabase = createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -95,35 +94,36 @@ export function GlobalHeader() {
     <header className="fixed top-0 left-0 right-0 h-14 bg-background border-b z-50 flex items-center px-4">
       {/* Logo */}
       <Link href="/" className="flex items-center gap-2 mr-6">
-        <Image src="/images/shin.png" alt="SHIN Logo" width={32} height={32} className="object-contain" />
+        <img src="/images/shin.png" alt="SHIN Logo" width={32} height={32} className="object-contain" />
         <span className="font-semibold text-lg hidden sm:inline">SHIN</span>
       </Link>
 
-      {/* Portal Tabs */}
-      <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-        {portalTabs.map((tab) => {
-          const isActive =
-            (tab.name === "Director" && isDirectorRoute) ||
-            (tab.name === "Student" && isStudentRoute) ||
-            (tab.name === "Client" && isClientRoute)
+      {(isAuthenticated || isDemoMode) && portalTabs.length > 0 && (
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+          {portalTabs.map((tab) => {
+            const isActive =
+              (tab.name === "Director" && isDirectorRoute) ||
+              (tab.name === "Student" && isStudentRoute) ||
+              (tab.name === "Client" && isClientRoute)
 
-          return (
-            <Link
-              key={tab.name}
-              href={tab.href}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
-                isActive
-                  ? "bg-background shadow-sm text-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/50",
-              )}
-            >
-              <tab.icon className="h-4 w-4" />
-              <span className="hidden md:inline">{tab.name}</span>
-            </Link>
-          )
-        })}
-      </div>
+            return (
+              <Link
+                key={tab.name}
+                href={tab.href}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                  isActive
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-background/50",
+                )}
+              >
+                <tab.icon className="h-4 w-4" />
+                <span className="hidden md:inline">{tab.name}</span>
+              </Link>
+            )
+          })}
+        </div>
+      )}
 
       {/* Spacer */}
       <div className="flex-1" />

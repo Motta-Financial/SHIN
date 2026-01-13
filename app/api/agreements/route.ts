@@ -39,9 +39,19 @@ export async function GET(request: Request) {
     console.log(`[v0] Agreements API - Fetched and cached agreements count: ${data?.length || 0}`)
 
     return NextResponse.json(response)
-  } catch (error) {
-    console.error("Error fetching agreements:", error)
-    return NextResponse.json({ agreements: [] })
+  } catch (error: any) {
+    const errorMessage = error?.message || String(error)
+    console.error("Error fetching agreements:", errorMessage)
+
+    // Check if it's a rate limit error
+    if (errorMessage.includes("Too Many") || errorMessage.includes("rate limit") || errorMessage.includes("429")) {
+      return NextResponse.json(
+        { agreements: [], error: "Rate limited, please retry", rateLimited: true },
+        { status: 429 },
+      )
+    }
+
+    return NextResponse.json({ agreements: [], error: errorMessage })
   }
 }
 
