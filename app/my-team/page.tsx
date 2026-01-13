@@ -2,7 +2,6 @@ import { Suspense } from "react"
 import { MyTeamContent } from "@/components/my-team-content"
 import { GlobalHeader } from "@/components/global-header"
 import { MainNavigation } from "@/components/main-navigation"
-import { StudentPortalHeader } from "@/components/student-portal-header"
 
 function MyTeamLoading() {
   return (
@@ -22,12 +21,9 @@ export default function MyTeamPage() {
         </aside>
         <main className="flex-1 overflow-y-auto">
           <div className="container mx-auto p-6">
-            <StudentPortalHeader />
-            <div className="mt-6">
-              <Suspense fallback={<MyTeamLoading />}>
-                <MyTeamContent />
-              </Suspense>
-            </div>
+            <Suspense fallback={<MyTeamLoading />}>
+              <MyTeamContent />
+            </Suspense>
           </div>
         </main>
       </div>

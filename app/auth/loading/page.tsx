@@ -32,11 +32,13 @@ export default function AuthLoadingPage() {
       try {
         clearAuthCache()
 
+        const normalizedEmail = userEmail.toLowerCase()
+
         // Check directors first
-        const { data: directorData } = await supabase
+        const { data: directorData, error: directorError } = await supabase
           .from("directors")
           .select("id, email, role, full_name")
-          .ilike("email", userEmail)
+          .eq("email", normalizedEmail)
           .maybeSingle()
 
         if (directorData) {
@@ -45,10 +47,10 @@ export default function AuthLoadingPage() {
         }
 
         // Check students
-        const { data: studentData } = await supabase
+        const { data: studentData, error: studentError } = await supabase
           .from("students")
           .select("id, email, full_name, clinic")
-          .ilike("email", userEmail)
+          .eq("email", normalizedEmail)
           .maybeSingle()
 
         if (studentData) {
@@ -57,14 +59,24 @@ export default function AuthLoadingPage() {
         }
 
         // Check clients
-        const { data: clientData } = await supabase
+        const { data: clientData, error: clientError } = await supabase
           .from("clients")
           .select("id, name, email")
-          .ilike("email", userEmail)
+          .eq("email", normalizedEmail)
           .maybeSingle()
 
         if (clientData) {
           router.push("/client-portal")
+          return
+        }
+
+        // No role found - try case-insensitive search as fallback
+        const { data: allStudents } = await supabase.from("students").select("id, email, full_name, clinic")
+
+        const matchingStudent = allStudents?.find((s) => s.email?.toLowerCase() === normalizedEmail)
+
+        if (matchingStudent) {
+          router.push("/students")
           return
         }
 

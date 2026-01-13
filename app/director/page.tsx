@@ -4,7 +4,6 @@ import { Suspense, useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { MainNavigation } from "@/components/main-navigation"
 import { DashboardHeader } from "@/components/dashboard-header"
-import { ClinicPerformance } from "@/components/clinic-performance"
 import { WeeklyProgramSummary } from "@/components/weekly-program-summary"
 import { DirectorNotifications } from "@/components/director-notifications"
 import { ClinicView } from "@/components/clinic-view"
@@ -28,8 +27,6 @@ import {
   TrendingUp,
   MessageSquare,
   ExternalLink,
-  AlertTriangle,
-  UserCheck,
   Bell,
   Eye,
 } from "lucide-react"
@@ -760,36 +757,8 @@ export default function DirectorDashboard() {
                 />
               )}
 
-              {/* Urgent Items / Alerts Banner */}
-              {overviewData.urgentItems.length > 0 && (
-                <Card className="border-amber-200 bg-amber-50">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center">
-                        <AlertTriangle className="h-5 w-5 text-amber-600" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-amber-900">Needs Your Attention</h3>
-                        <div className="flex flex-wrap gap-4 mt-1">
-                          {overviewData.urgentItems.map((item, idx) => (
-                            <div key={idx} className="flex items-center gap-2 text-sm text-amber-800">
-                              <span>{item.message}</span>
-                              {item.action && (
-                                <Button variant="link" size="sm" className="h-auto p-0 text-amber-700 font-medium">
-                                  {item.action} <ChevronRight className="h-3 w-3 ml-1" />
-                                </Button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Quick Stats Row - Redesigned for faster scanning */}
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+              {/* Weekly Overview Stats */}
+              <div className="grid gap-6 md:grid-cols-3">
                 <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
@@ -834,38 +803,6 @@ export default function DirectorDashboard() {
                       </div>
                       <div className="h-12 w-12 rounded-full bg-purple-200/50 flex items-center justify-center">
                         <Briefcase className="h-6 w-6 text-purple-600" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-gradient-to-br from-amber-50 to-amber-100/50 border-amber-200">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-medium text-amber-600 uppercase tracking-wide">Debriefs</p>
-                        <p className="text-3xl font-bold text-amber-900 mt-1">{quickStats.debriefsSubmitted}</p>
-                        <p className="text-xs text-amber-600 mt-1">
-                          {debriefsData.pending > 0 ? `${debriefsData.pending} pending review` : "All reviewed"}
-                        </p>
-                      </div>
-                      <div className="h-12 w-12 rounded-full bg-amber-200/50 flex items-center justify-center">
-                        <FileText className="h-6 w-6 text-amber-600" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-gradient-to-br from-slate-50 to-slate-100/50 border-slate-200">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-medium text-slate-600 uppercase tracking-wide">Attendance</p>
-                        <p className="text-3xl font-bold text-slate-900 mt-1">{overviewData.attendanceSummary.rate}%</p>
-                        <p className="text-xs text-slate-600 mt-1">This week</p>
-                      </div>
-                      <div className="h-12 w-12 rounded-full bg-slate-200/50 flex items-center justify-center">
-                        <UserCheck className="h-6 w-6 text-slate-600" />
                       </div>
                     </div>
                   </CardContent>
@@ -1068,14 +1005,7 @@ export default function DirectorDashboard() {
               </div>
 
               {/* Detailed Performance Section */}
-              <div className="grid gap-6 lg:grid-cols-2">
-                <Suspense fallback={<div>Loading performance...</div>}>
-                  <ClinicPerformance
-                    selectedClinic={selectedDirectorId}
-                    selectedWeeks={selectedWeeks}
-                    directorId={selectedDirectorId}
-                  />
-                </Suspense>
+              <div className="grid gap-6">
                 <Suspense fallback={<div>Loading summary...</div>}>
                   <WeeklyProgramSummary
                     selectedClinic={selectedDirectorId}

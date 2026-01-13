@@ -8,21 +8,20 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { FileText, Calendar, Clock, ChevronDown, ChevronUp, Building2 } from "lucide-react"
 import { useUserRole } from "@/hooks/use-user-role"
 import { StudentPortalHeader } from "@/components/student-portal-header"
-import { useDemoMode } from "@/contexts/demo-mode-context"
 
 interface Debrief {
   id: string
-  student_id: string
-  student_email: string
-  client_name: string
+  studentId: string
+  studentEmail: string
+  clientName: string
   clinic: string
-  hours_worked: string
-  work_summary: string
+  hoursWorked: string | number
+  workSummary: string
   questions: string | null
-  week_ending: string
-  date_submitted: string
+  weekEnding: string
+  createdAt: string
   status: string
-  week_number: number
+  weekNumber: number
 }
 
 const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
@@ -39,21 +38,15 @@ export default function StudentDebriefsPage() {
     isTeamLeader: boolean
   } | null>(null)
 
-  const { email, isLoading: userLoading } = useUserRole()
-  const { isDemoMode, demoStudentId } = useDemoMode()
+  const { studentId: authStudentId, isLoading: userLoading, isAuthenticated, role } = useUserRole()
 
-  // Fetch student info
+  // Fetch student info using the authenticated student's ID
   useEffect(() => {
     async function fetchStudentInfo() {
-      if (!email && !isDemoMode) return
+      if (!authStudentId) return
 
       try {
-        const queryEmail = isDemoMode && demoStudentId ? undefined : email
-        const url =
-          isDemoMode && demoStudentId
-            ? `/api/supabase/v-complete-mapping?studentId=${demoStudentId}`
-            : `/api/supabase/v-complete-mapping?studentEmail=${encodeURIComponent(queryEmail || "")}`
-
+        const url = `/api/supabase/v-complete-mapping?studentId=${authStudentId}`
         const response = await fetch(url)
         const data = await response.json()
 
@@ -61,7 +54,7 @@ export default function StudentDebriefsPage() {
           const student = data.data[0]
           setStudentInfo({
             fullName: student.student_name || "Student",
-            email: student.student_email || email || "",
+            email: student.student_email || "",
             clinic: student.student_clinic_name || "Unknown Clinic",
             clientName: student.client_name,
             isTeamLeader: student.student_role === "Team Leader",
@@ -72,22 +65,22 @@ export default function StudentDebriefsPage() {
       }
     }
 
-    if (!userLoading) {
+    if (!userLoading && authStudentId) {
       fetchStudentInfo()
     }
-  }, [email, userLoading, isDemoMode, demoStudentId])
+  }, [authStudentId, userLoading])
 
-  // Fetch debriefs for the current student
+  // Fetch debriefs for the current student using their ID
   useEffect(() => {
     async function fetchDebriefs() {
-      if (!studentInfo?.email) return
+      if (!authStudentId) return
 
       try {
         const response = await fetch(
-          `/api/supabase/debriefs?semesterId=${SPRING_2026_SEMESTER_ID}&studentEmail=${encodeURIComponent(studentInfo.email)}`,
+          `/api/supabase/debriefs?semesterId=${SPRING_2026_SEMESTER_ID}&studentId=${authStudentId}`,
         )
         const data = await response.json()
-        if (data.success && data.debriefs) {
+        if (data.debriefs) {
           setDebriefs(data.debriefs)
         }
       } catch (error) {
@@ -97,24 +90,24 @@ export default function StudentDebriefsPage() {
       }
     }
 
-    if (studentInfo?.email) {
+    if (!userLoading && authStudentId) {
       fetchDebriefs()
     }
-  }, [studentInfo?.email])
+  }, [authStudentId, userLoading])
 
   // Group debriefs by week
   const debriefsbyWeek = useMemo(() => {
     const grouped: Record<number, Debrief[]> = {}
     debriefs.forEach((d) => {
-      if (!grouped[d.week_number]) {
-        grouped[d.week_number] = []
+      if (!grouped[d.weekNumber]) {
+        grouped[d.weekNumber] = []
       }
-      grouped[d.week_number].push(d)
+      grouped[d.weekNumber].push(d)
     })
     return grouped
   }, [debriefs])
 
-  const totalHours = debriefs.reduce((sum, d) => sum + Number.parseFloat(d.hours_worked || "0"), 0)
+  const totalHours = debriefs.reduce((sum, d) => sum + Number.parseFloat(String(d.hoursWorked) || "0"), 0)
 
   const getStatusBadge = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -209,11 +202,11 @@ export default function StudentDebriefsPage() {
                                   <Building2 className="h-5 w-5 text-blue-600" />
                                 </div>
                                 <div>
-                                  <p className="font-medium text-slate-900">{debrief.client_name}</p>
+                                  <p className="font-medium text-slate-900">{debrief.clientName}</p>
                                   <div className="flex items-center gap-2 text-sm text-slate-500">
-                                    <span>{debrief.hours_worked} hours</span>
+                                    <span>{debrief.hoursWorked} hours</span>
                                     <span>•</span>
-                                    <span>{new Date(debrief.date_submitted).toLocaleDateString()}</span>
+                                    <span>{new Date(debrief.createdAt).toLocaleDateString()}</span>
                                   </div>
                                 </div>
                               </div>
@@ -233,7 +226,7 @@ export default function StudentDebriefsPage() {
                               <div className="pt-4">
                                 <h4 className="text-sm font-medium text-slate-700 mb-2">Work Summary</h4>
                                 <p className="text-sm text-slate-600 whitespace-pre-wrap">
-                                  {debrief.work_summary || "No summary provided."}
+                                  {debrief.workSummary || "No summary provided."}
                                 </p>
                               </div>
 
@@ -251,7 +244,7 @@ export default function StudentDebriefsPage() {
                                 </span>
                                 <span className="flex items-center gap-1">
                                   <Calendar className="h-3 w-3" />
-                                  Week ending: {debrief.week_ending}
+                                  Week ending: {debrief.weekEnding}
                                 </span>
                               </div>
                             </div>

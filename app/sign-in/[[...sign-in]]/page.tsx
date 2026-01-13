@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -63,12 +64,14 @@ export default function SignInPage() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
       <div className="w-full max-w-md px-4">
         <div className="mb-8 flex flex-col items-center gap-6">
-          {/* SEED Program Logo */}
           <div className="relative w-[360px] h-[130px]">
-            <img
+            <Image
               src="/images/u101224-suffolk-seed-logo-chosen-recreat-1.avif"
               alt="Suffolk SEED Program"
-              className="w-full h-full object-contain drop-shadow-md"
+              fill
+              className="object-contain drop-shadow-md"
+              priority
+              unoptimized
             />
           </div>
 
@@ -79,12 +82,14 @@ export default function SignInPage() {
             <div className="flex-1 h-px bg-gradient-to-l from-transparent via-slate-300 to-slate-300"></div>
           </div>
 
-          {/* SHIN Platform Logo */}
           <div className="relative w-[420px] h-[240px]">
-            <img
+            <Image
               src="/images/shin.png"
               alt="SHIN - SEED Hub & Information Nexus"
-              className="w-full h-full object-contain drop-shadow-lg"
+              fill
+              className="object-contain drop-shadow-lg"
+              priority
+              unoptimized
             />
           </div>
         </div>

@@ -374,13 +374,17 @@ export default function AccountManagementPage() {
 
   if (isLoading || authLoading) {
     return (
-      <div className="flex min-h-screen bg-background">
-        <MainNavigation />
-        <main className="flex-1 p-6 md:p-8 lg:p-10 overflow-auto">
-          <div className="max-w-4xl mx-auto space-y-6">
-            <Skeleton className="h-10 w-64" />
-            <Skeleton className="h-48 w-full" />
-            <Skeleton className="h-64 w-full" />
+      <div className="min-h-screen bg-background">
+        <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+          <MainNavigation />
+        </aside>
+        <main className="pl-52 pt-14">
+          <div className="p-6 md:p-8 lg:p-10">
+            <div className="max-w-4xl mx-auto space-y-6">
+              <Skeleton className="h-10 w-64" />
+              <Skeleton className="h-48 w-full" />
+              <Skeleton className="h-64 w-full" />
+            </div>
           </div>
         </main>
       </div>
@@ -388,293 +392,297 @@ export default function AccountManagementPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <MainNavigation />
-      <main className="flex-1 p-6 md:p-8 lg:p-10 overflow-auto">
-        <div className="max-w-4xl mx-auto space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Account Management</h1>
-            <p className="text-muted-foreground">Update your profile information and platform settings</p>
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
-              <AlertCircle className="h-4 w-4" />
-              {error}
+    <div className="min-h-screen bg-background">
+      <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+        <MainNavigation />
+      </aside>
+      <main className="pl-52 pt-14">
+        <div className="p-6 md:p-8 lg:p-10 overflow-auto">
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Account Management</h1>
+              <p className="text-muted-foreground">Update your profile information and platform settings</p>
             </div>
-          )}
 
-          {successMessage && (
-            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              {successMessage}
-            </div>
-          )}
-
-          {passwordSuccess && (
-            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              {passwordSuccess}
-            </div>
-          )}
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Camera className="h-5 w-5 text-muted-foreground" />
-                <CardTitle>Profile Photo</CardTitle>
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-2">
+                <AlertCircle className="h-4 w-4" />
+                {error}
               </div>
-              <CardDescription>Upload a profile photo to personalize your account</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-6">
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src={profile?.profile_picture_url || ""} />
-                  <AvatarFallback className="text-lg">{getInitials(profile?.full_name || "U")}</AvatarFallback>
-                </Avatar>
-                <div className="space-y-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoUpload}
-                    className="hidden"
-                  />
-                  <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
-                    <Camera className="h-4 w-4 mr-2" />
-                    {isUploading ? "Uploading..." : "Change Photo"}
-                  </Button>
-                  <p className="text-xs text-muted-foreground">JPG, PNG or GIF. Max size 5MB.</p>
+            )}
+
+            {successMessage && (
+              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                {successMessage}
+              </div>
+            )}
+
+            {passwordSuccess && (
+              <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                {passwordSuccess}
+              </div>
+            )}
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Camera className="h-5 w-5 text-muted-foreground" />
+                  <CardTitle>Profile Photo</CardTitle>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+                <CardDescription>Upload a profile photo to personalize your account</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-6">
+                  <Avatar className="h-20 w-20">
+                    <AvatarImage src={profile?.profile_picture_url || ""} />
+                    <AvatarFallback className="text-lg">{getInitials(profile?.full_name || "U")}</AvatarFallback>
+                  </Avatar>
+                  <div className="space-y-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                    />
+                    <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                      <Camera className="h-4 w-4 mr-2" />
+                      {isUploading ? "Uploading..." : "Change Photo"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">JPG, PNG or GIF. Max size 5MB.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <User className="h-5 w-5 text-muted-foreground" />
-                <CardTitle>Personal Information</CardTitle>
-              </div>
-              <CardDescription>Update your personal details and contact information</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <User className="h-5 w-5 text-muted-foreground" />
+                  <CardTitle>Personal Information</CardTitle>
+                </div>
+                <CardDescription>Update your personal details and contact information</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="full_name" className="flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      Full Name
+                    </Label>
+                    <Input
+                      id="full_name"
+                      value={formData.full_name}
+                      onChange={(e) => handleInputChange("full_name", e.target.value)}
+                      placeholder="Enter your full name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email" className="flex items-center gap-2">
+                      <Mail className="h-4 w-4" />
+                      Email Address
+                    </Label>
+                    <Input id="email" value={profile?.email || ""} disabled className="bg-muted" />
+                    <p className="text-xs text-muted-foreground">Email cannot be changed</p>
+                  </div>
+                </div>
                 <div className="space-y-2">
-                  <Label htmlFor="full_name" className="flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    Full Name
+                  <Label htmlFor="phone" className="flex items-center gap-2">
+                    <Phone className="h-4 w-4" />
+                    Phone Number
                   </Label>
                   <Input
-                    id="full_name"
-                    value={formData.full_name}
-                    onChange={(e) => handleInputChange("full_name", e.target.value)}
-                    placeholder="Enter your full name"
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) => handleInputChange("phone", e.target.value)}
+                    placeholder="(555) 123-4567"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="flex items-center gap-2">
-                    <Mail className="h-4 w-4" />
-                    Email Address
-                  </Label>
-                  <Input id="email" value={profile?.email || ""} disabled className="bg-muted" />
-                  <p className="text-xs text-muted-foreground">Email cannot be changed</p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone" className="flex items-center gap-2">
-                  <Phone className="h-4 w-4" />
-                  Phone Number
-                </Label>
-                <Input
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) => handleInputChange("phone", e.target.value)}
-                  placeholder="(555) 123-4567"
-                />
-              </div>
-              {profile?.role !== "client" && (
-                <div className="space-y-2">
-                  <Label htmlFor="bio">Bio</Label>
-                  <Textarea
-                    id="bio"
-                    value={formData.bio}
-                    onChange={(e) => handleInputChange("bio", e.target.value)}
-                    placeholder="Tell us a bit about yourself..."
-                    rows={3}
-                  />
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                {profile?.role !== "client" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="bio">Bio</Label>
+                    <Textarea
+                      id="bio"
+                      value={formData.bio}
+                      onChange={(e) => handleInputChange("bio", e.target.value)}
+                      placeholder="Tell us a bit about yourself..."
+                      rows={3}
+                    />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-muted-foreground" />
-                <CardTitle>Account Details</CardTitle>
-              </div>
-              <CardDescription>Your account information managed by the system</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground">ACCOUNT TYPE</p>
-                <p className="font-medium capitalize">{profile?.role || "Unknown"}</p>
-              </div>
-              {profile?.clinic_name && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-muted-foreground" />
+                  <CardTitle>Account Details</CardTitle>
+                </div>
+                <CardDescription>Your account information managed by the system</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div className="p-4 bg-muted rounded-lg">
-                  <p className="text-sm text-muted-foreground">CLINIC</p>
-                  <p className="font-medium">{profile.clinic_name}</p>
+                  <p className="text-sm text-muted-foreground">ACCOUNT TYPE</p>
+                  <p className="font-medium capitalize">{profile?.role || "Unknown"}</p>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+                {profile?.clinic_name && (
+                  <div className="p-4 bg-muted rounded-lg">
+                    <p className="text-sm text-muted-foreground">CLINIC</p>
+                    <p className="font-medium">{profile.clinic_name}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Lock className="h-5 w-5 text-muted-foreground" />
-                <CardTitle>Security</CardTitle>
-              </div>
-              <CardDescription>Manage your password and security settings</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {!showPasswordSection ? (
-                <Button variant="outline" onClick={() => setShowPasswordSection(true)}>
-                  <Lock className="h-4 w-4 mr-2" />
-                  Change Password
-                </Button>
-              ) : (
-                <div className="space-y-4 p-4 border rounded-lg">
-                  <h4 className="font-medium">Change Password</h4>
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Lock className="h-5 w-5 text-muted-foreground" />
+                  <CardTitle>Security</CardTitle>
+                </div>
+                <CardDescription>Manage your password and security settings</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!showPasswordSection ? (
+                  <Button variant="outline" onClick={() => setShowPasswordSection(true)}>
+                    <Lock className="h-4 w-4 mr-2" />
+                    Change Password
+                  </Button>
+                ) : (
+                  <div className="space-y-4 p-4 border rounded-lg">
+                    <h4 className="font-medium">Change Password</h4>
 
-                  {passwordError && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4" />
-                      {passwordError}
+                    {passwordError && (
+                      <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4" />
+                        {passwordError}
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <Label htmlFor="newPassword">New Password</Label>
+                      <div className="relative">
+                        <Input
+                          id="newPassword"
+                          type={showNewPassword ? "text" : "password"}
+                          value={passwordData.newPassword}
+                          onChange={(e) => setPasswordData((prev) => ({ ...prev, newPassword: e.target.value }))}
+                          placeholder="Enter new password"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                        >
+                          {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
                     </div>
-                  )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="newPassword">New Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="newPassword"
-                        type={showNewPassword ? "text" : "password"}
-                        value={passwordData.newPassword}
-                        onChange={(e) => setPasswordData((prev) => ({ ...prev, newPassword: e.target.value }))}
-                        placeholder="Enter new password"
-                      />
+                    <div className="space-y-2">
+                      <Label htmlFor="confirmPassword">Confirm New Password</Label>
+                      <div className="relative">
+                        <Input
+                          id="confirmPassword"
+                          type={showConfirmPassword ? "text" : "password"}
+                          value={passwordData.confirmPassword}
+                          onChange={(e) => setPasswordData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                          placeholder="Confirm new password"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        >
+                          {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button onClick={handleChangePassword} disabled={isChangingPassword}>
+                        {isChangingPassword ? "Changing..." : "Update Password"}
+                      </Button>
                       <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
-                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        variant="outline"
+                        onClick={() => {
+                          setShowPasswordSection(false)
+                          setPasswordData({ newPassword: "", confirmPassword: "" })
+                          setPasswordError(null)
+                        }}
                       >
-                        {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        Cancel
                       </Button>
                     </div>
                   </div>
+                )}
+              </CardContent>
+            </Card>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="confirmPassword"
-                        type={showConfirmPassword ? "text" : "password"}
-                        value={passwordData.confirmPassword}
-                        onChange={(e) => setPasswordData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
-                        placeholder="Confirm new password"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      >
-                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
+            <div className="flex justify-end">
+              <Button onClick={handleSaveProfile} disabled={isSaving}>
+                <Save className="h-4 w-4 mr-2" />
+                {isSaving ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
 
-                  <div className="flex gap-2">
-                    <Button onClick={handleChangePassword} disabled={isChangingPassword}>
-                      {isChangingPassword ? "Changing..." : "Update Password"}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setShowPasswordSection(false)
-                        setPasswordData({ newPassword: "", confirmPassword: "" })
-                        setPasswordError(null)
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
+            <hr className="my-6" />
+
+            <div className="flex items-center gap-2 mb-4">
+              <Settings className="h-5 w-5 text-muted-foreground" />
+              <h2 className="text-xl font-semibold">Platform Settings</h2>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-muted-foreground" />
+                  <CardTitle>Active Semester View</CardTitle>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-end">
-            <Button onClick={handleSaveProfile} disabled={isSaving}>
-              <Save className="h-4 w-4 mr-2" />
-              {isSaving ? "Saving..." : "Save Changes"}
-            </Button>
+                <CardDescription>
+                  Choose which semester's data to view across the platform. Changing this will update all pages to show
+                  students, clients, and data from the selected semester.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {semesterLoading ? (
+                  <Skeleton className="h-10 w-full max-w-xs" />
+                ) : semesterError ? (
+                  <p className="text-red-500 text-sm">{semesterError}</p>
+                ) : (
+                  <div className="space-y-4">
+                    <Select value={selectedSemesterId || ""} onValueChange={(value) => setSelectedSemesterId(value)}>
+                      <SelectTrigger className="w-full max-w-xs">
+                        <SelectValue placeholder="Select a semester" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {semesters.map((sem) => (
+                          <SelectItem key={sem.id} value={sem.id}>
+                            {sem.semester} {sem.is_active && "(Active)"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {isViewingArchived && (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-sm text-amber-800">
+                          You are viewing archived data from <strong>{selectedSemester?.semester}</strong>. Some
+                          features may be limited.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
-
-          <hr className="my-6" />
-
-          <div className="flex items-center gap-2 mb-4">
-            <Settings className="h-5 w-5 text-muted-foreground" />
-            <h2 className="text-xl font-semibold">Platform Settings</h2>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-muted-foreground" />
-                <CardTitle>Active Semester View</CardTitle>
-              </div>
-              <CardDescription>
-                Choose which semester's data to view across the platform. Changing this will update all pages to show
-                students, clients, and data from the selected semester.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {semesterLoading ? (
-                <Skeleton className="h-10 w-full max-w-xs" />
-              ) : semesterError ? (
-                <p className="text-red-500 text-sm">{semesterError}</p>
-              ) : (
-                <div className="space-y-4">
-                  <Select value={selectedSemesterId || ""} onValueChange={(value) => setSelectedSemesterId(value)}>
-                    <SelectTrigger className="w-full max-w-xs">
-                      <SelectValue placeholder="Select a semester" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {semesters.map((sem) => (
-                        <SelectItem key={sem.id} value={sem.id}>
-                          {sem.semester} {sem.is_active && "(Active)"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {isViewingArchived && (
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                      <p className="text-sm text-amber-800">
-                        You are viewing archived data from <strong>{selectedSemester?.semester}</strong>. Some features
-                        may be limited.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
       </main>
     </div>
