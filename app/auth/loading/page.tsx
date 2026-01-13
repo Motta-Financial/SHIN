@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Loader2 } from "lucide-react"
@@ -9,37 +9,49 @@ import { clearAuthCache } from "@/hooks/use-user-role"
 export default function AuthLoadingPage() {
   const router = useRouter()
   const [status, setStatus] = useState("Verifying your account...")
-  const supabase = createClient()
+  const hasStartedRef = useRef(false)
 
   useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
-        await detectRoleAndRedirect(session.user.email!)
-      } else if (event === "INITIAL_SESSION") {
-        if (session?.user) {
-          await detectRoleAndRedirect(session.user.email!)
-        } else {
-          router.push("/sign-in")
-        }
-      }
-    })
+    // Prevent double execution
+    if (hasStartedRef.current) return
+    hasStartedRef.current = true
 
-    const detectRoleAndRedirect = async (userEmail: string) => {
-      setStatus("Loading your profile...")
+    const detectRoleAndRedirect = async () => {
+      console.log("[v0] AuthLoading - Starting role detection")
 
       try {
+        const supabase = createClient()
+
+        // Get current user
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser()
+
+        console.log("[v0] AuthLoading - User check:", { hasUser: !!user, error: userError?.message })
+
+        if (userError || !user) {
+          console.log("[v0] AuthLoading - No user found, redirecting to sign-in")
+          router.push("/sign-in")
+          return
+        }
+
+        setStatus("Loading your profile...")
         clearAuthCache()
 
         // Call API route that uses service role to bypass RLS
+        console.log("[v0] AuthLoading - Calling detect-role API for:", user.email)
+
         const response = await fetch("/api/auth/detect-role", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: userEmail }),
+          body: JSON.stringify({ email: user.email }),
         })
 
+        console.log("[v0] AuthLoading - API response status:", response.status)
+
         const data = await response.json()
+        console.log("[v0] AuthLoading - API response data:", data)
 
         if (response.ok && data.redirect) {
           console.log("[v0] AuthLoading - Role detected:", data.role, "Redirecting to:", data.redirect)
@@ -48,7 +60,7 @@ export default function AuthLoadingPage() {
         }
 
         // No role found
-        console.error("[v0] AuthLoading - No role found for:", userEmail, data.error)
+        console.error("[v0] AuthLoading - No role found for:", user.email, data.error)
         setStatus("Account not configured. Please contact support.")
         setTimeout(() => router.push("/sign-in"), 3000)
       } catch (error) {
@@ -58,10 +70,8 @@ export default function AuthLoadingPage() {
       }
     }
 
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [router, supabase])
+    detectRoleAndRedirect()
+  }, [router])
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">

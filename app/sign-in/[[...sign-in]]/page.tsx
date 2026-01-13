@@ -20,8 +20,6 @@ export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
 
-  const supabase = createClient()
-
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
@@ -30,6 +28,7 @@ export default function SignInPage() {
     console.log("[v0] SignIn - Attempting sign in for:", email)
 
     try {
+      const supabase = createClient()
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -51,6 +50,7 @@ export default function SignInPage() {
 
       console.log("[v0] SignIn - Auth success! User:", data.user.email)
 
+      // Navigate to auth loading page which will detect role and redirect
       router.push("/auth/loading")
     } catch (err) {
       console.error("[v0] SignIn - Error:", err)
