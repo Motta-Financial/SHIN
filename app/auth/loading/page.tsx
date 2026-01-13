@@ -22,19 +22,29 @@ export default function AuthLoadingPage() {
       try {
         const supabase = createClient()
 
-        // Get current user
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser()
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
 
-        console.log("[v0] AuthLoading - User check:", {
-          hasUser: !!user,
-          email: user?.email,
-          error: userError?.message,
+        console.log("[v0] AuthLoading - Session check:", {
+          hasSession: !!sessionData.session,
+          email: sessionData.session?.user?.email,
+          error: sessionError?.message,
         })
 
-        if (userError || !user) {
+        // If no session, try to get user directly (session might be in cookies)
+        let user = sessionData.session?.user
+
+        if (!user) {
+          console.log("[v0] AuthLoading - No session, trying getUser...")
+          const { data: userData, error: userError } = await supabase.auth.getUser()
+
+          if (userError) {
+            console.log("[v0] AuthLoading - getUser error:", userError.message)
+          } else {
+            user = userData.user
+          }
+        }
+
+        if (!user) {
           console.log("[v0] AuthLoading - No user found, redirecting to sign-in")
           router.push("/sign-in")
           return
@@ -43,49 +53,43 @@ export default function AuthLoadingPage() {
         setStatus("Loading your profile...")
         clearAuthCache()
 
-        console.log("[v0] AuthLoading - Calling detect-role API for:", user.email)
+        const userEmail = user.email
+        console.log("[v0] AuthLoading - User email:", userEmail)
 
-        let response: Response
-        try {
-          response = await fetch("/api/auth/detect-role", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: user.email }),
-            credentials: "include",
-          })
-        } catch (fetchError) {
-          console.error("[v0] AuthLoading - Fetch failed:", fetchError)
-          setStatus("Network error. Please try again.")
-          setTimeout(() => router.push("/sign-in"), 2000)
-          return
-        }
+        console.log("[v0] AuthLoading - Calling detect-role API...")
+
+        const response = await fetch("/api/auth/detect-role", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: userEmail }),
+          credentials: "include",
+        })
 
         console.log("[v0] AuthLoading - API response status:", response.status)
 
+        const responseText = await response.text()
+        console.log("[v0] AuthLoading - API response:", responseText.substring(0, 500))
+
         let data: any
         try {
-          const text = await response.text()
-          console.log("[v0] AuthLoading - API response text:", text.substring(0, 200))
-          data = JSON.parse(text)
+          data = JSON.parse(responseText)
         } catch (parseError) {
-          console.error("[v0] AuthLoading - Failed to parse response:", parseError)
+          console.error("[v0] AuthLoading - Failed to parse response")
           setStatus("Server error. Please try again.")
           setTimeout(() => router.push("/sign-in"), 2000)
           return
         }
 
-        console.log("[v0] AuthLoading - API response data:", data)
+        console.log("[v0] AuthLoading - Parsed data:", data)
 
         if (response.ok && data.redirect) {
-          console.log("[v0] AuthLoading - Role detected:", data.role, "Redirecting to:", data.redirect)
+          console.log("[v0] AuthLoading - Redirecting to:", data.redirect)
           router.push(data.redirect)
           return
         }
 
-        // No role found - but user is authenticated, try to figure out where to send them
-        console.error("[v0] AuthLoading - No role found for:", user.email, "Error:", data.error)
-
-        // For now, redirect to sign-in with a message
+        // No role found
+        console.error("[v0] AuthLoading - No role found. Error:", data.error)
         setStatus("Account not configured. Please contact support.")
         setTimeout(() => router.push("/sign-in"), 3000)
       } catch (error) {

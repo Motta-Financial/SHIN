@@ -50,6 +50,13 @@ export default function SignInPage() {
 
       console.log("[v0] SignIn - Auth success! User:", data.user.email)
 
+      // This ensures cookies are written before navigation
+      await new Promise((resolve) => setTimeout(resolve, 500))
+
+      // Verify session is set
+      const { data: sessionData } = await supabase.auth.getSession()
+      console.log("[v0] SignIn - Session verified:", !!sessionData.session)
+
       // Navigate to auth loading page which will detect role and redirect
       router.push("/auth/loading")
     } catch (err) {
@@ -66,7 +73,7 @@ export default function SignInPage() {
         <div className="mb-8 flex flex-col items-center gap-6">
           <div className="relative w-[360px] h-[100px]">
             <Image
-              src="/images/seed-20logo.png"
+              src="/images/u101224-suffolk-seed-logo-chosen-recreat-1.avif"
               alt="Suffolk SEED Program"
               fill
               className="object-contain drop-shadow-md"
