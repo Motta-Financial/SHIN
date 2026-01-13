@@ -66,7 +66,7 @@ export default function SignInPage() {
         <div className="mb-8 flex flex-col items-center gap-6">
           <div className="relative w-[360px] h-[130px]">
             <Image
-              src="/images/u101224-suffolk-seed-logo-chosen-recreat-1.avif"
+              src="/images/seed-20logo.png"
               alt="Suffolk SEED Program"
               fill
               className="object-contain drop-shadow-md"
