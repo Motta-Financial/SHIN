@@ -33,7 +33,24 @@ export async function updateSession(request: NextRequest) {
 
   // Refresh session if expired - this is important for SSR
   try {
-    await supabase.auth.getUser()
+    const { error } = await supabase.auth.getUser()
+
+    if (error?.code === "session_not_found" || error?.message?.includes("session_not_found")) {
+      // Clear all Supabase auth cookies to force re-authentication
+      const cookieNames = request.cookies.getAll().map((c) => c.name)
+      const supabaseCookies = cookieNames.filter((name) => name.startsWith("sb-") || name.includes("supabase"))
+
+      supabaseCookies.forEach((name) => {
+        response.cookies.delete(name)
+      })
+
+      // Redirect to sign-in page if not already there
+      const pathname = request.nextUrl.pathname
+      if (!pathname.startsWith("/sign-in") && !pathname.startsWith("/sign-up")) {
+        const signInUrl = new URL("/sign-in", request.url)
+        return NextResponse.redirect(signInUrl)
+      }
+    }
   } catch {
     // Auth may not be set up yet, ignore errors
   }
