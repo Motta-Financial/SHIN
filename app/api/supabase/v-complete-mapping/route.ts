@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
 import { getCached, setCache, getCacheKey } from "@/lib/api-cache"
@@ -24,18 +23,16 @@ export async function GET(request: Request) {
     })
     const cached = getCached<{ success: boolean; data: any[]; records: any[]; mappings: any[] }>(cacheKey)
     if (cached) {
-      console.log("[v0] v-complete-mapping API - Returning cached response")
       return NextResponse.json(cached)
     }
 
-    const supabase = await createClient()
+    const supabase = createServiceClient()
 
     // Get active semester if not specified and not including all
     let activeSemesterId = semesterId
     if (!activeSemesterId && !includeAll) {
       try {
-        const serviceClient = createServiceClient()
-        const { data: activeSemester } = await serviceClient
+        const { data: activeSemester } = await supabase
           .from("semester_config")
           .select("id")
           .eq("is_active", true)

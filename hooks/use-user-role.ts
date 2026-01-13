@@ -8,11 +8,14 @@ export type UserRole = "admin" | "director" | "student" | "client" | null
 interface UserRoleData {
   role: UserRole
   userId: string | null
+  authUserId: string | null // The Supabase Auth user ID
   email: string | null
   fullName: string | null
   clinicId: string | null
   clinicName: null
   studentId: string | null
+  directorId: string | null
+  clientId: string | null
   isLoading: boolean
   isAuthenticated: boolean
 }
@@ -36,11 +39,14 @@ async function fetchUserRole(): Promise<UserRoleData> {
       return {
         role: null,
         userId: null,
+        authUserId: null,
         email: null,
         fullName: null,
         clinicId: null,
         clinicName: null,
         studentId: null,
+        directorId: null,
+        clientId: null,
         isLoading: false,
         isAuthenticated: false,
       }
@@ -58,12 +64,15 @@ async function fetchUserRole(): Promise<UserRoleData> {
     if (directorData) {
       return {
         role: "director",
-        userId: user.id,
+        userId: directorData.id,
+        authUserId: user.id,
         email: user.email || null,
         fullName: directorData.full_name || null,
         clinicId: directorData.clinic_id || null,
         clinicName: null,
         studentId: null,
+        directorId: directorData.id,
+        clientId: null,
         isLoading: false,
         isAuthenticated: true,
       }
@@ -79,12 +88,15 @@ async function fetchUserRole(): Promise<UserRoleData> {
     if (studentData) {
       return {
         role: "student",
-        userId: user.id,
+        userId: studentData.id,
+        authUserId: user.id,
         email: user.email || null,
         fullName: studentData.full_name || null,
         clinicId: studentData.clinic_id || null,
         clinicName: null,
         studentId: studentData.id,
+        directorId: null,
+        clientId: null,
         isLoading: false,
         isAuthenticated: true,
       }
@@ -100,12 +112,15 @@ async function fetchUserRole(): Promise<UserRoleData> {
     if (clientData) {
       return {
         role: "client",
-        userId: user.id,
+        userId: clientData.id,
+        authUserId: user.id,
         email: user.email || null,
         fullName: clientData.name || null,
         clinicId: null,
         clinicName: null,
         studentId: null,
+        directorId: null,
+        clientId: clientData.id,
         isLoading: false,
         isAuthenticated: true,
       }
@@ -115,11 +130,14 @@ async function fetchUserRole(): Promise<UserRoleData> {
     return {
       role: null,
       userId: user.id,
+      authUserId: user.id,
       email: user.email || null,
       fullName: null,
       clinicId: null,
       clinicName: null,
       studentId: null,
+      directorId: null,
+      clientId: null,
       isLoading: false,
       isAuthenticated: true,
     }
@@ -128,11 +146,14 @@ async function fetchUserRole(): Promise<UserRoleData> {
     return {
       role: null,
       userId: null,
+      authUserId: null,
       email: null,
       fullName: null,
       clinicId: null,
       clinicName: null,
       studentId: null,
+      directorId: null,
+      clientId: null,
       isLoading: false,
       isAuthenticated: false,
     }
@@ -143,11 +164,14 @@ export function useUserRole(): UserRoleData {
   const [data, setData] = useState<UserRoleData>({
     role: null,
     userId: null,
+    authUserId: null,
     email: null,
     fullName: null,
     clinicId: null,
     clinicName: null,
     studentId: null,
+    directorId: null,
+    clientId: null,
     isLoading: true,
     isAuthenticated: false,
   })
@@ -186,11 +210,14 @@ export function useUserRole(): UserRoleData {
           setData({
             role: null,
             userId: null,
+            authUserId: null,
             email: null,
             fullName: null,
             clinicId: null,
             clinicName: null,
             studentId: null,
+            directorId: null,
+            clientId: null,
             isLoading: false,
             isAuthenticated: false,
           })

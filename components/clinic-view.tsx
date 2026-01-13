@@ -1,29 +1,30 @@
 "use client"
 
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
+
 import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Button } from "@/components/ui/button"
 import {
   Users,
-  FileText,
-  GraduationCap,
   Building2,
-  ExternalLink,
+  FileText,
   Clock,
-  CheckCircle,
+  CheckCircle2,
   AlertCircle,
+  Calendar,
   TrendingUp,
-  BarChart3,
   ChevronDown,
   ChevronUp,
   Mail,
-  Calendar,
   Briefcase,
+  GraduationCap,
   MessageSquare,
+  BarChart3,
+  ExternalLink,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import DocumentUpload from "@/components/shared/DocumentUpload"
@@ -86,7 +87,7 @@ interface CourseMaterial {
   created_at: string
 }
 
-export function ClinicView({ selectedClinic, selectedWeeks = [] }: ClinicViewProps) {
+export default function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
   const [clinicData, setClinicData] = useState<ClinicData | null>(null)
   const [schedule, setSchedule] = useState<ScheduleWeek[]>([])
   const [materials, setMaterials] = useState<CourseMaterial[]>([])
@@ -136,10 +137,16 @@ export function ClinicView({ selectedClinic, selectedWeeks = [] }: ClinicViewPro
           /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedClinic),
       )
 
-      const { data: mappingData, error: mappingError } = await supabase
-        .from("v_complete_mapping")
-        .select("*")
-        .eq("semester_id", SPRING_2026_SEMESTER_ID)
+      // Also pass semesterId to filter by Spring 2026 only
+      const mappingUrl = `/api/supabase/v-complete-mapping?semesterId=${SPRING_2026_SEMESTER_ID}`
+      const mappingRes = await fetch(mappingUrl)
+      let mappingData: CompleteMapping[] = []
+
+      if (mappingRes.ok) {
+        const result = await mappingRes.json()
+        // Handle different response formats
+        mappingData = result.data || result.records || result.mappings || result || []
+      }
 
       let filteredStudents: CompleteMapping[] = []
 
@@ -482,7 +489,7 @@ export function ClinicView({ selectedClinic, selectedWeeks = [] }: ClinicViewPro
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-green-500 rounded-lg">
-                    <CheckCircle className="h-5 w-5 text-white" />
+                    <CheckCircle2 className="h-5 w-5 text-white" />
                   </div>
                   <div className="flex-1">
                     <p className="text-2xl font-bold text-green-700">{activityMetrics.activeStudents}</p>
@@ -982,7 +989,7 @@ export function ClinicView({ selectedClinic, selectedWeeks = [] }: ClinicViewPro
                               <div>
                                 <p className="font-bold text-sm">{totalHours.toFixed(1)}h</p>
                                 {hasSubmitted ? (
-                                  <CheckCircle className="h-4 w-4 text-green-500 ml-auto" />
+                                  <CheckCircle2 className="h-4 w-4 text-green-500 ml-auto" />
                                 ) : (
                                   <AlertCircle className="h-4 w-4 text-orange-500 ml-auto" />
                                 )}
@@ -1156,7 +1163,7 @@ export function ClinicView({ selectedClinic, selectedWeeks = [] }: ClinicViewPro
                                           {/* Review Status */}
                                           {d.reviewed_by && (
                                             <div className="flex items-center gap-2 pt-2 border-t text-xs">
-                                              <CheckCircle className="h-3 w-3 text-green-500" />
+                                              <CheckCircle2 className="h-3 w-3 text-green-500" />
                                               <span className="text-muted-foreground">Reviewed by</span>
                                               <span className="font-medium">{d.reviewed_by}</span>
                                               {d.reviewed_at && (
@@ -1284,3 +1291,6 @@ export function ClinicView({ selectedClinic, selectedWeeks = [] }: ClinicViewPro
     </div>
   )
 }
+
+export { ClinicView }
+// export default ClinicView // Removed to fix duplicate default export error
