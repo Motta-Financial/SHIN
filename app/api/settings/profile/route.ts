@@ -1,20 +1,24 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/utils/supabase/server"
+import { createClient } from "@supabase/supabase-js"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+function getSupabaseClient() {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const userId = searchParams.get("userId")
-  const userType = searchParams.get("userType") || searchParams.get("role") // Accept both userType and role
+  const userType = searchParams.get("userType") || searchParams.get("role")
 
   if (!userId || !userType) {
     return NextResponse.json({ error: "Missing userId or userType" }, { status: 400 })
   }
 
   try {
-    const supabase = await createClient()
+    const supabase = getSupabaseClient()
 
     let profile = null
 
@@ -113,7 +117,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Missing userId or userType/role" }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = getSupabaseClient()
 
     let tableName: string
     let updateData: Record<string, any> = {

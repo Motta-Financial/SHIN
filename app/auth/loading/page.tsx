@@ -32,59 +32,27 @@ export default function AuthLoadingPage() {
       try {
         clearAuthCache()
 
-        const normalizedEmail = userEmail.toLowerCase()
+        // Call API route that uses service role to bypass RLS
+        const response = await fetch("/api/auth/detect-role", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: userEmail }),
+        })
 
-        // Check directors first
-        const { data: directorData, error: directorError } = await supabase
-          .from("directors")
-          .select("id, email, role, full_name")
-          .eq("email", normalizedEmail)
-          .maybeSingle()
+        const data = await response.json()
 
-        if (directorData) {
-          router.push("/director")
-          return
-        }
-
-        // Check students
-        const { data: studentData, error: studentError } = await supabase
-          .from("students")
-          .select("id, email, full_name, clinic")
-          .eq("email", normalizedEmail)
-          .maybeSingle()
-
-        if (studentData) {
-          router.push("/students")
-          return
-        }
-
-        // Check clients
-        const { data: clientData, error: clientError } = await supabase
-          .from("clients")
-          .select("id, name, email")
-          .eq("email", normalizedEmail)
-          .maybeSingle()
-
-        if (clientData) {
-          router.push("/client-portal")
-          return
-        }
-
-        // No role found - try case-insensitive search as fallback
-        const { data: allStudents } = await supabase.from("students").select("id, email, full_name, clinic")
-
-        const matchingStudent = allStudents?.find((s) => s.email?.toLowerCase() === normalizedEmail)
-
-        if (matchingStudent) {
-          router.push("/students")
+        if (response.ok && data.redirect) {
+          console.log("[v0] AuthLoading - Role detected:", data.role, "Redirecting to:", data.redirect)
+          router.push(data.redirect)
           return
         }
 
         // No role found
+        console.error("[v0] AuthLoading - No role found for:", userEmail, data.error)
         setStatus("Account not configured. Please contact support.")
         setTimeout(() => router.push("/sign-in"), 3000)
       } catch (error) {
-        console.error("[v0] AuthLoading - Query error:", error)
+        console.error("[v0] AuthLoading - Error:", error)
         setStatus("Error loading your account. Redirecting...")
         setTimeout(() => router.push("/sign-in"), 2000)
       }

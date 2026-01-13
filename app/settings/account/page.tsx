@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-
+import { createBrowserClient } from "@supabase/ssr"
 import { useState, useEffect, useRef } from "react"
 import { MainNavigation } from "@/components/main-navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -322,27 +322,73 @@ export default function AccountManagementPage() {
     setIsChangingPassword(true)
 
     try {
-      const response = await fetch("/api/settings/change-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          newPassword: passwordData.newPassword,
-        }),
+      // Create browser Supabase client for direct auth operations
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      )
+
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+      console.log("[v0] Password change - Session check:", {
+        hasSession: !!sessionData?.session,
+        sessionError: sessionError?.message,
+        userEmail: sessionData?.session?.user?.email,
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to change password")
+      if (!sessionData?.session) {
+        // Try to refresh the session
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
+        console.log("[v0] Password change - Refresh attempt:", {
+          hasSession: !!refreshData?.session,
+          refreshError: refreshError?.message,
+        })
+
+        if (!refreshData?.session) {
+          setPasswordError("Your session has expired. Please sign out and sign back in, then try again.")
+          return
+        }
       }
 
-      setPasswordSuccess("Password changed successfully!")
+      // Update password directly using the client-side auth
+      console.log("[v0] Password change - Attempting updateUser")
+      const { data, error } = await supabase.auth.updateUser({
+        password: passwordData.newPassword,
+      })
+
+      console.log("[v0] Password change - Result:", {
+        success: !!data?.user,
+        error: error?.message,
+        errorCode: error?.status,
+      })
+
+      if (error) {
+        if (error.message.toLowerCase().includes("weak") || error.message.toLowerCase().includes("easy to guess")) {
+          setPasswordError(
+            "Your password is too weak. Please choose a stronger password with a mix of uppercase, lowercase, numbers, and special characters.",
+          )
+          return
+        }
+        if (
+          error.message.includes("same") ||
+          error.message.includes("should be different") ||
+          (error.message.includes("different") && !error.message.includes("choose a different"))
+        ) {
+          setPasswordError(
+            "Please choose a different password. Your new password cannot be the same as your current password.",
+          )
+          return
+        }
+        throw new Error(error.message)
+      }
+
+      setPasswordSuccess("Password changed successfully! You may need to sign in again with your new password.")
       setPasswordData({ newPassword: "", confirmPassword: "" })
       setShowPasswordSection(false)
 
-      setTimeout(() => setPasswordSuccess(null), 3000)
+      setTimeout(() => setPasswordSuccess(null), 5000)
     } catch (err: any) {
       console.error("[v0] Error changing password:", err)
-      setPasswordError(err.message || "Failed to change password")
+      setPasswordError(err.message || "Failed to change password. Please try again.")
     } finally {
       setIsChangingPassword(false)
     }
@@ -436,7 +482,9 @@ export default function AccountManagementPage() {
               <CardContent>
                 <div className="flex items-center gap-6">
                   <Avatar className="h-20 w-20">
-                    <AvatarImage src={profile?.profile_picture_url || ""} />
+                    {profile?.profile_picture_url && (
+                      <AvatarImage src={profile.profile_picture_url || "/placeholder.svg"} />
+                    )}
                     <AvatarFallback className="text-lg">{getInitials(profile?.full_name || "U")}</AvatarFallback>
                   </Avatar>
                   <div className="space-y-2">
