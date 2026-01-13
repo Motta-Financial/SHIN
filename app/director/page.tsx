@@ -31,11 +31,18 @@ import {
   AlertTriangle,
   UserCheck,
   Bell,
+  Eye,
 } from "lucide-react"
 import { useDirectors } from "@/hooks/use-directors"
 import { useDemoMode } from "@/contexts/demo-mode-context"
 import { useUserRole, canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  getElapsedClassCount,
+  getTotalClassCount,
+  getElapsedWeeksRequiringDebrief,
+  type SemesterWeek,
+} from "@/lib/semester-utils"
 
 interface QuickStats {
   totalHours: number
@@ -63,6 +70,11 @@ interface Director {
   clinic: string
   job_title?: string
   role?: string
+}
+
+interface Clinic {
+  id: string
+  name: string
 }
 
 async function getAvailableWeeks(): Promise<{ weeks: string[]; schedule: WeekSchedule[]; currentWeek: string | null }> {
@@ -198,6 +210,9 @@ export default function DirectorDashboard() {
   const directorSetRef = useRef(false)
   const currentWeekSetRef = useRef(false)
 
+  const [clinics, setClinics] = useState<Clinic[]>([])
+  const [selectedClinicForView, setSelectedClinicForView] = useState<string>("my-clinic")
+
   const [selectedDirectorId, setSelectedDirectorId] = useState<string>("all")
   const [currentDirector, setCurrentDirector] = useState<{
     name: string
@@ -258,6 +273,16 @@ export default function DirectorDashboard() {
     studentQuestions: [],
     weeklyProgress: { hoursTarget: 0, hoursActual: 0, debriefsExpected: 0, debriefsSubmitted: 0 },
   })
+
+  const isInternalOrLegalDirector = role === "admin" || role === "legal" // Assuming these roles should see the clinic selection
+  const isSEEDDirector = role === "director" // Assuming SEED Director role
+
+  const getClinicIdForView = (): string => {
+    if (isInternalOrLegalDirector || isSEEDDirector || role === "admin" || isDemoMode) {
+      return selectedClinicForView
+    }
+    return "my-clinic" // Default for other roles
+  }
 
   useEffect(() => {
     if (roleLoading) return
@@ -446,6 +471,13 @@ export default function DirectorDashboard() {
           }
         }
 
+        const scheduleRes = await fetch("/api/semester-schedule")
+        let semesterScheduleData: SemesterWeek[] = []
+        if (scheduleRes.ok) {
+          const scheduleJson = await scheduleRes.json()
+          semesterScheduleData = scheduleJson.schedules || []
+        }
+
         // Fetch announcements for recent activity
         const announcementsRes = await fetch("/api/announcements")
         let announcementsData = { announcements: [] }
@@ -470,19 +502,19 @@ export default function DirectorDashboard() {
           }
         }
 
-        // Calculate attendance summary from current week
-        const currentWeekAttendance =
-          attendanceData.records?.filter((r: any) => {
-            if (!r.date) return false
-            const recordDate = new Date(r.date)
-            const now = new Date()
-            const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-            return recordDate >= weekAgo && recordDate <= now
-          }) || []
+        const allAttendanceRecords = attendanceData.records || attendanceData.attendance || []
+        const elapsedClasses = getElapsedClassCount(semesterScheduleData)
+        const totalClasses = getTotalClassCount(semesterScheduleData)
 
-        const presentCount = currentWeekAttendance.filter((r: any) => r.status === "present").length
-        const totalCount = currentWeekAttendance.length || 1
-        const attendanceRate = Math.round((presentCount / totalCount) * 100)
+        // Get unique students who attended
+        const studentsWithAttendance = new Set(allAttendanceRecords.map((r: any) => r.student_id))
+        const presentCount = studentsWithAttendance.size
+
+        // Calculate rate based on elapsed classes (if 1 class has occurred, and student attended, rate is 100%)
+        const attendanceRate =
+          elapsedClasses > 0
+            ? Math.round((allAttendanceRecords.length / (quickStats.activeStudents * elapsedClasses || 1)) * 100)
+            : 0
 
         // Build urgent items
         const urgentItems: Array<{ type: string; message: string; count?: number; action?: string }> = []
@@ -496,10 +528,10 @@ export default function DirectorDashboard() {
           })
         }
 
-        if (attendanceRate < 80 && totalCount > 0) {
+        if (attendanceRate < 80 && elapsedClasses > 0) {
           urgentItems.push({
             type: "alert",
-            message: `Attendance rate at ${attendanceRate}% this week`,
+            message: `Attendance rate at ${attendanceRate}% (${elapsedClasses}/${totalClasses} classes completed)`,
             action: "View Details",
           })
         }
@@ -516,10 +548,10 @@ export default function DirectorDashboard() {
           })
         })
 
-        // Calculate weekly progress
-        const expectedDebriefs = quickStats.activeStudents || 0
+        const elapsedWeeks = getElapsedWeeksRequiringDebrief(semesterScheduleData).length
+        const expectedDebriefs = (quickStats.activeStudents || 0) * elapsedWeeks
         const weeklyProgress = {
-          hoursTarget: (quickStats.activeStudents || 0) * 3, // Assume 3 hours target per student
+          hoursTarget: (quickStats.activeStudents || 0) * 3 * elapsedWeeks, // 3 hours target per student per week
           hoursActual: quickStats.totalHours || 0,
           debriefsExpected: expectedDebriefs,
           debriefsSubmitted: quickStats.debriefsSubmitted || 0,
@@ -528,9 +560,9 @@ export default function DirectorDashboard() {
         setOverviewData({
           urgentItems,
           attendanceSummary: {
-            present: presentCount,
-            absent: totalCount - presentCount,
-            rate: attendanceRate,
+            present: allAttendanceRecords.length,
+            absent: quickStats.activeStudents * elapsedClasses - allAttendanceRecords.length,
+            rate: Math.min(attendanceRate, 100), // Cap at 100%
           },
           recentClientActivity: recentActivity,
           studentQuestions: [],
@@ -545,6 +577,21 @@ export default function DirectorDashboard() {
       fetchOverviewData()
     }
   }, [isLoading, quickStats, debriefsData])
+
+  useEffect(() => {
+    async function fetchClinics() {
+      try {
+        const response = await fetch("/api/clinics")
+        if (response.ok) {
+          const data = await response.json()
+          setClinics(data.clinics || [])
+        }
+      } catch (error) {
+        console.error("Error fetching clinics:", error)
+      }
+    }
+    fetchClinics()
+  }, [])
 
   const handleCurrentWeekDetected = (currentWeek: string) => {
     if (!currentWeekSetRef.current && selectedWeeks.length === 0) {
@@ -1040,7 +1087,37 @@ export default function DirectorDashboard() {
             </TabsContent>
 
             <TabsContent value="my-clinic" className="space-y-6">
-              <ClinicView selectedClinic={selectedDirectorId} selectedWeeks={selectedWeeks} />
+              {/* Add clinic selection dropdown for "My Clinic" view */}
+              {(isInternalOrLegalDirector || isSEEDDirector || role === "admin" || isDemoMode) && (
+                <Card className="border-blue-200 bg-blue-50/30">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Eye className="h-4 w-4 text-blue-600" />
+                        <span className="text-sm font-medium text-blue-900">Viewing as Director/Admin</span>
+                        <span className="text-sm text-blue-700">Select a clinic to view their data</span>
+                      </div>
+                      <Select value={selectedClinicForView} onValueChange={setSelectedClinicForView}>
+                        <SelectTrigger className="w-[220px] bg-white">
+                          <SelectValue placeholder="Select clinic" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="my-clinic">
+                            My Clinic ({currentDirector?.clinic || "Not assigned"})
+                          </SelectItem>
+                          <SelectItem value="all">All Clinics</SelectItem>
+                          {clinics.map((clinic) => (
+                            <SelectItem key={clinic.id} value={clinic.id}>
+                              {clinic.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              <ClinicView selectedClinic={getClinicIdForView()} selectedWeeks={selectedWeeks} />
             </TabsContent>
 
             <TabsContent value="debriefs" className="space-y-6">

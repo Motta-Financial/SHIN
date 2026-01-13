@@ -22,7 +22,6 @@ import {
   FileText,
   HelpCircle,
   Send,
-  Upload,
   Building2,
   AlertCircle,
   Bell,
@@ -33,6 +32,7 @@ import {
   CalendarClock,
   ChevronDown,
   Eye,
+  UserCheck,
 } from "lucide-react"
 import { upload } from "@vercel/blob/client"
 import {
@@ -555,16 +555,27 @@ export default function StudentPortal() {
       if (isAdminOrDirector) {
         try {
           const res = await fetch("/api/supabase/v-complete-mapping")
-          const data = await safeJsonParse(res, { students: [] })
-          if (data.students && data.students.length > 0) {
-            setAvailableStudents(
-              data.students.map((s: any) => ({
-                id: s.student_id,
-                full_name: s.student_name,
-                email: s.student_email,
-                clinic: s.student_clinic_name || "No Clinic",
-              })),
-            )
+          const responseData = await safeJsonParse(res, { data: [] })
+          const mappings = responseData.data || responseData.mappings || responseData.records || []
+          if (mappings.length > 0) {
+            // Deduplicate students by ID since the view can have multiple rows per student
+            const studentMap = new Map<string, any>()
+            for (const row of mappings) {
+              if (row.student_id && !studentMap.has(row.student_id)) {
+                studentMap.set(row.student_id, {
+                  id: row.student_id,
+                  full_name: row.student_name,
+                  email: row.student_email,
+                  clinic: row.student_clinic_name || "No Clinic",
+                })
+              }
+            }
+            const uniqueStudents = Array.from(studentMap.values())
+            setAvailableStudents(uniqueStudents)
+            // If no student selected yet and we have students, select the first one
+            if (!selectedStudentId && uniqueStudents.length > 0) {
+              setSelectedStudentId(uniqueStudents[0].id)
+            }
           }
         } catch (error) {
           console.error("Error fetching students:", error)
@@ -582,7 +593,7 @@ export default function StudentPortal() {
     if (!roleLoading) {
       fetchAvailableStudents()
     }
-  }, [role, userEmail, authStudentId, roleLoading, isAdminOrDirector]) // Removed isDemoMode
+  }, [role, userEmail, authStudentId, roleLoading, isAdminOrDirector, selectedStudentId]) // Removed isDemoMode dependencies, added selectedStudentId for initial selection
 
   const canSwitchStudents = isAdminOrDirector
 
@@ -811,18 +822,9 @@ export default function StudentPortal() {
 
         await new Promise((resolve) => setTimeout(resolve, 2000)) // Longer delay to avoid rate limiting
         const response = await fetchWithRetry(`/api/agreements?userEmail=${encodeURIComponent(studentEmail)}`)
-        const text = await response.text()
-        if (text.startsWith("Too Many R")) {
-          console.error("Error fetching agreements: Rate limited")
-          return
-        }
-        try {
-          const data = JSON.parse(text)
-          if (data.agreements) {
-            setSignedAgreements(data.agreements.map((a: any) => a.agreement_type))
-          }
-        } catch (parseError) {
-          console.error("Error parsing agreements:", parseError)
+        const data = await safeJsonParse(response, { agreements: [] })
+        if (data.agreements) {
+          setSignedAgreements(data.agreements.map((a: any) => a.agreement_type))
         }
       } catch (error) {
         console.error("Error fetching agreements:", error)
@@ -1357,8 +1359,6 @@ export default function StudentPortal() {
             </div>
           )}
 
-          {/* CHANGE: Removed old demo mode banner - now using unified selector above */}
-
           {/* Header */}
           <StudentPortalHeader
             loading={loading}
@@ -1845,7 +1845,7 @@ export default function StudentPortal() {
             {/* Dashboard Tab - Reminders & Notifications */}
             <TabsContent value="dashboard" className="space-y-6">
               <div className="space-y-6">
-                {/* CHANGE: Replace separate Onboarding, Action Items, and Notifications with unified Triage */}
+                {/* CHANGE: Combined Triage with integrated Quick Actions */}
                 <Triage
                   userType="student"
                   userName={currentStudent?.fullName || ""}
@@ -1871,31 +1871,47 @@ export default function StudentPortal() {
                   }}
                 />
 
-                {/* Quick Actions */}
+                {/* CHANGE: Combined Quick Actions with Attendance button - merged with Triage section */}
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="flex items-center gap-2">
                       <BookOpen className="h-5 w-5 text-slate-600" />
                       Quick Actions
                     </CardTitle>
+                    <CardDescription>Common tasks and navigation shortcuts</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 md:grid-5 gap-3">
+                      {/* Submit Attendance - Primary action */}
                       <Button
                         variant="outline"
-                        className="h-auto py-4 flex flex-col items-center gap-2 bg-transparent"
+                        className="h-auto py-4 flex flex-col items-center gap-2 bg-purple-50 border-purple-200 hover:bg-purple-100"
                         onClick={() =>
                           document
-                            .querySelector('[value="attendance"]') // Changed from debriefs
+                            .querySelector('[value="attendance"]')
                             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
                         }
                       >
-                        <FileText className="h-6 w-6 text-blue-600" />
-                        <span className="text-sm">Submit Debrief</span>
+                        <UserCheck className="h-6 w-6 text-purple-600" />
+                        <span className="text-sm font-medium">Submit Attendance</span>
+                        <span className="text-xs text-muted-foreground">Class check-in</span>
                       </Button>
+
+                      {/* Submit Debrief */}
                       <Button
                         variant="outline"
-                        className="h-auto py-4 flex flex-col items-center gap-2 bg-transparent"
+                        className="h-auto py-4 flex flex-col items-center gap-2 bg-blue-50 border-blue-200 hover:bg-blue-100"
+                        onClick={() => setShowDebriefDialog(true)}
+                      >
+                        <FileText className="h-6 w-6 text-blue-600" />
+                        <span className="text-sm font-medium">Submit Debrief</span>
+                        <span className="text-xs text-muted-foreground">Weekly report</span>
+                      </Button>
+
+                      {/* Ask Question */}
+                      <Button
+                        variant="outline"
+                        className="h-auto py-4 flex flex-col items-center gap-2 bg-amber-50 border-amber-200 hover:bg-amber-100"
                         onClick={() =>
                           document
                             .querySelector('[value="questions"]')
@@ -1903,55 +1919,34 @@ export default function StudentPortal() {
                         }
                       >
                         <HelpCircle className="h-6 w-6 text-amber-600" />
-                        <span className="text-sm">Ask Question</span>
+                        <span className="text-sm font-medium">Ask Question</span>
+                        <span className="text-xs text-muted-foreground">Get help</span>
                       </Button>
+
+                      {/* Request Meeting */}
                       <Button
                         variant="outline"
-                        className="h-auto py-4 flex flex-col items-center gap-2 bg-transparent"
+                        className="h-auto py-4 flex flex-col items-center gap-2 bg-green-50 border-green-200 hover:bg-green-100"
                         onClick={() =>
                           document
-                            .querySelector('[value="clinic"]') // Changed to clinic as documents is removed
+                            .querySelector('[value="questions"]')
                             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
                         }
                       >
-                        <Upload className="h-6 w-6 text-green-600" />
-                        <span className="text-sm">Upload Document</span>
+                        <Calendar className="h-6 w-6 text-green-600" />
+                        <span className="text-sm font-medium">Request Meeting</span>
+                        <span className="text-xs text-muted-foreground">Schedule time</span>
                       </Button>
+
+                      {/* View My Team */}
                       <Button
                         variant="outline"
-                        className="h-auto py-4 flex flex-col items-center gap-2 bg-transparent"
-                        onClick={() =>
-                          document
-                            .querySelector('[value="attendance"]')
-                            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-                        }
+                        className="h-auto py-4 flex flex-col items-center gap-2 bg-slate-50 border-slate-200 hover:bg-slate-100"
+                        onClick={() => router.push("/my-team")}
                       >
-                        <Calendar className="h-6 w-6 text-purple-600" />
-                        <span className="text-sm">View Attendance</span>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="h-auto py-4 flex flex-col items-center gap-2 bg-transparent"
-                        onClick={() =>
-                          document
-                            .querySelector('[value="questions"]') // Should link to meeting requests section
-                            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-                        }
-                      >
-                        <Calendar className="h-6 w-6 text-blue-600" />
-                        <span className="text-sm">Request Meeting</span>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="h-auto py-4 flex flex-col items-center gap-2 bg-transparent"
-                        onClick={() =>
-                          document
-                            .querySelector('[value="clinic"]') // Changed to clinic as materials is removed
-                            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-                        }
-                      >
-                        <BookOpen className="h-6 w-6 text-amber-600" />
-                        <span className="text-sm">View Course Materials</span>
+                        <Users className="h-6 w-6 text-slate-600" />
+                        <span className="text-sm font-medium">My Team</span>
+                        <span className="text-xs text-muted-foreground">Team info</span>
                       </Button>
                     </div>
                   </CardContent>

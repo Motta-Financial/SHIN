@@ -51,8 +51,12 @@ function getDeliverableTypeLabel(type: string | undefined): string {
 }
 
 export function MyTeamContent() {
-  const { role, isAuthenticated, roleLoading, authStudentId } = useUserRole()
+  const { role, isAuthenticated, isLoading: roleLoading, studentId: authStudentId } = useUserRole()
   const router = useRouter()
+
+  const [availableStudents, setAvailableStudents] = useState<Array<{ id: string; name: string; email: string }>>([])
+  const isAdminOrDirector = role === "admin" || role === "director"
+  const canSwitchStudents = isAdminOrDirector
 
   const [loading, setLoading] = useState(true)
   const [currentStudentId, setCurrentStudentId] = useState<string>("") // Initialize with empty string
@@ -80,6 +84,41 @@ export function MyTeamContent() {
   const [savingEdit, setSavingEdit] = useState(false) // Declare savingEdit state
 
   useEffect(() => {
+    const fetchAvailableStudents = async () => {
+      if (isAdminOrDirector) {
+        try {
+          const response = await fetch("/api/supabase/roster?activeOnly=true")
+          if (response.ok) {
+            const data = await response.json()
+            if (data.students) {
+              const studentList = data.students.map((s: any) => ({
+                id: s.id,
+                name:
+                  s.fullName ||
+                  s.full_name ||
+                  `${s.firstName || s.first_name || ""} ${s.lastName || s.last_name || ""}`.trim(),
+                email: s.email,
+              }))
+              setAvailableStudents(studentList)
+              // If no student selected yet, select the first one
+              if (!currentStudentId && studentList.length > 0) {
+                setCurrentStudentId(studentList[0].id)
+                loadTeamData(studentList[0].id)
+              }
+            }
+          }
+        } catch (error) {
+          console.error("[v0] Error fetching students:", error)
+        }
+      }
+    }
+
+    if (!roleLoading && isAdminOrDirector) {
+      fetchAvailableStudents()
+    }
+  }, [roleLoading, isAdminOrDirector, currentStudentId])
+
+  useEffect(() => {
     console.log("[v0] MyTeam - Auth state:", { role, isAuthenticated, roleLoading, authStudentId })
 
     if (roleLoading) {
@@ -93,20 +132,48 @@ export function MyTeamContent() {
       return
     }
 
+    // Directors and admins can access all portals
+    if (isAdminOrDirector) {
+      console.log("[v0] MyTeam - Admin/Director access granted, no redirect.")
+      return // Don't redirect, allow access
+    }
+
+    // Students can access the student portal
+    if (role === "student") {
+      console.log("[v0] MyTeam - Student role detected.")
+      if (authStudentId && authStudentId !== currentStudentId) {
+        console.log("[v0] MyTeam - Using student ID from auth:", authStudentId)
+        setCurrentStudentId(authStudentId)
+        loadTeamData(authStudentId)
+      }
+      return
+    }
+
+    // Other roles that can't access student portal - redirect
     if (!canAccessPortal(role, "student")) {
       console.log("[v0] MyTeam - Wrong role, redirecting to:", getDefaultPortal(role))
       router.push(getDefaultPortal(role))
       return
     }
 
-    console.log("[v0] MyTeam - Student access granted")
-
+    console.log("[v0] MyTeam - Student access granted (default case)")
+    // This part might be redundant if the above conditions cover all cases,
+    // but it's here for completeness if logic changes.
     if (authStudentId && authStudentId !== currentStudentId) {
-      console.log("[v0] MyTeam - Using student ID from auth:", authStudentId)
+      console.log("[v0] MyTeam - Using student ID from auth (fallback):", authStudentId)
       setCurrentStudentId(authStudentId)
       loadTeamData(authStudentId)
     }
-  }, [role, isAuthenticated, roleLoading, authStudentId, router, currentStudentId])
+  }, [role, isAuthenticated, roleLoading, authStudentId, router, currentStudentId, isAdminOrDirector])
+
+  const handleStudentChange = (studentId: string) => {
+    setCurrentStudentId(studentId)
+    const selectedStudent = availableStudents.find((s) => s.id === studentId)
+    if (selectedStudent) {
+      setCurrentStudentName(selectedStudent.name)
+    }
+    loadTeamData(studentId)
+  }
 
   const loadTeamData = async (studentId: string) => {
     try {
@@ -449,7 +516,7 @@ export function MyTeamContent() {
   }
 
   // Adjust loading state to include role loading
-  if (roleLoading || loading) {
+  if (roleLoading || (loading && !currentStudentId)) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-2rem)]">
         <div className="animate-pulse text-muted-foreground">Loading team data...</div>
@@ -460,6 +527,30 @@ export function MyTeamContent() {
   return (
     // Simplified layout for authenticated users
     <div className="space-y-6">
+      {canSwitchStudents && availableStudents.length > 0 && (
+        <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-100">
+          <div className="flex items-center gap-3">
+            <Eye className="h-5 w-5 text-blue-600" />
+            <div>
+              <p className="text-sm text-blue-800 font-medium">Viewing as Director/Admin</p>
+              <p className="text-xs text-blue-600">Select a student to view their team</p>
+            </div>
+          </div>
+          <Select value={currentStudentId} onValueChange={handleStudentChange}>
+            <SelectTrigger className="w-[280px] bg-white">
+              <SelectValue placeholder="Select a student" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableStudents.map((student) => (
+                <SelectItem key={student.id} value={student.id}>
+                  {student.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
