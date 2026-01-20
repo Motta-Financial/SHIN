@@ -28,6 +28,7 @@ import {
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import DocumentUpload from "@/components/shared/DocumentUpload"
+import { useRouter } from "next/navigation"
 
 // Spring 2026 semester ID - used to filter data
 const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
@@ -100,6 +101,7 @@ export default function ClinicView({ selectedClinic, selectedWeeks }: ClinicView
   const [expandedDebrief, setExpandedDebrief] = useState<string | null>(null)
 
   const supabase = createClient()
+  const router = useRouter()
 
   const normalizeDate = (dateStr: string): string => {
     if (!dateStr) return ""
@@ -354,13 +356,16 @@ export default function ClinicView({ selectedClinic, selectedWeeks }: ClinicView
   const clientTeams = useMemo(() => {
     if (!clinicData) return []
 
-    const clientMap = new Map<string, { name: string; students: CompleteMapping[]; totalHours: number }>()
+    const clientMap = new Map<
+      string,
+      { id: string | null; name: string; students: CompleteMapping[]; totalHours: number }
+    >()
 
     clinicData.students.forEach((s) => {
       if (!s.client_name) return
 
       if (!clientMap.has(s.client_name)) {
-        clientMap.set(s.client_name, { name: s.client_name, students: [], totalHours: 0 })
+        clientMap.set(s.client_name, { id: s.client_id, name: s.client_name, students: [], totalHours: 0 })
       }
 
       clientMap.get(s.client_name)!.students.push(s)
@@ -773,172 +778,76 @@ export default function ClinicView({ selectedClinic, selectedWeeks }: ClinicView
                 <Building2 className="h-5 w-5" />
                 Client Teams
               </CardTitle>
-              <CardDescription>Students assigned to each client - click to expand</CardDescription>
+              <CardDescription>Click on a client to view full details in Client Engagements</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {clientTeams.map((client) => (
-                  <Collapsible
-                    key={client.name}
-                    open={expandedClient === client.name}
-                    onOpenChange={(open) => setExpandedClient(open ? client.name : null)}
-                  >
-                    <CollapsibleTrigger asChild>
-                      <Card className="border-l-4 border-l-blue-500 cursor-pointer hover:shadow-md transition-shadow">
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <h4 className="font-semibold">{client.name}</h4>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="secondary">{client.students.length} members</Badge>
-                              <Badge variant="outline">{client.totalHours.toFixed(1)}h</Badge>
-                              {expandedClient === client.name ? (
-                                <ChevronUp className="h-4 w-4" />
-                              ) : (
-                                <ChevronDown className="h-4 w-4" />
-                              )}
-                            </div>
+            <CardContent className="pt-0">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {clientTeams.map((client) => {
+                  const submittedCount = client.students.filter((s) =>
+                    activityMetrics.submittedStudentIds.has(s.student_id),
+                  ).length
+
+                  return (
+                    <Card
+                      key={client.name}
+                      className="border-l-4 border-l-[#505143] hover:shadow-md transition-all hover:border-l-[#878568] cursor-pointer group"
+                      onClick={() => {
+                        router.push(`/client-engagements?client=${encodeURIComponent(client.name)}`)
+                      }}
+                    >
+                      <CardContent className="p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-semibold text-sm truncate flex-1">{client.name}</h4>
+                          <ExternalLink className="h-3.5 w-3.5 text-gray-400 group-hover:text-[#505143] transition-colors" />
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div className="text-center p-1.5 bg-gray-50 rounded">
+                            <p className="font-semibold text-gray-700">{client.students.length}</p>
+                            <p className="text-gray-500">Members</p>
                           </div>
-                          <div className="flex flex-wrap gap-1">
-                            {client.students.slice(0, 5).map((student) => {
-                              const hasSubmitted = activityMetrics.submittedStudentIds.has(student.student_id)
-                              return (
-                                <Avatar
-                                  key={student.student_id}
-                                  className={`h-8 w-8 border-2 ${hasSubmitted ? "border-green-500" : "border-orange-400"}`}
-                                >
-                                  <AvatarFallback className="text-xs">
-                                    {student.student_name
-                                      ?.split(" ")
-                                      .map((n) => n[0])
-                                      .join("") || "?"}
-                                  </AvatarFallback>
-                                </Avatar>
-                              )
-                            })}
-                            {client.students.length > 5 && (
-                              <Avatar className="h-8 w-8 border-2 border-muted">
-                                <AvatarFallback className="text-xs">+{client.students.length - 5}</AvatarFallback>
+                          <div className="text-center p-1.5 bg-gray-50 rounded">
+                            <p className="font-semibold text-gray-700">{client.totalHours.toFixed(1)}h</p>
+                            <p className="text-gray-500">Hours</p>
+                          </div>
+                          <div className="text-center p-1.5 bg-gray-50 rounded">
+                            <p
+                              className={`font-semibold ${submittedCount === client.students.length ? "text-green-600" : "text-amber-600"}`}
+                            >
+                              {submittedCount}/{client.students.length}
+                            </p>
+                            <p className="text-gray-500">Active</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between">
+                          <div className="flex -space-x-1.5">
+                            {client.students.slice(0, 4).map((student) => (
+                              <Avatar key={student.student_id} className="h-6 w-6 border-2 border-white">
+                                <AvatarFallback className="text-[10px] bg-[#D5CCAB] text-[#505143]">
+                                  {student.student_name
+                                    ?.split(" ")
+                                    .map((n) => n[0])
+                                    .join("") || "?"}
+                                </AvatarFallback>
+                              </Avatar>
+                            ))}
+                            {client.students.length > 4 && (
+                              <Avatar className="h-6 w-6 border-2 border-white">
+                                <AvatarFallback className="text-[10px] bg-gray-200 text-gray-600">
+                                  +{client.students.length - 4}
+                                </AvatarFallback>
                               </Avatar>
                             )}
                           </div>
-                        </CardContent>
-                      </Card>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="mt-2">
-                      <Card className="border-blue-200 bg-blue-50/30">
-                        <CardContent className="p-4">
-                          <h5 className="font-medium mb-3 flex items-center gap-2">
-                            <Users className="h-4 w-4" />
-                            Team Members
-                          </h5>
-                          <div className="space-y-2">
-                            {client.students.map((student) => {
-                              const {
-                                totalHours,
-                                debriefs: studentDebriefs,
-                                lastDebrief,
-                              } = getStudentDetails(student.student_id)
-                              const hasSubmitted = activityMetrics.submittedStudentIds.has(student.student_id)
-                              const isStudentExpanded = expandedStudent === student.student_id
-
-                              return (
-                                <Collapsible
-                                  key={student.student_id}
-                                  open={isStudentExpanded}
-                                  onOpenChange={(open) => setExpandedStudent(open ? student.student_id : null)}
-                                >
-                                  <CollapsibleTrigger asChild>
-                                    <div
-                                      className={`p-3 rounded-lg border cursor-pointer hover:shadow-sm transition-all ${hasSubmitted ? "border-green-200 bg-green-50" : "border-orange-200 bg-orange-50"}`}
-                                    >
-                                      <div className="flex items-center gap-3">
-                                        <Avatar className={`h-10 w-10 ${hasSubmitted ? "ring-2 ring-green-500" : ""}`}>
-                                          <AvatarFallback>
-                                            {student.student_name
-                                              ?.split(" ")
-                                              .map((n) => n[0])
-                                              .join("") || "?"}
-                                          </AvatarFallback>
-                                        </Avatar>
-                                        <div className="flex-1 min-w-0">
-                                          <p className="font-medium">{student.student_name}</p>
-                                          <p className="text-xs text-muted-foreground">
-                                            {student.student_role || "Team Member"}
-                                          </p>
-                                        </div>
-                                        <div className="text-right flex items-center gap-2">
-                                          <div>
-                                            <p className="font-bold text-sm">{totalHours.toFixed(1)}h</p>
-                                            <p className="text-xs text-muted-foreground">
-                                              {studentDebriefs.length} debriefs
-                                            </p>
-                                          </div>
-                                          {isStudentExpanded ? (
-                                            <ChevronUp className="h-4 w-4" />
-                                          ) : (
-                                            <ChevronDown className="h-4 w-4" />
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </CollapsibleTrigger>
-                                  <CollapsibleContent>
-                                    <div className="mt-2 p-3 rounded-lg bg-background border space-y-3">
-                                      <div className="grid grid-cols-2 gap-3 text-sm">
-                                        <div className="flex items-center gap-2">
-                                          <Mail className="h-4 w-4 text-muted-foreground" />
-                                          <span className="truncate">{student.student_email}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <Briefcase className="h-4 w-4 text-muted-foreground" />
-                                          <span>{student.student_role || "Team Member"}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <Clock className="h-4 w-4 text-muted-foreground" />
-                                          <span>{totalHours.toFixed(1)} hours total</span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                                          <span>
-                                            {lastDebrief
-                                              ? `Last: ${new Date(lastDebrief.week_ending || lastDebrief.weekEnding).toLocaleDateString()}`
-                                              : "No submissions"}
-                                          </span>
-                                        </div>
-                                      </div>
-                                      {studentDebriefs.length > 0 && (
-                                        <div>
-                                          <h6 className="text-xs font-medium text-muted-foreground mb-2">
-                                            Recent Activity
-                                          </h6>
-                                          <div className="space-y-1">
-                                            {studentDebriefs.slice(0, 3).map((d, idx) => (
-                                              <div
-                                                key={idx}
-                                                className="flex justify-between text-xs p-2 bg-muted/50 rounded"
-                                              >
-                                                <span>
-                                                  {new Date(d.week_ending || d.weekEnding).toLocaleDateString()}
-                                                </span>
-                                                <span className="font-medium">
-                                                  {d.hours_worked || d.hoursWorked || 0}h
-                                                </span>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </CollapsibleContent>
-                                </Collapsible>
-                              )
-                            })}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </CollapsibleContent>
-                  </Collapsible>
-                ))}
+                          <span className="text-[10px] text-[#505143] font-medium group-hover:underline">
+                            View Details →
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
             </CardContent>
           </Card>

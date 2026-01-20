@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -53,13 +53,17 @@ function getDeliverableTypeLabel(type: string | undefined): string {
 export function MyTeamContent() {
   const { role, isAuthenticated, isLoading: roleLoading, studentId: authStudentId } = useUserRole()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const studentIdFromUrl = searchParams.get("studentId")
+
+  console.log("[v0] MyTeamContent - studentIdFromUrl:", studentIdFromUrl)
 
   const [availableStudents, setAvailableStudents] = useState<Array<{ id: string; name: string; email: string }>>([])
   const isAdminOrDirector = role === "admin" || role === "director"
   const canSwitchStudents = isAdminOrDirector
 
   const [loading, setLoading] = useState(true)
-  const [currentStudentId, setCurrentStudentId] = useState<string>("") // Initialize with empty string
+  const [currentStudentId, setCurrentStudentId] = useState<string>(studentIdFromUrl || "")
   const [currentStudentName, setCurrentStudentName] = useState<string>("Loading...")
   const [engagement, setEngagement] = useState<ClientEngagement | null>(null)
   const [newNote, setNewNote] = useState("")
@@ -83,13 +87,22 @@ export function MyTeamContent() {
   const [expandedTimelineItems, setExpandedTimelineItems] = useState<Set<string>>(new Set())
   const [savingEdit, setSavingEdit] = useState(false) // Declare savingEdit state
 
+  console.log("[v0] URL param useEffect - studentIdFromUrl:", studentIdFromUrl, "currentStudentId:", currentStudentId)
+  // The old useEffect at lines 88-93 is removed
+
   useEffect(() => {
     const fetchAvailableStudents = async () => {
       if (isAdminOrDirector) {
         try {
-          const response = await fetch("/api/supabase/roster?activeOnly=true")
+          const response = await fetch("/api/supabase/roster")
           if (response.ok) {
             const data = await response.json()
+            console.log(
+              "[v0] Fetched students for dropdown:",
+              data.students?.length,
+              "first student:",
+              data.students?.[0]?.name,
+            )
             if (data.students) {
               const studentList = data.students.map((s: any) => ({
                 id: s.id,
@@ -100,10 +113,32 @@ export function MyTeamContent() {
                 email: s.email,
               }))
               setAvailableStudents(studentList)
-              // If no student selected yet, select the first one
-              if (!currentStudentId && studentList.length > 0) {
-                setCurrentStudentId(studentList[0].id)
-                loadTeamData(studentList[0].id)
+
+              let studentToLoad = studentIdFromUrl
+
+              // If URL param provided, use it
+              if (studentIdFromUrl) {
+                // Verify the student exists in the list
+                const studentExists = studentList.some((s: any) => s.id === studentIdFromUrl)
+                if (studentExists) {
+                  studentToLoad = studentIdFromUrl
+                } else {
+                  // URL param student not found in current semester, fall back to first
+                  console.log("[v0] Student from URL not found in roster, defaulting to first")
+                  studentToLoad = studentList[0]?.id
+                }
+              } else if (!currentStudentId && studentList.length > 0) {
+                // No URL param and no current selection - default to first
+                studentToLoad = studentList[0].id
+              }
+
+              // Load the student data if we have one to load
+              if (studentToLoad && studentToLoad !== currentStudentId) {
+                setCurrentStudentId(studentToLoad)
+                loadTeamData(studentToLoad)
+              } else if (studentToLoad && !engagement) {
+                // Student ID already set but data not loaded yet
+                loadTeamData(studentToLoad)
               }
             }
           }
@@ -116,7 +151,7 @@ export function MyTeamContent() {
     if (!roleLoading && isAdminOrDirector) {
       fetchAvailableStudents()
     }
-  }, [roleLoading, isAdminOrDirector, currentStudentId])
+  }, [roleLoading, isAdminOrDirector])
 
   useEffect(() => {
     console.log("[v0] MyTeam - Auth state:", { role, isAuthenticated, roleLoading, authStudentId })

@@ -21,18 +21,20 @@ import {
   Clock,
   FileText,
   HelpCircle,
-  Send,
   Building2,
   AlertCircle,
   Bell,
   Presentation,
   Award,
   Users,
-  Lock,
   CalendarClock,
   ChevronDown,
   Eye,
   UserCheck,
+  UsersRound,
+  Sparkles,
+  ArrowRight,
+  RefreshCw,
 } from "lucide-react"
 import { upload } from "@vercel/blob/client"
 import {
@@ -337,7 +339,7 @@ const DELIVERABLE_INSTRUCTIONS = {
         description: "Establish communication protocols and expectations.",
         content: [
           "Weekly updates via project check-in meetings and email reports",
-          "Scheduled project review meetings for progress and feedback",
+          "Scheduled project review meetings for feedback",
           "Response time expectations for emails and requests",
           "Final presentation of results and recommendations",
         ],
@@ -393,7 +395,7 @@ const DELIVERABLE_INSTRUCTIONS = {
       "Client Business: Define your client's business model including product/service, customers/clients, marketing and sales approach, delivery method, and profit generation",
       "Industry: Research your client's industry, identify competitors or similar businesses, understand market operations and key industry characteristics, identify key competitors and competitive advantages",
       "Key Performance Indicators: Identify metrics your client needs to monitor performance, understand accounting systems and processes required for these measurements",
-      "Project Focus: Define key areas of focus for your project and explain how they help your client grow and sustain competitive advantage",
+      "Project Focus: Define key areas of focus for your client project and explain how they help your client grow and sustain competitive advantage",
     ],
     planningGuidelines: [
       "Presentations must be prepared in PowerPoint - recommend 8 slides or less",
@@ -603,6 +605,13 @@ export default function StudentPortal() {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
   const [questionText, setQuestionText] = useState("")
   const [submitting, setSubmitting] = useState(false)
+
+  // CHANGE: Add team status state variables
+  const [teamData, setTeamData] = useState<any>(null)
+  const [teamSummary, setTeamSummary] = useState<string>("")
+  const [loadingTeamSummary, setLoadingTeamSummary] = useState(false)
+  const [teamSummaryError, setTeamSummaryError] = useState<string | null>(null)
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploadedFileUrl, setUploadedFileUrl] = useState("") // Keep this state
   const [uploading, setUploading] = useState(false)
@@ -806,6 +815,38 @@ export default function StudentPortal() {
 
     fetchData()
   }, [selectedStudentId, authStudentId, role]) // Removed demoStudentId and isDemoMode dependencies
+
+  // CHANGE: Add useEffect to fetch team data and generate summary
+  useEffect(() => {
+    const fetchTeamData = async () => {
+      // Ensure we have the selected student ID and it's not in demo mode for fetching team data,
+      // or if it's a student role and they have a clientId.
+      const currentStudentId = role === "student" ? authStudentId : selectedStudentId
+      if (!currentStudentId || !currentStudent?.clientId) return
+
+      setLoadingTeamSummary(true)
+      setTeamSummaryError(null)
+      try {
+        // Fetch team data first
+        const teamRes = await fetchWithRetry(`/api/teams?clientId=${currentStudent.clientId}`)
+        if (!teamRes.ok) throw new Error(`HTTP error! status: ${teamRes.status}`)
+        const teamData = await safeJsonParse(teamRes, { team: null })
+        setTeamData(teamData.team)
+
+        // Then fetch the summary for the student's team
+        const summaryRes = await fetchWithRetry(`/api/teams/summary?studentId=${currentStudentId}`)
+        if (!summaryRes.ok) throw new Error(`HTTP error! status: ${summaryRes.status}`)
+        const summaryData = await safeJsonParse(summaryRes, { summary: "" })
+        setTeamSummary(summaryData.summary)
+      } catch (error: any) {
+        console.error("Error fetching team data or summary:", error)
+        setTeamSummaryError(error.message || "Failed to load team information.")
+      } finally {
+        setLoadingTeamSummary(false)
+      }
+    }
+    fetchTeamData()
+  }, [currentStudent?.clientId, selectedStudentId, authStudentId, role])
 
   // Add useEffect to fetch signed agreements
   useEffect(() => {
@@ -1282,6 +1323,32 @@ export default function StudentPortal() {
     return debriefWeek === lastWeekEnding
   })
 
+  const generateTeamSummary = async () => {
+    if (!currentStudent?.clientId) return
+    setLoadingTeamSummary(true)
+    setTeamSummaryError(null)
+    try {
+      const response = await fetch("/api/teams/generate-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: currentStudent.clientId,
+          studentId: currentStudent.id, // Pass studentId to ensure context
+        }),
+      })
+
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+      const data = await safeJsonParse(response, { summary: "" })
+      setTeamSummary(data.summary)
+    } catch (error: any) {
+      console.error("Error generating team summary:", error)
+      setTeamSummaryError(error.message || "Failed to generate team summary.")
+      setTeamSummary("")
+    } finally {
+      setLoadingTeamSummary(false)
+    }
+  }
+
   if (loading || roleLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -1650,7 +1717,9 @@ export default function StudentPortal() {
                                   <div className="flex items-center gap-2">
                                     <p className="text-sm font-medium text-slate-700">Week {week.week_number}</p>
                                     {isPending && <Clock className="h-3.5 w-3.5 text-amber-600" />}
-                                    {!isPending && <AlertCircle className="h-3.5 w-3.5 text-red-500" />}
+                                    {!isPending && !isReviewed && !week.is_break && (
+                                      <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                                    )}
                                   </div>
                                   {isPending ? (
                                     <Badge className="bg-amber-100 text-amber-700 text-xs">Pending Review</Badge>
@@ -1681,7 +1750,7 @@ export default function StudentPortal() {
                                     </p>
                                   </>
                                 )}
-                                {isMissing && week.session_focus && (
+                                {!isPending && isMissing && week.session_focus && (
                                   <p className="text-xs text-slate-400 mt-1">{week.session_focus}</p>
                                 )}
                               </div>
@@ -1844,137 +1913,274 @@ export default function StudentPortal() {
 
             {/* Dashboard Tab - Reminders & Notifications */}
             <TabsContent value="dashboard" className="space-y-6">
-              <div className="space-y-6">
-                {/* CHANGE: Combined Triage with integrated Quick Actions */}
-                <Triage
-                  userType="student"
-                  userName={currentStudent?.fullName || ""}
-                  userEmail={currentStudent?.email || ""}
-                  userId={currentStudent?.id}
-                  clinicId={currentStudent?.clinicId}
-                  programName="SEED Program"
-                  debriefs={debriefs}
-                  meetingRequests={meetingRequests}
-                  recentCourseMaterials={recentCourseMaterials}
-                  studentNotifications={studentNotifications}
-                  hasSubmittedThisWeek={hasSubmittedThisWeek}
-                  hasSubmittedLastWeek={hasSubmittedLastWeek}
-                  currentWeekEnding={currentWeekEnding}
-                  lastWeekEnding={lastWeekEnding}
-                  signedAgreements={signedAgreements as any}
-                  onAgreementSigned={(type) => {
-                    setSignedAgreements((prev) => [...prev, type])
-                  }}
-                  onNavigate={(tab) => {
-                    const tabsEl = document.querySelector(`[data-state="true"] button[value="${tab}"]`) as HTMLElement
-                    tabsEl?.click()
-                  }}
-                />
+              {/* CHANGE: Added grid layout for Triage, Quick Actions, and new Status Summary card */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* Triage Card - Takes 2 columns */}
+                <div className="lg:col-span-2">
+                  <Triage
+                    userType="student"
+                    userName={currentStudent?.fullName || ""}
+                    userEmail={currentStudent?.email || ""}
+                    userId={currentStudent?.id}
+                    clinicId={currentStudent?.clinicId}
+                    debriefs={debriefs}
+                    meetingRequests={meetingRequests}
+                    recentCourseMaterials={recentCourseMaterials}
+                    studentNotifications={studentNotifications}
+                    hasSubmittedThisWeek={hasSubmittedThisWeek}
+                    hasSubmittedLastWeek={hasSubmittedLastWeek}
+                    currentWeekEnding={currentWeekEnding}
+                    lastWeekEnding={lastWeekEnding}
+                    onNavigateToTab={(tab) => {
+                      const tabsEl = document.querySelector(`[data-state="true"] button[value="${tab}"]`) as HTMLElement
+                      tabsEl?.click()
+                    }}
+                  />
+                </div>
 
-                {/* CHANGE: Combined Quick Actions with Attendance button - merged with Triage section */}
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2">
-                      <BookOpen className="h-5 w-5 text-slate-600" />
-                      Quick Actions
-                    </CardTitle>
-                    <CardDescription>Common tasks and navigation shortcuts</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 md:grid-5 gap-3">
-                      {/* Submit Attendance - Primary action */}
-                      <Button
-                        variant="outline"
-                        className="h-auto py-4 flex flex-col items-center gap-2 bg-purple-50 border-purple-200 hover:bg-purple-100"
-                        onClick={() =>
-                          document
-                            .querySelector('[value="attendance"]')
-                            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-                        }
-                      >
-                        <UserCheck className="h-6 w-6 text-purple-600" />
-                        <span className="text-sm font-medium">Submit Attendance</span>
-                        <span className="text-xs text-muted-foreground">Class check-in</span>
-                      </Button>
-
-                      {/* Submit Debrief */}
-                      <Button
-                        variant="outline"
-                        className="h-auto py-4 flex flex-col items-center gap-2 bg-blue-50 border-blue-200 hover:bg-blue-100"
-                        onClick={() => setShowDebriefDialog(true)}
-                      >
-                        <FileText className="h-6 w-6 text-blue-600" />
-                        <span className="text-sm font-medium">Submit Debrief</span>
-                        <span className="text-xs text-muted-foreground">Weekly report</span>
-                      </Button>
-
-                      {/* Ask Question */}
-                      <Button
-                        variant="outline"
-                        className="h-auto py-4 flex flex-col items-center gap-2 bg-amber-50 border-amber-200 hover:bg-amber-100"
-                        onClick={() =>
-                          document
-                            .querySelector('[value="questions"]')
-                            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-                        }
-                      >
-                        <HelpCircle className="h-6 w-6 text-amber-600" />
-                        <span className="text-sm font-medium">Ask Question</span>
-                        <span className="text-xs text-muted-foreground">Get help</span>
-                      </Button>
-
-                      {/* Request Meeting */}
-                      <Button
-                        variant="outline"
-                        className="h-auto py-4 flex flex-col items-center gap-2 bg-green-50 border-green-200 hover:bg-green-100"
-                        onClick={() =>
-                          document
-                            .querySelector('[value="questions"]')
-                            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-                        }
-                      >
-                        <Calendar className="h-6 w-6 text-green-600" />
-                        <span className="text-sm font-medium">Request Meeting</span>
-                        <span className="text-xs text-muted-foreground">Schedule time</span>
-                      </Button>
-
-                      {/* View My Team */}
-                      <Button
-                        variant="outline"
-                        className="h-auto py-4 flex flex-col items-center gap-2 bg-slate-50 border-slate-200 hover:bg-slate-100"
-                        onClick={() => router.push("/my-team")}
-                      >
-                        <Users className="h-6 w-6 text-slate-600" />
-                        <span className="text-sm font-medium">My Team</span>
-                        <span className="text-xs text-muted-foreground">Team info</span>
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Program Info */}
-                <Card className="bg-gradient-to-r from-slate-50 to-blue-50 border-slate-200">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-semibold text-slate-900">Your Assignment</h3>
-                        <p className="text-sm text-slate-600 mt-1">
-                          <span className="font-medium">{currentStudent?.clinic || "Business Clinic"}</span>
-                          {currentStudent?.clientName && (
-                            <span>
-                              {" "}
-                              • Working with <span className="font-medium">{currentStudent.clientName}</span>
-                            </span>
-                          )}
-                        </p>
+                {/* Right column - Status Summary */}
+                <div className="space-y-4">
+                  {/* CHANGE: Added My Team Status Card */}
+                  <Card className="border-l-4 border-l-[#878568]">
+                    <CardHeader className="pb-2 pt-3 px-4">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-bold flex items-center gap-2">
+                          <UsersRound className="h-4 w-4 text-[#878568]" />
+                          My Team's Status
+                        </CardTitle>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs text-[#505143] hover:text-[#505143]/80 p-0"
+                          onClick={() => router.push(`/my-team?studentId=${selectedStudentId || authStudentId}`)}
+                        >
+                          View Team <ArrowRight className="h-3 w-3 ml-1" />
+                        </Button>
                       </div>
-                      <Badge className={currentStudent?.isTeamLeader ? "bg-amber-500" : "bg-blue-500"}>
-                        {currentStudent?.isTeamLeader ? "Team Leader" : "Team Member"}
-                      </Badge>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-3 space-y-3">
+                      {/* Team Members Summary */}
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-500">Team Members</span>
+                        <span className="font-semibold text-[#505143]">
+                          {teamData?.teamMembers?.length || 0} students
+                        </span>
+                      </div>
+
+                      {/* This Week's Debriefs */}
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-500">Debriefs This Week</span>
+                        <span className="font-semibold text-[#505143]">
+                          {teamData?.debriefs?.filter((d: any) => {
+                            const now = new Date()
+                            const startOfWeek = new Date(now)
+                            startOfWeek.setDate(now.getDay())
+                            const debriefDate = new Date(d.created_at || d.date)
+                            return debriefDate >= startOfWeek
+                          }).length || 0}{" "}
+                          submitted
+                        </span>
+                      </div>
+
+                      {/* AI Summary Section */}
+                      <div className="pt-2 border-t border-gray-100">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1">
+                            <Sparkles className="h-3 w-3 text-amber-500" />
+                            Weekly Progress Summary
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 text-[10px] text-[#878568] hover:text-[#505143] p-0"
+                            onClick={generateTeamSummary}
+                            disabled={loadingTeamSummary}
+                          >
+                            {loadingTeamSummary ? (
+                              <RefreshCw className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <>
+                                Generate <Sparkles className="h-2.5 w-2.5 ml-1" />
+                              </>
+                            )}
+                          </Button>
+                        </div>
+
+                        {teamSummaryError && <p className="text-[10px] text-red-500 mb-2">{teamSummaryError}</p>}
+
+                        {teamSummary ? (
+                          <div className="p-2 rounded-md bg-[#D5CCAB]/20 max-h-[80px] overflow-y-auto">
+                            <p className="text-[11px] text-gray-700 leading-relaxed">{teamSummary}</p>
+                          </div>
+                        ) : !loadingTeamSummary && !teamSummaryError ? (
+                          <p className="text-[10px] text-gray-400 italic">
+                            Click "Generate" to create an AI summary of your team's weekly progress
+                          </p>
+                        ) : null}
+
+                        {loadingTeamSummary && (
+                          <div className="flex items-center justify-center p-3">
+                            <RefreshCw className="h-4 w-4 animate-spin text-[#878568]" />
+                            <span className="text-[10px] text-gray-500 ml-2">Generating summary...</span>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Status Summary Card */}
+                  <Card className="border-l-4 border-l-[#505143]">
+                    <CardHeader className="pb-2 pt-3 px-4">
+                      <CardTitle className="text-sm font-bold flex items-center gap-2">
+                        <Award className="h-4 w-4 text-[#505143]" />
+                        My Progress
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-3 space-y-3">
+                      {/* This Week Status */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">This Week</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-gray-50">
+                            <div
+                              className={`p-1.5 rounded-full ${hasSubmittedThisWeek ? "bg-green-100" : "bg-amber-100"}`}
+                            >
+                              <FileText
+                                className={`h-3.5 w-3.5 ${hasSubmittedThisWeek ? "text-green-600" : "text-amber-600"}`}
+                              />
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Debrief</p>
+                              <p
+                                className={`text-xs font-semibold ${hasSubmittedThisWeek ? "text-green-600" : "text-amber-600"}`}
+                              >
+                                {hasSubmittedThisWeek ? "Submitted" : "Pending"}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 p-2 rounded-md bg-gray-50">
+                            <div
+                              className={`p-1.5 rounded-full ${(currentStudent?.attendanceCount || 0) > 0 ? "bg-green-100" : "bg-amber-100"}`}
+                            >
+                              <UserCheck
+                                className={`h-3.5 w-3.5 ${(currentStudent?.attendanceCount || 0) > 0 ? "text-green-600" : "text-amber-600"}`}
+                              />
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Attendance</p>
+                              <p
+                                className={`text-xs font-semibold ${(currentStudent?.attendanceCount || 0) > 0 ? "text-green-600" : "text-amber-600"}`}
+                              >
+                                {(currentStudent?.attendanceCount || 0) > 0 ? "Checked In" : "Pending"}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Accumulated Stats */}
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Semester Total</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="text-center p-2 rounded-md bg-[#D5CCAB]/30">
+                            <p className="text-lg font-bold text-[#505143]">{currentStudent?.totalHours || 0}</p>
+                            <p className="text-[10px] text-gray-500">Hours</p>
+                          </div>
+                          <div className="text-center p-2 rounded-md bg-[#A3A289]/20">
+                            <p className="text-lg font-bold text-[#505143]">{debriefs?.length || 0}</p>
+                            <p className="text-[10px] text-gray-500">Debriefs</p>
+                          </div>
+                          <div className="text-center p-2 rounded-md bg-[#878568]/20">
+                            <p className="text-lg font-bold text-[#505143]">{currentStudent?.attendanceCount || 0}</p>
+                            <p className="text-[10px] text-gray-500">Attendance</p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Compact Quick Actions */}
+                  <Card>
+                    <CardHeader className="pb-2 pt-3 px-4">
+                      <CardTitle className="text-sm font-bold flex items-center gap-2">
+                        <BookOpen className="h-4 w-4 text-slate-600" />
+                        Quick Actions
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-4 pb-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-auto py-2 flex flex-col items-center gap-1 bg-purple-50/50 border-purple-200 hover:bg-purple-100 text-xs"
+                          onClick={() =>
+                            document
+                              .querySelector('[value="attendance"]')
+                              ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+                          }
+                        >
+                          <UserCheck className="h-4 w-4 text-purple-600" />
+                          <span className="font-medium">Attendance</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-auto py-2 flex flex-col items-center gap-1 bg-blue-50/50 border-blue-200 hover:bg-blue-100 text-xs"
+                          onClick={() => setShowDebriefDialog(true)}
+                        >
+                          <FileText className="h-4 w-4 text-blue-600" />
+                          <span className="font-medium">Debrief</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-auto py-2 flex flex-col items-center gap-1 bg-amber-50/50 border-amber-200 hover:bg-amber-100 text-xs"
+                          onClick={() =>
+                            document
+                              .querySelector('[value="questions"]')
+                              ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+                          }
+                        >
+                          <HelpCircle className="h-4 w-4 text-amber-600" />
+                          <span className="font-medium">Ask Question</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-auto py-2 flex flex-col items-center gap-1 bg-green-50/50 border-green-200 hover:bg-green-100 text-xs"
+                          onClick={() => router.push(`/my-team?studentId=${selectedStudentId || authStudentId}`)}
+                        >
+                          <Users className="h-4 w-4 text-green-600" />
+                          <span className="font-medium">My Team</span>
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
+
+              {/* Program Info - kept but made more compact */}
+              <Card className="bg-gradient-to-r from-slate-50 to-blue-50 border-slate-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold text-slate-900 text-sm">Your Assignment</h3>
+                      <p className="text-xs text-slate-600 mt-1">
+                        <span className="font-medium">{currentStudent?.clinic || "Business Clinic"}</span>
+                        {currentStudent?.clientName && (
+                          <span>
+                            {" "}
+                            • Working with <span className="font-medium">{currentStudent.clientName}</span>
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="bg-white text-xs">
+                      {currentStudent?.semester || "Spring 2026"}
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             {/* attendance & Debriefs Tab - Merged Content */}
@@ -2084,228 +2290,202 @@ export default function StudentPortal() {
                                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                                   <div className="flex items-center gap-4">
                                     <div className="text-center min-w-[60px]">
-                                      <p className="text-xs text-muted-foreground">Week</p>
-                                      <p className="text-xl font-bold">{week.week_number}</p>
-                                    </div>
-                                    <div>
-                                      <div className="flex items-center gap-2">
-                                        <p className="font-medium">{week.week_label || `Week ${week.week_number}`}</p>
-                                        {week.is_break && <Badge className="bg-amber-500">Break</Badge>}
-                                        {isCurrent && <Badge className="bg-blue-600">Current Week</Badge>}
-                                      </div>
-                                      <p className="text-sm text-muted-foreground">
-                                        {new Date(week.week_start).toLocaleDateString("en-US", {
-                                          weekday: "short",
-                                          month: "short",
-                                          day: "numeric",
-                                        })}{" "}
-                                        -{" "}
+                                      <p className="text-lg font-bold text-slate-800">{week.week_number}</p>
+                                      <p className="text-xs font-medium text-slate-500">
                                         {new Date(week.week_end).toLocaleDateString("en-US", {
-                                          weekday: "short",
                                           month: "short",
                                           day: "numeric",
                                         })}
                                       </p>
+                                    </div>
+                                    <div className="flex-1">
+                                      <p className="text-sm font-semibold text-slate-700">
+                                        {week.week_label || "Class Session"}
+                                        {week.is_break && <span className="text-slate-500 ml-1">(Break)</span>}
+                                      </p>
                                       {week.session_focus && (
-                                        <p className="text-xs text-slate-600 mt-1">{week.session_focus}</p>
+                                        <p className="text-xs text-slate-500 line-clamp-1">{week.session_focus}</p>
                                       )}
                                     </div>
                                   </div>
 
-                                  {!week.is_break && (
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      {/* Attendance Status/Button */}
-                                      {hasAttendance ? (
-                                        <Badge className="bg-green-600 text-white">
-                                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                                          Attended
-                                        </Badge>
-                                      ) : (
-                                        <Dialog>
+                                  <div className="flex items-center gap-3 shrink-0">
+                                    {!week.is_break && (
+                                      <>
+                                        <Dialog
+                                          open={openDialog === "attendance" && selectedWeekForAttendance === week.id}
+                                          onOpenChange={(open) => setOpenDialog(open ? "attendance" : null)}
+                                        >
                                           <DialogTrigger asChild>
                                             <Button
                                               variant="outline"
                                               size="sm"
-                                              className="border-blue-300 text-blue-700 hover:bg-blue-50 bg-transparent"
-                                              onClick={() => setSelectedWeekForAttendance(week.id)}
+                                              className="text-xs h-8 bg-transparent"
+                                              onClick={() => {
+                                                setSelectedWeekForAttendance(week.id)
+                                                setOpenDialog("attendance")
+                                              }}
+                                              disabled={!isCurrent && isPast}
                                             >
-                                              <Lock className="h-3 w-3 mr-1" />
-                                              Submit Attendance
+                                              {hasAttendance ? (
+                                                <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
+                                              ) : isPast ? (
+                                                <AlertCircle className="h-4 w-4 mr-2 text-red-500" />
+                                              ) : (
+                                                <CalendarClock className="h-4 w-4 mr-2 text-blue-600" />
+                                              )}
+                                              {hasAttendance ? "Attended" : isPast ? "Missing" : "Mark Attendance"}
                                             </Button>
                                           </DialogTrigger>
-                                          <DialogContent>
+                                          <DialogContent className="sm:max-w-[425px]">
                                             <DialogHeader>
-                                              <DialogTitle>Submit Attendance - Week {week.week_number}</DialogTitle>
+                                              <DialogTitle>Mark Attendance</DialogTitle>
                                               <DialogDescription>
-                                                Enter the class password provided during class to mark your attendance
-                                                for {new Date(week.week_start).toLocaleDateString()}.
+                                                Enter the password provided by the instructor for Week{" "}
+                                                {week.week_number}.
                                               </DialogDescription>
                                             </DialogHeader>
-                                            <div className="space-y-4 py-4">
-                                              <div className="space-y-2">
-                                                <Label>Class Password</Label>
+                                            <div className="grid gap-4 py-4">
+                                              <div className="grid grid-cols-4 items-center gap-4">
+                                                <Label htmlFor="attendancePassword" className="text-right">
+                                                  Password
+                                                </Label>
                                                 <Input
+                                                  id="attendancePassword"
                                                   type="password"
-                                                  placeholder="Enter today's class password"
+                                                  className="col-span-3"
                                                   value={attendancePassword}
                                                   onChange={(e) => setAttendancePassword(e.target.value)}
+                                                  placeholder="Enter password"
                                                 />
-                                                <p className="text-xs text-muted-foreground">
-                                                  The password is shared during class
-                                                </p>
                                               </div>
                                             </div>
                                             <DialogFooter>
                                               <Button
-                                                onClick={() => {
-                                                  // Pass the selected week ID and call the submit function
-                                                  setSelectedWeekForAttendance(week.id)
-                                                  handleSubmitAttendance()
-                                                }}
-                                                disabled={submittingAttendance || !attendancePassword.trim()}
+                                                type="submit"
+                                                onClick={handleSubmitAttendance}
+                                                disabled={submittingAttendance}
                                               >
-                                                {submittingAttendance ? "Submitting..." : "Submit"}
+                                                {submittingAttendance ? "Submitting..." : "Submit Attendance"}
                                               </Button>
                                             </DialogFooter>
                                           </DialogContent>
                                         </Dialog>
-                                      )}
-
-                                      {/* Debrief Status/Button */}
-                                      {hasDebrief ? (
-                                        <Collapsible>
-                                          <CollapsibleTrigger asChild>
-                                            <Badge className="bg-green-600 text-white cursor-pointer hover:bg-green-700">
-                                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                                              Debrief ({weekDebrief?.hoursWorked}h)
-                                              <ChevronDown className="h-3 w-3 ml-1" />
-                                            </Badge>
-                                          </CollapsibleTrigger>
-                                          <CollapsibleContent className="mt-2">
-                                            <Card className="border-green-200">
-                                              <CardContent className="pt-3 text-sm">
-                                                <div className="space-y-2">
-                                                  <div className="flex justify-between">
-                                                    <span className="text-muted-foreground">Hours:</span>
-                                                    <span className="font-medium">{weekDebrief?.hoursWorked}h</span>
-                                                  </div>
-                                                  <div>
-                                                    <span className="text-muted-foreground">Work Summary:</span>
-                                                    <p className="mt-1">{weekDebrief?.workSummary}</p>
-                                                  </div>
-                                                  {weekDebrief?.questions && (
-                                                    <div>
-                                                      <span className="text-muted-foreground">Questions:</span>
-                                                      <p className="mt-1 text-amber-700">{weekDebrief.questions}</p>
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              </CardContent>
-                                            </Card>
-                                          </CollapsibleContent>
-                                        </Collapsible>
-                                      ) : (
-                                        <Dialog>
+                                        <Dialog open={showDebriefDialog} onOpenChange={setShowDebriefDialog}>
                                           <DialogTrigger asChild>
                                             <Button
                                               variant="outline"
                                               size="sm"
-                                              className="border-purple-300 text-purple-700 hover:bg-purple-50 bg-transparent"
+                                              className={`text-xs h-8 ${hasDebrief ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100" : isPast ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100" : ""}`}
                                               onClick={() => {
                                                 setSelectedWeekForDebrief(week.id)
-                                                setShowDebriefDialog(true)
+                                                setDebriefForm({
+                                                  hoursWorked: weekDebrief?.hoursWorked?.toString() || "",
+                                                  workSummary: weekDebrief?.workSummary || "",
+                                                  questions: weekDebrief?.questions || "",
+                                                })
                                               }}
+                                              disabled={!isCurrent && isPast && hasDebrief}
                                             >
-                                              <FileText className="h-3 w-3 mr-1" />
-                                              Submit Debrief
+                                              {hasDebrief ? (
+                                                weekDebrief?.status === "reviewed" ? (
+                                                  <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
+                                                ) : (
+                                                  <Clock className="h-4 w-4 mr-2 text-amber-600" />
+                                                )
+                                              ) : isPast ? (
+                                                <AlertCircle className="h-4 w-4 mr-2 text-red-500" />
+                                              ) : (
+                                                <FileText className="h-4 w-4 mr-2 text-blue-600" />
+                                              )}
+                                              {hasDebrief
+                                                ? weekDebrief?.status === "reviewed"
+                                                  ? "Debrief Reviewed"
+                                                  : "Debrief Pending"
+                                                : isPast
+                                                  ? "Missing Debrief"
+                                                  : "Submit Debrief"}
                                             </Button>
                                           </DialogTrigger>
-                                          <DialogContent className="max-w-lg">
+                                          <DialogContent className="sm:max-w-[500px]">
                                             <DialogHeader>
-                                              <DialogTitle>Weekly Debrief - Week {week.week_number}</DialogTitle>
+                                              <DialogTitle>Weekly Debrief</DialogTitle>
                                               <DialogDescription>
-                                                Submit your weekly work summary for{" "}
-                                                {new Date(week.week_start).toLocaleDateString()} -{" "}
-                                                {new Date(week.week_end).toLocaleDateString()}
+                                                Please complete your debrief for Week {week.week_number}.
                                               </DialogDescription>
                                             </DialogHeader>
-                                            <div className="space-y-4 py-4">
-                                              <div className="space-y-2">
-                                                <Label>Hours Worked This Week *</Label>
+                                            <div className="grid gap-4 py-4">
+                                              <div className="grid grid-cols-4 items-center gap-4">
+                                                <Label htmlFor="hoursWorked" className="text-right">
+                                                  Hours Worked
+                                                </Label>
                                                 <Input
+                                                  id="hoursWorked"
                                                   type="number"
-                                                  step="0.5"
-                                                  min="0"
-                                                  placeholder="e.g., 5.5"
+                                                  className="col-span-3"
                                                   value={debriefForm.hoursWorked}
                                                   onChange={(e) =>
                                                     setDebriefForm({ ...debriefForm, hoursWorked: e.target.value })
                                                   }
+                                                  placeholder="e.g., 5.5"
+                                                  min="0"
+                                                  step="0.5"
                                                 />
                                               </div>
-                                              <div className="space-y-2">
-                                                <Label>Work Summary *</Label>
+                                              <div className="grid grid-cols-4 items-center gap-4">
+                                                <Label htmlFor="workSummary" className="text-right">
+                                                  Work Summary
+                                                </Label>
                                                 <Textarea
-                                                  placeholder="Describe what you worked on this week..."
-                                                  rows={4}
+                                                  id="workSummary"
+                                                  className="col-span-3 h-32 resize-none"
                                                   value={debriefForm.workSummary}
                                                   onChange={(e) =>
                                                     setDebriefForm({ ...debriefForm, workSummary: e.target.value })
                                                   }
+                                                  placeholder="Summarize your work this week..."
                                                 />
                                               </div>
-                                              <div className="space-y-2">
-                                                <Label>Questions or Notes (Optional)</Label>
+                                              <div className="grid grid-cols-4 items-center gap-4">
+                                                <Label htmlFor="questions" className="text-right">
+                                                  Questions
+                                                </Label>
                                                 <Textarea
-                                                  placeholder="Any questions for your clinic director?"
-                                                  rows={2}
+                                                  id="questions"
+                                                  className="col-span-3 h-24 resize-none"
                                                   value={debriefForm.questions}
                                                   onChange={(e) =>
                                                     setDebriefForm({ ...debriefForm, questions: e.target.value })
                                                   }
+                                                  placeholder="Any questions for the instructor?"
                                                 />
                                               </div>
                                             </div>
                                             <DialogFooter>
                                               <Button
-                                                onClick={() => {
-                                                  setSelectedWeekForDebrief(week.id)
-                                                  handleSubmitDebrief()
-                                                }}
-                                                disabled={
-                                                  submittingDebrief ||
-                                                  !debriefForm.hoursWorked ||
-                                                  !debriefForm.workSummary
-                                                }
+                                                type="submit"
+                                                onClick={handleSubmitDebrief}
+                                                disabled={submittingDebrief}
                                               >
                                                 {submittingDebrief ? "Submitting..." : "Submit Debrief"}
                                               </Button>
                                             </DialogFooter>
                                           </DialogContent>
                                         </Dialog>
-                                      )}
+                                      </>
+                                    )}
 
-                                      {/* Completion indicator */}
-                                      {isPast && !week.is_break && (
-                                        <div className="flex items-center">
-                                          {hasAttendance && hasDebrief ? (
-                                            <Badge
-                                              variant="outline"
-                                              className="bg-green-100 text-green-700 border-green-300"
-                                            >
-                                              <CheckCircle2 className="h-3 w-3 mr-1" />
-                                              Complete
-                                            </Badge>
-                                          ) : (
-                                            <Badge variant="outline" className="bg-red-100 text-red-700 border-red-300">
-                                              <AlertCircle className="h-3 w-3 mr-1" />
-                                              Incomplete
-                                            </Badge>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
+                                    {!isPast && !isCurrent && !week.is_break && (
+                                      <Badge variant="outline" className="text-xs text-slate-400">
+                                        Upcoming
+                                      </Badge>
+                                    )}
+                                    {week.is_break && (
+                                      <Badge variant="outline" className="text-xs text-amber-500">
+                                        Break Week
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             )
@@ -2314,338 +2494,173 @@ export default function StudentPortal() {
                     </div>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
-                      Your Debrief History
-                    </CardTitle>
-                    <CardDescription>All your weekly work submissions</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3 max-h-96 overflow-y-auto">
-                      {debriefs.length === 0 ? (
-                        <p className="text-sm text-slate-500 text-center py-8">No debriefs submitted yet</p>
-                      ) : (
-                        debriefs
-                          .sort((a, b) => b.weekNumber - a.weekNumber) // Sort by week number descending
-                          .map((debrief) => (
-                            <Collapsible key={debrief.id}>
-                              <CollapsibleTrigger asChild>
-                                <div className="p-3 border rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                      <div className="text-center min-w-[50px]">
-                                        <p className="text-xs text-muted-foreground">Week</p>
-                                        <p className="font-bold">{debrief.weekNumber || "—"}</p>
-                                      </div>
-                                      <div>
-                                        <p className="font-medium text-sm">{debrief.clientName}</p>
-                                        <p className="text-xs text-slate-500">
-                                          {new Date(debrief.weekEnding).toLocaleDateString()}
-                                        </p>
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Badge
-                                        className={
-                                          debrief.status === "reviewed"
-                                            ? "bg-green-500"
-                                            : debrief.status === "pending"
-                                              ? "bg-amber-500"
-                                              : "bg-slate-500"
-                                        }
-                                      >
-                                        {debrief.status}
-                                      </Badge>
-                                      <div className="flex items-center gap-1 text-sm font-medium">
-                                        <Clock className="h-4 w-4 text-blue-600" />
-                                        {debrief.hoursWorked}h
-                                      </div>
-                                      <ChevronDown className="h-4 w-4 text-slate-400" />
-                                    </div>
-                                  </div>
-                                </div>
-                              </CollapsibleTrigger>
-                              <CollapsibleContent>
-                                <div className="p-3 border border-t-0 rounded-b-lg bg-slate-50">
-                                  <p className="text-sm text-slate-700 mb-2">{debrief.workSummary}</p>
-                                  {debrief.questions && (
-                                    <div className="bg-amber-50 border border-amber-200 rounded p-2 mt-2">
-                                      <p className="text-xs font-medium text-amber-800 mb-1">Questions:</p>
-                                      <p className="text-xs text-amber-700">{debrief.questions}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              </CollapsibleContent>
-                            </Collapsible>
-                          ))
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
               </div>
             </TabsContent>
 
-            <TabsContent value="questions">
+            {/* Questions & Meetings Tab */}
+            <TabsContent value="questions" className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Ask a Question Card */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <HelpCircle className="h-5 w-5" />
                       Ask a Question
                     </CardTitle>
-                    <CardDescription>Submit questions to your directors</CardDescription>
+                    <CardDescription>
+                      Use this section to ask questions related to clinic work, client engagements, or course material.
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="question-type">Question Type</Label>
-                      <Select
-                        value={questionType}
-                        onValueChange={(value: "clinic" | "client") => setQuestionType(value)}
-                      >
-                        <SelectTrigger id="question-type">
-                          <SelectValue placeholder="Select question type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="clinic">
-                            <div className="flex flex-col items-start">
-                              <span className="font-medium">Clinic-Specific Question</span>
-                              <span className="text-xs text-muted-foreground">Goes to your clinic director(s)</span>
-                            </div>
-                          </SelectItem>
-                          <SelectItem value="client">
-                            <div className="flex flex-col items-start">
-                              <span className="font-medium">Client Engagement Question</span>
-                              <span className="text-xs text-muted-foreground">
-                                Goes to client primary director (visible to all directors)
-                              </span>
-                            </div>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        {questionType === "clinic"
-                          ? "Clinic questions are for topics specific to your clinic's operations, processes, or requirements."
-                          : "Client engagement questions are about your client project and will be visible to all directors working with your client."}
-                      </p>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="questionType">Question Type</Label>
+                        <Select
+                          value={questionType}
+                          onValueChange={(value) => setQuestionType(value as "clinic" | "client")}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select question type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="clinic">Clinic Related</SelectItem>
+                            <SelectItem value="client">Client Related</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="questionText">Your Question</Label>
+                        <Textarea
+                          id="questionText"
+                          className="h-32 resize-none"
+                          value={questionText}
+                          onChange={(e) => setQuestionText(e.target.value)}
+                          placeholder="Type your question here..."
+                        />
+                      </div>
+                      <Button onClick={handleSubmitQuestion} disabled={submitting || !questionText.trim()}>
+                        {submitting ? "Submitting..." : "Send Question"}
+                      </Button>
                     </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="question-text">Your Question</Label>
-                      <Textarea
-                        id="question-text"
-                        placeholder="Type your question here..."
-                        value={questionText}
-                        onChange={(e) => setQuestionText(e.target.value)}
-                        rows={4}
-                      />
-                    </div>
-                    <Button onClick={handleSubmitQuestion} disabled={submitting || !questionText.trim()}>
-                      <Send className="h-4 w-4 mr-2" />
-                      {submitting ? "Submitting..." : "Submit Question"}
-                    </Button>
                   </CardContent>
                 </Card>
+
+                {/* Request a Meeting Card */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <Users className="h-5 w-5" />
+                      <CalendarClock className="h-5 w-5" />
                       Request a Meeting
                     </CardTitle>
-                    <CardDescription>Schedule time with a clinic director</CardDescription>
+                    <CardDescription>
+                      Request a meeting with your clinic director or instructor. Please provide context and preferred
+                      times.
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Subject</Label>
-                      <Input
-                        placeholder="Meeting subject..."
-                        value={meetingSubject}
-                        onChange={(e) => setMeetingSubject(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Message (Optional)</Label>
-                      <Textarea
-                        placeholder="Additional details about your meeting request..."
-                        value={meetingMessage}
-                        onChange={(e) => setMeetingMessage(e.target.value)}
-                        rows={3}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Preferred Dates (Optional)</Label>
+                  <CardContent>
+                    <div className="space-y-4">
                       <div className="space-y-2">
-                        {preferredDates.map((date, index) => (
-                          <Input
-                            key={index}
-                            type="date"
-                            value={date}
-                            onChange={(e) => {
-                              const newDates = [...preferredDates]
-                              newDates[index] = e.target.value
-                              setPreferredDates(newDates)
-                            }}
-                          />
-                        ))}
+                        <Label htmlFor="meetingSubject">Subject</Label>
+                        <Input
+                          id="meetingSubject"
+                          value={meetingSubject}
+                          onChange={(e) => setMeetingSubject(e.target.value)}
+                          placeholder="e.g., Project X Check-in"
+                        />
                       </div>
-                    </div>
-                    <Button
-                      onClick={handleSubmitMeetingRequest}
-                      disabled={submittingMeeting || !meetingSubject.trim()}
-                      className="w-full"
-                    >
-                      <Calendar className="h-4 w-4 mr-2" />
-                      {submittingMeeting ? "Submitting..." : "Request Meeting"}
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Your Previous Questions</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {debriefs.filter((d) => d.questions).length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">No questions submitted yet</p>
-                    ) : (
-                      <div className="space-y-3 max-h-64 overflow-y-auto">
-                        {debriefs
-                          .filter((d) => d.questions)
-                          .slice(0, 10)
-                          .map((d) => (
-                            <div key={d.id} className="p-3 bg-muted/50 rounded-lg">
-                              <div className="flex items-center gap-2 mb-1">
-                                <Badge variant="outline" className="text-xs">
-                                  {d.questionType === "client" ? "Client Engagement" : "Clinic"}
-                                </Badge>
-                                <span className="text-xs text-muted-foreground">
-                                  {new Date(d.createdAt).toLocaleDateString()}
-                                </span>
-                                {d.status === "reviewed" && <Badge className="bg-green-600 text-xs">Answered</Badge>}
-                              </div>
-                              <p className="text-sm">{d.questions}</p>
-                            </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="meetingMessage">Message</Label>
+                        <Textarea
+                          id="meetingMessage"
+                          className="h-24 resize-none"
+                          value={meetingMessage}
+                          onChange={(e) => setMeetingMessage(e.target.value)}
+                          placeholder="Provide details about the meeting purpose..."
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Preferred Dates/Times</Label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {preferredDates.map((date, index) => (
+                            <Input
+                              key={index}
+                              type="datetime-local"
+                              className="text-xs"
+                              value={date}
+                              onChange={(e) => {
+                                const newDates = [...preferredDates]
+                                newDates[index] = e.target.value
+                                setPreferredDates(newDates)
+                              }}
+                            />
                           ))}
+                        </div>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm">Your Meeting Requests</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {meetingRequests.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-4">No meeting requests yet</p>
-                    ) : (
-                      <div className="space-y-3 max-h-64 overflow-y-auto">
-                        {meetingRequests.map((request) => (
-                          <div key={request.id} className="p-3 border rounded-lg">
-                            <div className="flex items-center justify-between mb-1">
-                              <p className="font-medium text-sm">{request.subject || request.directorName}</p>
-                              <Badge
-                                variant="outline"
-                                className={
-                                  request.status === "approved"
-                                    ? "bg-green-100 text-green-700"
-                                    : request.status === "pending"
-                                      ? "bg-amber-100 text-amber-700"
-                                      : "bg-slate-100"
-                                }
-                              >
-                                {request.status || "Pending"}
-                              </Badge>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              Requested: {new Date(request.requestedDate || request.created_at).toLocaleDateString()}
-                            </p>
-                            {request.reason && <p className="text-sm mt-1">{request.reason}</p>}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                      <Button
+                        onClick={handleSubmitMeetingRequest}
+                        disabled={submittingMeeting || !meetingSubject.trim()}
+                      >
+                        {submittingMeeting ? "Requesting..." : "Request Meeting"}
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               </div>
-            </TabsContent>
-            <TabsContent value="client-service">
-              {currentStudent?.clientId ? (
-                <ClientServiceTab
-                  clientId={currentStudent.clientId}
-                  clientName={currentStudent.clientName || "Client"}
-                  currentUser={{
-                    id: currentStudent.id,
-                    name: currentStudent.fullName,
-                    email: currentStudent.email,
-                    type: "student",
-                  }}
-                />
-              ) : (
-                <Card className="p-8 text-center">
-                  <Building2 className="h-12 w-12 mx-auto mb-4 text-slate-300" />
-                  <p className="text-slate-500">No client assigned yet</p>
-                </Card>
-              )}
+
+              {/* Recent Meeting Requests */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CalendarClock className="h-5 w-5" />
+                    Your Meeting Requests
+                  </CardTitle>
+                  <CardDescription>View the status of your submitted meeting requests.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {meetingRequests.length === 0 ? (
+                    <p className="text-sm text-slate-500">You haven't requested any meetings yet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {meetingRequests.map((req) => (
+                        <div
+                          key={req.id}
+                          className="p-3 rounded-lg border border-slate-200 flex justify-between items-center"
+                        >
+                          <div>
+                            <p className="font-medium text-slate-700">{req.subject}</p>
+                            <p className="text-xs text-slate-500 line-clamp-1">{req.message}</p>
+                            <p className="text-xs text-slate-400 mt-1">
+                              Requested: {new Date(req.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${
+                              req.status === "approved"
+                                ? "border-green-200 text-green-700 bg-green-50"
+                                : req.status === "pending"
+                                  ? "border-amber-200 text-amber-700 bg-amber-50"
+                                  : "border-red-200 text-red-700 bg-red-50"
+                            }`}
+                          >
+                            {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
 
+            {/* Client Service Tab */}
+            <TabsContent value="client-service">
+              <ClientServiceTab currentStudent={currentStudent} />
+            </TabsContent>
+
+            {/* Clinic Tab */}
             <TabsContent value="clinic">
-              {currentStudent ? (
-                <StudentClinicView
-                  currentStudent={{
-                    id: currentStudent.id,
-                    fullName: currentStudent.fullName,
-                    email: currentStudent.email,
-                    clinic: currentStudent.clinic,
-                    clinicId: currentStudent.clinicId || "",
-                    clientId: currentStudent.clientId || "",
-                    clientName: currentStudent.clientName || "",
-                  }}
-                  deliverableDocuments={deliverableDocuments}
-                  teamGrades={teamGrades}
-                  onDeliverableUpload={handleDeliverableUpload}
-                  uploadingDeliverable={uploadingDeliverable}
-                  courseMaterials={recentCourseMaterials}
-                  onDocumentSubmit={async (data) => {
-                    setSubmittingDocument(true)
-                    try {
-                      const blob = await upload(data.file.name, data.file, {
-                        access: "public",
-                        handleUploadUrl: "/api/upload-blob",
-                      })
-                      await fetch("/api/documents", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          fileName: data.file.name,
-                          fileUrl: blob.url,
-                          fileType: data.file.type,
-                          studentId: currentStudent.id,
-                          studentName: currentStudent.fullName,
-                          clientId: currentStudent.clientId,
-                          clientName: data.client,
-                          clinic: currentStudent.clinic,
-                          submissionType: data.type,
-                          description: data.description,
-                        }),
-                      })
-                      alert("Document submitted successfully!")
-                    } catch (error) {
-                      console.error("Error submitting document:", error)
-                      alert("An error occurred. Please try again.")
-                    } finally {
-                      setSubmittingDocument(false)
-                    }
-                  }}
-                  submittingDocument={submittingDocument}
-                />
-              ) : (
-                <Card className="p-8 text-center">
-                  <Users className="h-12 w-12 mx-auto mb-4 text-slate-300" />
-                  <p className="text-slate-500">Loading clinic information...</p>
-                </Card>
-              )}
+              <StudentClinicView currentStudent={currentStudent} />
             </TabsContent>
           </Tabs>
         </div>

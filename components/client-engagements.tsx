@@ -1,37 +1,29 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import {
   Building2,
   Users,
   Clock,
   AlertCircle,
   FileText,
-  ExternalLink,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  GraduationCap,
-  Presentation,
-  FileCheck,
-  Calendar,
   Star,
-  MessageSquare,
   TrendingUp,
+  ChevronRight,
+  Check,
   BarChart3,
-  Mail,
-  Globe,
-  UserCheck,
-  Activity,
+  Presentation,
+  Trophy,
+  Search,
 } from "lucide-react"
 import { getClinicColor } from "@/lib/clinic-colors"
-import { Button } from "@/components/ui/button"
 import { DocumentUpload } from "@/components/document-upload"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { ClientServiceTab } from "@/components/client-service-tab"
 // Removed: import { ClinicAgendaTab } from "@/components/clinic-agenda-tab" // Import removed
 import { useDirectors } from "@/hooks/use-directors"
@@ -156,14 +148,33 @@ const DELIVERABLE_INSTRUCTIONS = {
   },
 }
 
+// Workflow stages type and helper function
+const workflowStages = [
+  { id: 1, name: "Discovery", icon: Search, description: "Client research & analysis" },
+  { id: 2, name: "SOW Signed", icon: FileText, description: "Statement of Work finalized" },
+  { id: 3, name: "Strategy", icon: BarChart3, description: "Developing recommendations" },
+  { id: 4, name: "Deliverables", icon: Presentation, description: "Creating final outputs" },
+  { id: 5, name: "Complete", icon: Trophy, description: "Project finished" },
+]
+
+function getWorkflowStage(progress: number): number {
+  if (progress >= 100) return 5
+  if (progress >= 75) return 4
+  if (progress >= 50) return 3
+  if (progress >= 25) return 2
+  return 1
+}
+
 export function ClientEngagements({ selectedWeeks, selectedClinic }: ClientEngagementsProps) {
   const [clients, setClients] = useState<Client[]>([])
-  const [documents, setDocuments] = useState<Record<string, Document[]>>({})
-  const [evaluations, setEvaluations] = useState<Record<string, Evaluation[]>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [expandedClient, setExpandedClient] = useState<string | null>(null)
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
+  const [documents, setDocuments] = useState<Record<string, Document[]>>({})
+  const [evaluations, setEvaluations] = useState<Record<string, Evaluation[]>>({})
   const [clientTabs, setClientTabs] = useState<Record<string, string>>({})
+  const [mainTab, setMainTab] = useState<"clients" | "agenda">("clients") // Added state for main tab
+  const { directors } = useDirectors()
   const [directorInfo, setDirectorInfo] = useState<{
     id: string
     name: string
@@ -171,8 +182,8 @@ export function ClientEngagements({ selectedWeeks, selectedClinic }: ClientEngag
     clinicId?: string
     clinicName?: string
   } | null>(null) // Added clinicId and clinicName
-  const { directors } = useDirectors()
-  const [mainTab, setMainTab] = useState<string>("clients") // Added state for main tab
+  const searchParams = useSearchParams()
+  const clientFromUrl = searchParams.get("client")
 
   const getClientTab = (clientId: string) => clientTabs[clientId] || "overview"
   const setClientTab = (clientId: string, tab: string) => {
@@ -195,6 +206,22 @@ export function ClientEngagements({ selectedWeeks, selectedClinic }: ClientEngag
       }
     }
   }, [selectedClinic, directors])
+
+  useEffect(() => {
+    if (clientFromUrl && clients.length > 0) {
+      const matchingClient = clients.find(
+        (c) => c.name.toLowerCase() === decodeURIComponent(clientFromUrl).toLowerCase(),
+      )
+      if (matchingClient) {
+        setSelectedClientId(matchingClient.id)
+        return
+      }
+    }
+    // Default: select first client if none selected
+    if (clients.length > 0 && !selectedClientId && !clientFromUrl) {
+      setSelectedClientId(null) // Show "All Clients" by default
+    }
+  }, [clients, clientFromUrl, selectedClientId])
 
   useEffect(() => {
     async function fetchData() {
@@ -417,16 +444,22 @@ export function ClientEngagements({ selectedWeeks, selectedClinic }: ClientEngag
       })
   }
 
+  const selectedClient = clients.find((c) => c.id === selectedClientId)
+  const selectedClientDocs = selectedClient ? documents[selectedClient.id] || [] : []
+  const selectedProgress = selectedClient
+    ? Math.min((selectedClient.hoursLogged / selectedClient.hoursTarget) * 100, 100)
+    : 0
+
   if (loading) {
+    // Loading state for split-pane layout
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {[1, 2, 3, 4, 5, 6].map((i) => (
-          <Card key={i} className="p-6 animate-pulse">
-            <div className="h-6 bg-muted rounded w-3/4 mb-4"></div>
-            <div className="h-4 bg-muted rounded w-1/2 mb-2"></div>
-            <div className="h-4 bg-muted rounded w-2/3"></div>
-          </Card>
-        ))}
+      <div className="flex gap-4 h-[600px]">
+        <div className="w-72 flex-shrink-0 space-y-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-20 bg-muted rounded animate-pulse" />
+          ))}
+        </div>
+        <div className="flex-1 bg-muted rounded animate-pulse" />
       </div>
     )
   }
@@ -454,725 +487,431 @@ export function ClientEngagements({ selectedWeeks, selectedClinic }: ClientEngag
   }
 
   return (
-    <div className="space-y-6">
-      <Tabs value={mainTab} onValueChange={setMainTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
-          <TabsTrigger value="clients" className="gap-2">
-            <Building2 className="h-4 w-4" />
-            Client Engagements
-          </TabsTrigger>
-          {/* Removed: Clinic Agenda Tab Trigger */}
-        </TabsList>
-
-        <TabsContent value="clients" className="mt-6 space-y-6">
-          {/* Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-500 rounded-lg">
-                    <Building2 className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-blue-700">{clients.length}</p>
-                    <p className="text-xs text-blue-600">Active Clients</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 border-emerald-200">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-emerald-500 rounded-lg">
-                    <Users className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-emerald-700">
-                      {clients.reduce((sum, c) => sum + c.students, 0)}
-                    </p>
-                    <p className="text-xs text-emerald-600">Total Students</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gradient-to-br from-purple-50 to-purple-100/50 border-purple-200">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-500 rounded-lg">
-                    <Clock className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-purple-700">
-                      {clients.reduce((sum, c) => sum + c.hoursLogged, 0).toFixed(0)}
-                    </p>
-                    <p className="text-xs text-purple-600">Hours Logged</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gradient-to-br from-amber-50 to-amber-100/50 border-amber-200">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-amber-500 rounded-lg">
-                    <FileText className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-amber-700">
-                      {Object.values(documents).reduce((sum, docs) => sum + docs.length, 0)}
-                    </p>
-                    <p className="text-xs text-amber-600">Documents</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gradient-to-br from-rose-50 to-rose-100/50 border-rose-200">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-rose-500 rounded-lg">
-                    <TrendingUp className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-rose-700">
-                      {Math.round(
-                        (clients.reduce((sum, c) => sum + c.hoursLogged, 0) /
-                          Math.max(
-                            clients.reduce((sum, c) => sum + c.hoursTarget, 0),
-                            1,
-                          )) *
-                          100,
-                      )}
-                      %
-                    </p>
-                    <p className="text-xs text-rose-600">Avg Progress</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+    <div className="space-y-4">
+      <div className="bg-gradient-to-r from-[#112250] via-[#1a2d52] to-[#112250] rounded-xl p-6 text-white shadow-lg">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          {/* Left - Title and subtitle */}
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-[#E0C58F] to-[#d0b57f] flex items-center justify-center shadow-md">
+              <Building2 className="h-6 w-6 text-[#112250]" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-[#F5F0E9]">Client Engagements</h1>
+              <p className="text-sm text-[#9aacba]">Manage and track all client projects</p>
+            </div>
           </div>
 
-          {/* Grading Breakdown */}
-          <Card className="bg-muted/30 border-dashed">
-            <CardHeader className="py-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <GraduationCap className="h-4 w-4" />
-                Syllabus Grading Breakdown
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="py-2">
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
-                {Object.entries(GRADING_BREAKDOWN).map(([key, item]) => (
-                  <div key={key} className="flex flex-col">
-                    <span className="font-medium text-foreground">{item.weight}%</span>
-                    <span className="text-muted-foreground">{item.label}</span>
-                    <Badge variant="outline" className="w-fit mt-1 text-[10px]">
-                      {item.type}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          {/* Right - Summary Stats in header */}
+          <div className="flex flex-wrap gap-3">
+            <div className="flex items-center gap-2 px-3 py-2 bg-white/10 rounded-lg border border-white/20">
+              <Building2 className="h-4 w-4 text-[#E0C58F]" />
+              <span className="text-lg font-bold">{clients.length}</span>
+              <span className="text-xs text-[#9aacba]">Clients</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 bg-white/10 rounded-lg border border-white/20">
+              <Users className="h-4 w-4 text-[#E0C58F]" />
+              <span className="text-lg font-bold">{clients.reduce((sum, c) => sum + c.students, 0)}</span>
+              <span className="text-xs text-[#9aacba]">Students</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 bg-white/10 rounded-lg border border-white/20">
+              <Clock className="h-4 w-4 text-[#E0C58F]" />
+              <span className="text-lg font-bold">{clients.reduce((sum, c) => sum + c.hoursLogged, 0).toFixed(0)}</span>
+              <span className="text-xs text-[#9aacba]">Hours</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 bg-white/10 rounded-lg border border-white/20">
+              <TrendingUp className="h-4 w-4 text-[#E0C58F]" />
+              <span className="text-lg font-bold">
+                {Math.round(
+                  (clients.reduce((sum, c) => sum + c.hoursLogged, 0) /
+                    Math.max(
+                      clients.reduce((sum, c) => sum + c.hoursTarget, 0),
+                      1,
+                    )) *
+                    100,
+                )}
+                %
+              </span>
+              <span className="text-xs text-[#9aacba]">Progress</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
-          {/* Client Cards */}
-          <div className="space-y-4">
+      {/* Client Tabs - Wrapping flex layout */}
+      <div className="border-b pb-2">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setSelectedClientId(null)}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+              !selectedClientId ? "bg-[#112250] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            All Clients ({clients.length})
+          </button>
+          {clients.map((client) => {
+            const colors = getClinicColor(client.clinic)
+            const isSelected = selectedClientId === client.id
+            return (
+              <button
+                key={client.id}
+                onClick={() => setSelectedClientId(client.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  isSelected ? "bg-[#112250] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                <span
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: isSelected ? "#fff" : colors.hex }}
+                />
+                {client.name}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Content Area */}
+      <div>
+        {/* All Clients View */}
+        {!selectedClientId && (
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {clients.map((client) => {
               const colors = getClinicColor(client.clinic)
-              const clientDocs = documents[client.id] || []
               const progress = Math.min((client.hoursLogged / client.hoursTarget) * 100, 100)
-              const isExpanded = expandedClient === client.id
-
-              const sowStatus = getDeliverableStatus(client.id, "sow")
-              const midtermStatus = getDeliverableStatus(client.id, "midterm")
-              const finalStatus = getDeliverableStatus(client.id, "final")
+              const clientDocs = documents[client.id] || []
 
               return (
-                <Card key={client.id} className="overflow-hidden border-l-4" style={{ borderLeftColor: colors.hex }}>
-                  {/* Client Header - Always Visible */}
-                  <div className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3">
-                          <h3 className="font-semibold text-lg text-foreground">{client.name}</h3>
-                          <Badge className={getStatusColor(client.status)}>
-                            {getStatusIcon(client.status)}
-                            <span className="ml-1 capitalize">{client.status.replace("-", " ")}</span>
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {client.clinic} • {client.director}
-                        </p>
-                        <div className="flex flex-wrap gap-3 mt-2 text-xs text-muted-foreground">
-                          {client.contactName && (
-                            <span className="flex items-center gap-1">
-                              <UserCheck className="h-3 w-3" />
-                              {client.contactName}
-                            </span>
-                          )}
-                          {client.email && (
-                            <a
-                              href={`mailto:${client.email}`}
-                              className="flex items-center gap-1 hover:text-primary transition-colors"
-                            >
-                              <Mail className="h-3 w-3" />
-                              {client.email}
-                            </a>
-                          )}
-                          {client.website && (
-                            <a
-                              href={client.website}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1 hover:text-primary transition-colors"
-                            >
-                              <Globe className="h-3 w-3" />
-                              Website
-                            </a>
-                          )}
-                        </div>
-                      </div>
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setExpandedClient(isExpanded ? null : client.id)}
-                      >
-                        {isExpanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-                      </Button>
+                <Card
+                  key={client.id}
+                  className="p-4 cursor-pointer hover:shadow-md transition-shadow border-l-4"
+                  style={{ borderLeftColor: colors.hex }}
+                  onClick={() => setSelectedClientId(client.id)}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{client.name}</h3>
+                      <p className="text-xs text-gray-500">{client.clinic}</p>
                     </div>
-
-                    {/* Quick Stats Row */}
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
-                      <div className="text-center p-2 bg-muted/50 rounded">
-                        <div className="text-lg font-semibold">{client.students}</div>
-                        <div className="text-xs text-muted-foreground">Students</div>
-                      </div>
-                      <div className="text-center p-2 bg-muted/50 rounded">
-                        <div className="text-lg font-semibold">{client.hoursLogged.toFixed(1)}h</div>
-                        <div className="text-xs text-muted-foreground">Hours Logged</div>
-                      </div>
-                      <div className="text-center p-2 bg-muted/50 rounded">
-                        <div className="text-lg font-semibold">{clientDocs.length}</div>
-                        <div className="text-xs text-muted-foreground">Documents</div>
-                      </div>
-                      {/* Deliverable Status Badges */}
-                      <div className="col-span-2 flex items-center justify-center gap-2 flex-wrap">
-                        <Badge className={`${sowStatus.color} text-xs`}>
-                          <FileCheck className="h-3 w-3 mr-1" />
-                          SOW: {sowStatus.label}
-                        </Badge>
-                        <Badge className={`${midtermStatus.color} text-xs`}>
-                          <Presentation className="h-3 w-3 mr-1" />
-                          Mid: {midtermStatus.label}
-                        </Badge>
-                        <Badge className={`${finalStatus.color} text-xs`}>
-                          <Star className="h-3 w-3 mr-1" />
-                          Final: {finalStatus.label}
-                        </Badge>
-                      </div>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] ${
+                        client.status === "on-track"
+                          ? "bg-green-50 text-green-700 border-green-200"
+                          : client.status === "ahead"
+                            ? "bg-blue-50 text-blue-700 border-blue-200"
+                            : "bg-amber-50 text-amber-700 border-amber-200"
+                      }`}
+                    >
+                      {client.status}
+                    </Badge>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-500">Progress</span>
+                      <span className="font-medium">{Math.round(progress)}%</span>
                     </div>
-
-                    {/* Progress Bar */}
-                    <div className="mt-4">
-                      <div className="flex items-center justify-between text-sm mb-1">
-                        <span className="text-muted-foreground">Hours Progress</span>
-                        <span className="font-medium">
-                          {client.hoursLogged.toFixed(1)} / {client.hoursTarget}h
-                        </span>
-                      </div>
-                      <Progress value={progress} className="h-2" />
+                    <Progress value={progress} className="h-1.5" />
+                    <div className="flex items-center justify-between text-xs text-gray-500 pt-1">
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3 w-3" />
+                        {client.students} students
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {client.hoursLogged}/{client.hoursTarget}h
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <FileText className="h-3 w-3" />
+                        {clientDocs.length}
+                      </span>
                     </div>
                   </div>
-
-                  {isExpanded && (
-                    <div className="border-t bg-muted/20 p-6">
-                      <Tabs
-                        value={getClientTab(client.id)}
-                        onValueChange={(v) => setClientTab(client.id, v)}
-                        className="w-full"
-                      >
-                        <TabsList className="grid w-full grid-cols-5">
-                          <TabsTrigger value="overview" className="text-xs">
-                            <BarChart3 className="h-3 w-3 mr-1" />
-                            Overview
-                          </TabsTrigger>
-                          <TabsTrigger value="deliverables" className="text-xs">
-                            <FileCheck className="h-3 w-3 mr-1" />
-                            Deliverables
-                          </TabsTrigger>
-                          <TabsTrigger value="service" className="text-xs">
-                            <MessageSquare className="h-3 w-3 mr-1" />
-                            Client Service
-                          </TabsTrigger>
-                          <TabsTrigger value="team" className="text-xs">
-                            <Users className="h-3 w-3 mr-1" />
-                            Team ({client.students})
-                          </TabsTrigger>
-                          <TabsTrigger value="activity" className="text-xs">
-                            <Activity className="h-3 w-3 mr-1" />
-                            Activity
-                          </TabsTrigger>
-                        </TabsList>
-
-                        <TabsContent value="overview" className="mt-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* Client Details Card */}
-                            <Card>
-                              <CardHeader className="pb-2">
-                                <CardTitle className="text-sm flex items-center gap-2">
-                                  <Building2 className="h-4 w-4" />
-                                  Client Details
-                                </CardTitle>
-                              </CardHeader>
-                              <CardContent className="space-y-3">
-                                <div className="grid grid-cols-2 gap-2 text-sm">
-                                  <div>
-                                    <p className="text-muted-foreground text-xs">Contact</p>
-                                    <p className="font-medium">{client.contactName || "Not specified"}</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-muted-foreground text-xs">Email</p>
-                                    <p className="font-medium truncate">{client.email || "Not specified"}</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-muted-foreground text-xs">Website</p>
-                                    {client.website ? (
-                                      <a
-                                        href={client.website}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="font-medium text-primary hover:underline truncate block"
-                                      >
-                                        {client.website.replace(/^https?:\/\//, "")}
-                                      </a>
-                                    ) : (
-                                      <p className="font-medium">Not specified</p>
-                                    )}
-                                  </div>
-                                  <div>
-                                    <p className="text-muted-foreground text-xs">Clinic Director</p>
-                                    <p className="font-medium">{client.director}</p>
-                                  </div>
-                                  {directorInfo && (
-                                    <>
-                                      <div>
-                                        <p className="text-muted-foreground text-xs">Director Email</p>
-                                        <a
-                                          href={`mailto:${directorInfo.email}`}
-                                          className="font-medium text-primary hover:underline truncate block"
-                                        >
-                                          {directorInfo.email}
-                                        </a>
-                                      </div>
-                                    </>
-                                  )}
-                                </div>
-                              </CardContent>
-                            </Card>
-
-                            {/* Progress Summary Card */}
-                            <Card>
-                              <CardHeader className="pb-2">
-                                <CardTitle className="text-sm flex items-center gap-2">
-                                  <TrendingUp className="h-4 w-4" />
-                                  Progress Summary
-                                </CardTitle>
-                              </CardHeader>
-                              <CardContent className="space-y-3">
-                                <div className="space-y-2">
-                                  <div className="flex justify-between text-sm">
-                                    <span>Hours Progress</span>
-                                    <span className="font-medium">{Math.round(progress)}%</span>
-                                  </div>
-                                  <Progress value={progress} className="h-2" />
-                                </div>
-                                <div className="grid grid-cols-3 gap-2 text-center">
-                                  <div className="p-2 bg-muted rounded">
-                                    <p className="text-lg font-bold">{client.hoursLogged.toFixed(0)}</p>
-                                    <p className="text-xs text-muted-foreground">Hours</p>
-                                  </div>
-                                  <div className="p-2 bg-muted rounded">
-                                    <p className="text-lg font-bold">{clientDocs.length}</p>
-                                    <p className="text-xs text-muted-foreground">Docs</p>
-                                  </div>
-                                  <div className="p-2 bg-muted rounded">
-                                    <p className="text-lg font-bold">{client.students}</p>
-                                    <p className="text-xs text-muted-foreground">Team</p>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-
-                            {/* Deliverable Status Card */}
-                            <Card className="md:col-span-2">
-                              <CardHeader className="pb-2">
-                                <CardTitle className="text-sm flex items-center gap-2">
-                                  <CheckCircle2 className="h-4 w-4" />
-                                  Deliverable Status
-                                </CardTitle>
-                              </CardHeader>
-                              <CardContent>
-                                <div className="grid grid-cols-3 gap-4">
-                                  <div className="p-3 border rounded-lg text-center">
-                                    <FileCheck className="h-6 w-6 mx-auto mb-2 text-primary" />
-                                    <p className="font-medium text-sm">Statement of Work</p>
-                                    <Badge className={`${sowStatus.color} mt-2`}>{sowStatus.label}</Badge>
-                                  </div>
-                                  <div className="p-3 border rounded-lg text-center">
-                                    <Presentation className="h-6 w-6 mx-auto mb-2 text-orange-500" />
-                                    <p className="font-medium text-sm">Mid-Term</p>
-                                    <Badge className={`${midtermStatus.color} mt-2`}>{midtermStatus.label}</Badge>
-                                  </div>
-                                  <div className="p-3 border rounded-lg text-center">
-                                    <Star className="h-6 w-6 mx-auto mb-2 text-yellow-500" />
-                                    <p className="font-medium text-sm">Final</p>
-                                    <Badge className={`${finalStatus.color} mt-2`}>{finalStatus.label}</Badge>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          </div>
-                        </TabsContent>
-
-                        {/* Deliverables Tab - existing code */}
-                        <TabsContent value="deliverables" className="mt-4">
-                          <Accordion type="single" collapsible defaultValue="sow">
-                            {/* Statement of Work Section */}
-                            <AccordionItem value="sow">
-                              <AccordionTrigger className="hover:no-underline">
-                                <div className="flex items-center gap-3">
-                                  <FileCheck className="h-5 w-5 text-primary" />
-                                  <div className="text-left">
-                                    <div className="font-medium">{DELIVERABLE_INSTRUCTIONS.sow.title}</div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {DELIVERABLE_INSTRUCTIONS.sow.weight}
-                                    </div>
-                                  </div>
-                                  <Badge className={sowStatus.color}>{sowStatus.label}</Badge>
-                                </div>
-                              </AccordionTrigger>
-                              <AccordionContent>
-                                <div className="space-y-4 pt-2">
-                                  <div className="bg-background p-4 rounded-lg border">
-                                    <p className="text-sm text-muted-foreground mb-3">
-                                      {DELIVERABLE_INSTRUCTIONS.sow.description}
-                                    </p>
-                                    <div className="text-sm">
-                                      <p className="font-medium mb-2">Instructions:</p>
-                                      <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                                        {DELIVERABLE_INSTRUCTIONS.sow.instructions.map((inst, i) => (
-                                          <li key={i}>{inst}</li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                    <div className="mt-3 flex items-center gap-2 text-xs text-primary">
-                                      <Calendar className="h-3 w-3" />
-                                      {DELIVERABLE_INSTRUCTIONS.sow.dueInfo}
-                                    </div>
-                                  </div>
-
-                                  {/* Upload Section */}
-                                  <div className="border rounded-lg p-4">
-                                    <DocumentUpload
-                                      clientId={client.id}
-                                      clientName={client.name}
-                                      clinic={client.clinic}
-                                      studentName="Director"
-                                      submissionType="sow"
-                                      title="Upload Statement of Work"
-                                      description="Upload the completed SOW document"
-                                      onUploadComplete={() => handleUploadComplete(client.id)}
-                                      compact
-                                    />
-                                  </div>
-
-                                  {/* Existing Documents */}
-                                  {getDocumentsByType(client.id, "sow").length > 0 && (
-                                    <div className="space-y-2">
-                                      <p className="text-sm font-medium">Submitted Documents</p>
-                                      {getDocumentsByType(client.id, "sow").map((doc) => (
-                                        <div
-                                          key={doc.id}
-                                          className="flex items-center justify-between p-3 border rounded-lg bg-background"
-                                        >
-                                          <div className="flex items-center gap-3">
-                                            <FileText className="h-4 w-4 text-muted-foreground" />
-                                            <div>
-                                              <p className="text-sm font-medium">{doc.file_name}</p>
-                                              <p className="text-xs text-muted-foreground">
-                                                {doc.student_name} • {new Date(doc.uploaded_at).toLocaleDateString()}
-                                              </p>
-                                            </div>
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                            <Button variant="outline" size="sm" asChild>
-                                              <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
-                                                <ExternalLink className="h-4 w-4" />
-                                              </a>
-                                            </Button>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              </AccordionContent>
-                            </AccordionItem>
-
-                            {/* Mid-Term & Final sections remain the same */}
-                            <AccordionItem value="midterm">
-                              <AccordionTrigger className="hover:no-underline">
-                                <div className="flex items-center gap-3">
-                                  <Presentation className="h-5 w-5 text-orange-500" />
-                                  <div className="text-left">
-                                    <div className="font-medium">{DELIVERABLE_INSTRUCTIONS.midterm.title}</div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {DELIVERABLE_INSTRUCTIONS.midterm.weight}
-                                    </div>
-                                  </div>
-                                  <Badge className={midtermStatus.color}>{midtermStatus.label}</Badge>
-                                </div>
-                              </AccordionTrigger>
-                              <AccordionContent>
-                                <div className="space-y-4 pt-2">
-                                  <div className="bg-background p-4 rounded-lg border">
-                                    <p className="text-sm text-muted-foreground mb-3">
-                                      {DELIVERABLE_INSTRUCTIONS.midterm.description}
-                                    </p>
-                                    <div className="text-sm">
-                                      <p className="font-medium mb-2">Instructions:</p>
-                                      <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                                        {DELIVERABLE_INSTRUCTIONS.midterm.instructions.map((inst, i) => (
-                                          <li key={i}>{inst}</li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                    <div className="mt-3 flex items-center gap-2 text-xs text-orange-600">
-                                      <Calendar className="h-3 w-3" />
-                                      {DELIVERABLE_INSTRUCTIONS.midterm.dueInfo}
-                                    </div>
-                                  </div>
-
-                                  <div className="border rounded-lg p-4">
-                                    <DocumentUpload
-                                      clientId={client.id}
-                                      clientName={client.name}
-                                      clinic={client.clinic}
-                                      studentName="Director"
-                                      submissionType="midterm"
-                                      title="Upload Mid-Term Presentation"
-                                      description="Upload presentation slides or supporting materials"
-                                      onUploadComplete={() => handleUploadComplete(client.id)}
-                                      compact
-                                    />
-                                  </div>
-
-                                  {getDocumentsByType(client.id, "midterm").length > 0 && (
-                                    <div className="space-y-2">
-                                      <p className="text-sm font-medium">Submitted Documents</p>
-                                      {getDocumentsByType(client.id, "midterm").map((doc) => (
-                                        <div
-                                          key={doc.id}
-                                          className="flex items-center justify-between p-3 border rounded-lg bg-background"
-                                        >
-                                          <div className="flex items-center gap-3">
-                                            <FileText className="h-4 w-4 text-muted-foreground" />
-                                            <div>
-                                              <p className="text-sm font-medium">{doc.file_name}</p>
-                                              <p className="text-xs text-muted-foreground">
-                                                {doc.student_name} • {new Date(doc.uploaded_at).toLocaleDateString()}
-                                              </p>
-                                            </div>
-                                          </div>
-                                          <Button variant="outline" size="sm" asChild>
-                                            <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
-                                              <ExternalLink className="h-4 w-4" />
-                                            </a>
-                                          </Button>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              </AccordionContent>
-                            </AccordionItem>
-
-                            <AccordionItem value="final">
-                              <AccordionTrigger className="hover:no-underline">
-                                <div className="flex items-center gap-3">
-                                  <Star className="h-5 w-5 text-yellow-500" />
-                                  <div className="text-left">
-                                    <div className="font-medium">{DELIVERABLE_INSTRUCTIONS.final.title}</div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {DELIVERABLE_INSTRUCTIONS.final.weight}
-                                    </div>
-                                  </div>
-                                  <Badge className={finalStatus.color}>{finalStatus.label}</Badge>
-                                </div>
-                              </AccordionTrigger>
-                              <AccordionContent>
-                                <div className="space-y-4 pt-2">
-                                  <div className="bg-background p-4 rounded-lg border">
-                                    <p className="text-sm text-muted-foreground mb-3">
-                                      {DELIVERABLE_INSTRUCTIONS.final.description}
-                                    </p>
-                                    <div className="text-sm">
-                                      <p className="font-medium mb-2">Instructions:</p>
-                                      <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                                        {DELIVERABLE_INSTRUCTIONS.final.instructions.map((inst, i) => (
-                                          <li key={i}>{inst}</li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                    <div className="mt-3 flex items-center gap-2 text-xs text-yellow-600">
-                                      <Calendar className="h-3 w-3" />
-                                      {DELIVERABLE_INSTRUCTIONS.final.dueInfo}
-                                    </div>
-                                  </div>
-
-                                  <div className="border rounded-lg p-4">
-                                    <DocumentUpload
-                                      clientId={client.id}
-                                      clientName={client.name}
-                                      clinic={client.clinic}
-                                      studentName="Director"
-                                      submissionType="final"
-                                      title="Upload Final Presentation"
-                                      description="Upload final presentation and deliverables"
-                                      onUploadComplete={() => handleUploadComplete(client.id)}
-                                      compact
-                                    />
-                                  </div>
-
-                                  {getDocumentsByType(client.id, "final").length > 0 && (
-                                    <div className="space-y-2">
-                                      <p className="text-sm font-medium">Submitted Documents</p>
-                                      {getDocumentsByType(client.id, "final").map((doc) => (
-                                        <div
-                                          key={doc.id}
-                                          className="flex items-center justify-between p-3 border rounded-lg bg-background"
-                                        >
-                                          <div className="flex items-center gap-3">
-                                            <FileText className="h-4 w-4 text-muted-foreground" />
-                                            <div>
-                                              <p className="text-sm font-medium">{doc.file_name}</p>
-                                              <p className="text-xs text-muted-foreground">
-                                                {doc.student_name} • {new Date(doc.uploaded_at).toLocaleDateString()}
-                                              </p>
-                                            </div>
-                                          </div>
-                                          <Button variant="outline" size="sm" asChild>
-                                            <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
-                                              <ExternalLink className="h-4 w-4" />
-                                            </a>
-                                          </Button>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              </AccordionContent>
-                            </AccordionItem>
-                          </Accordion>
-                        </TabsContent>
-
-                        {/* CHANGE: Updated ClientServiceTab to pass director email properly */}
-                        <TabsContent value="service" className="mt-4">
-                          <ClientServiceTab
-                            clientId={client.id}
-                            clientName={client.name}
-                            currentUser={{
-                              id: directorInfo?.id || client.directorId || "director",
-                              name: directorInfo?.name || client.director || "Director",
-                              email: directorInfo?.email || "",
-                              type: "director",
-                            }}
-                            teamMembers={client.teamMembers.map((m) => ({
-                              id: m.id,
-                              name: m.name,
-                              email: m.email,
-                            }))}
-                          />
-                        </TabsContent>
-
-                        {/* Team Tab */}
-                        <TabsContent value="team" className="mt-4">
-                          <div className="space-y-3">
-                            {client.teamMembers.length > 0 ? (
-                              client.teamMembers.map((member) => (
-                                <div
-                                  key={member.id}
-                                  className="flex items-center justify-between p-3 border rounded-lg bg-background"
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                                      <span className="text-sm font-medium text-primary">
-                                        {member.name
-                                          .split(" ")
-                                          .map((n) => n[0])
-                                          .join("")}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <p className="font-medium text-sm">{member.name}</p>
-                                      <p className="text-xs text-muted-foreground">{member.email}</p>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    {member.isTeamLeader && (
-                                      <Badge variant="outline" className="text-xs">
-                                        Team Leader
-                                      </Badge>
-                                    )}
-                                    <Badge variant="secondary" className="text-xs">
-                                      {member.role}
-                                    </Badge>
-                                  </div>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="text-center py-6 text-muted-foreground">
-                                <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                                <p>No team members assigned yet</p>
-                              </div>
-                            )}
-                          </div>
-                        </TabsContent>
-
-                        {/* Activity Tab */}
-                        <TabsContent value="activity" className="mt-4">
-                          <div className="space-y-3">
-                            {client.recentWork.length > 0 ? (
-                              client.recentWork.map((work, i) => (
-                                <div key={i} className="p-3 border rounded-lg bg-background">
-                                  <div className="flex items-start gap-3">
-                                    <MessageSquare className="h-4 w-4 text-muted-foreground mt-0.5" />
-                                    <p className="text-sm">{work}</p>
-                                  </div>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="text-center py-6 text-muted-foreground">
-                                <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                                <p>No recent activity recorded</p>
-                              </div>
-                            )}
-                          </div>
-                        </TabsContent>
-                      </Tabs>
-                    </div>
-                  )}
+                  <div className="flex items-center justify-end mt-2 text-xs text-[#112250] font-medium">
+                    View Details <ChevronRight className="h-3 w-3 ml-1" />
+                  </div>
                 </Card>
               )
             })}
           </div>
-        </TabsContent>
+        )}
 
-        {/* Removed: Clinic Agenda TabContent */}
-      </Tabs>
+        {/* Single Client View */}
+        {selectedClient && (
+          <div className="space-y-4">
+            {/* Client Header */}
+            <div className="flex items-start justify-between p-4 bg-white rounded-lg border">
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-12 h-12 rounded-lg flex items-center justify-center text-white font-bold text-lg"
+                  style={{ backgroundColor: getClinicColor(selectedClient.clinic).hex }}
+                >
+                  {selectedClient.name.charAt(0)}
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">{selectedClient.name}</h2>
+                  <p className="text-sm text-gray-500">{selectedClient.clinic}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 text-sm">
+                <div className="text-center">
+                  <p className="font-bold text-gray-900">{selectedClient.students}</p>
+                  <p className="text-xs text-gray-500">Students</p>
+                </div>
+                <div className="text-center">
+                  <p className="font-bold text-gray-900">
+                    {selectedClient.hoursLogged}/{selectedClient.hoursTarget}
+                  </p>
+                  <p className="text-xs text-gray-500">Hours</p>
+                </div>
+                <div className="text-center">
+                  <p className="font-bold text-gray-900">{selectedClientDocs.length}</p>
+                  <p className="text-xs text-gray-500">Docs</p>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={`${
+                    selectedClient.status === "on-track"
+                      ? "bg-green-50 text-green-700 border-green-200"
+                      : selectedClient.status === "ahead"
+                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                        : "bg-amber-50 text-amber-700 border-amber-200"
+                  }`}
+                >
+                  {selectedClient.status}
+                </Badge>
+              </div>
+            </div>
+
+            <div className="p-4 bg-white rounded-lg border">
+              <div className="flex items-center justify-between text-sm mb-3">
+                <span className="font-medium text-gray-700">Project Workflow</span>
+                <span className="font-semibold text-[#112250]">{Math.round(selectedProgress)}% Complete</span>
+              </div>
+
+              {/* Workflow Stages */}
+              <div className="relative mb-3">
+                {/* Progress Line */}
+                <div className="absolute top-4 left-0 right-0 h-0.5 bg-gray-200" />
+                <div
+                  className="absolute top-4 left-0 h-0.5 bg-[#505143] transition-all duration-500"
+                  style={{ width: `${Math.min(selectedProgress, 100)}%` }}
+                />
+
+                {/* Stage Nodes */}
+                <div className="relative flex justify-between">
+                  {workflowStages.map((stage, index) => {
+                    const currentStage = getWorkflowStage(selectedProgress)
+                    const isCompleted = stage.id < currentStage
+                    const isCurrent = stage.id === currentStage
+                    const StageIcon = stage.icon
+
+                    return (
+                      <div key={stage.id} className="flex flex-col items-center" style={{ width: "20%" }}>
+                        <div
+                          className={`
+                            w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-300
+                            ${
+                              isCompleted
+                                ? "bg-[#505143] border-[#505143] text-white"
+                                : isCurrent
+                                  ? "bg-white border-[#505143] text-[#505143]"
+                                  : "bg-white border-gray-300 text-gray-400"
+                            }
+                          `}
+                        >
+                          {isCompleted ? <Check className="h-4 w-4" /> : <StageIcon className="h-4 w-4" />}
+                        </div>
+                        <span
+                          className={`text-xs mt-1.5 text-center font-medium ${
+                            isCompleted || isCurrent ? "text-gray-700" : "text-gray-400"
+                          }`}
+                        >
+                          {stage.name}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Current Stage Description */}
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+                <Clock className="h-3.5 w-3.5 text-[#878568]" />
+                <span className="text-xs text-gray-600">
+                  Current:{" "}
+                  <span className="font-medium text-gray-800">
+                    {workflowStages[getWorkflowStage(selectedProgress) - 1]?.description || "Getting started"}
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            {/* Client Detail Tabs */}
+            <Tabs defaultValue="overview" className="w-full">
+              <TabsList className="w-full justify-start border-b rounded-none h-auto p-0 bg-transparent">
+                <TabsTrigger
+                  value="overview"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#112250] data-[state=active]:bg-transparent"
+                >
+                  Overview
+                </TabsTrigger>
+                <TabsTrigger
+                  value="deliverables"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#112250] data-[state=active]:bg-transparent"
+                >
+                  Deliverables
+                </TabsTrigger>
+                <TabsTrigger
+                  value="communication"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#112250] data-[state=active]:bg-transparent"
+                >
+                  Communication
+                </TabsTrigger>
+                <TabsTrigger
+                  value="team"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-[#112250] data-[state=active]:bg-transparent"
+                >
+                  Team
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="overview" className="mt-4 space-y-4">
+                {/* Contact Info */}
+                <Card className="p-4">
+                  <h3 className="font-semibold text-sm mb-3">Contact Information</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-500 text-xs">Contact Name</p>
+                      <p className="font-medium">{selectedClient.contactName || "Not specified"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 text-xs">Email</p>
+                      <p className="font-medium">{selectedClient.email || "Not specified"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 text-xs">Website</p>
+                      <p className="font-medium">{selectedClient.website || "Not specified"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 text-xs">Director</p>
+                      <p className="font-medium">{selectedClient.director}</p>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Recent Activity */}
+                <Card className="p-4">
+                  <h3 className="font-semibold text-sm mb-3">Recent Work</h3>
+                  {selectedClient.recentWork && selectedClient.recentWork.length > 0 ? (
+                    <ul className="space-y-2">
+                      {selectedClient.recentWork.map((work, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                          <span>{work}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-gray-500">No recent work logged</p>
+                  )}
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="deliverables" className="mt-4">
+                <Card className="p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold">Documents ({selectedClientDocs.length})</h3>
+                    <DocumentUpload
+                      clientId={selectedClient.id}
+                      clientName={selectedClient.name}
+                      onUploadComplete={() => handleUploadComplete(selectedClient.id)}
+                    />
+                  </div>
+                  {selectedClientDocs.length > 0 ? (
+                    <div className="space-y-2">
+                      {selectedClientDocs.map((doc) => (
+                        <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <FileText className="h-5 w-5 text-gray-400" />
+                            <div>
+                              <p className="font-medium text-sm">{doc.file_name}</p>
+                              <p className="text-xs text-gray-500">
+                                {doc.student_name} • {new Date(doc.uploaded_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                          <a
+                            href={doc.file_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-[#112250] hover:underline"
+                          >
+                            View
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No documents uploaded yet</p>
+                    </div>
+                  )}
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="communication" className="mt-4">
+                <ClientServiceTab
+                  clientId={selectedClient.id}
+                  clientName={selectedClient.name}
+                  semesterId={selectedClient.semesterId}
+                />
+              </TabsContent>
+
+              <TabsContent value="team" className="mt-4">
+                <Card className="p-4">
+                  <h3 className="font-semibold mb-4">Team Members ({selectedClient.teamMembers?.length || 0})</h3>
+                  {selectedClient.teamMembers && selectedClient.teamMembers.length > 0 ? (
+                    <div className="space-y-2">
+                      {selectedClient.teamMembers.map((member) => (
+                        <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-[#112250] text-white flex items-center justify-center text-sm font-medium">
+                              {member.name.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">{member.name}</p>
+                              <p className="text-xs text-gray-500">{member.email}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {member.isTeamLeader && (
+                              <Badge className="bg-amber-100 text-amber-700 text-[10px]">
+                                <Star className="h-3 w-3 mr-1" />
+                                Lead
+                              </Badge>
+                            )}
+                            <Badge variant="outline" className="text-[10px]">
+                              {member.role}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No team members assigned</p>
+                    </div>
+                  )}
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
+
+export default ClientEngagements

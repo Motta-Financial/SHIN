@@ -70,14 +70,24 @@ export default function DirectorPortalDashboard() {
   const { role, email, fullName, isLoading: roleLoading, isAuthenticated } = useUserRole()
 
   useEffect(() => {
-    if (roleLoading) return
+    if (roleLoading) {
+      console.log("[v0] Still loading role, waiting...")
+      return
+    }
 
-    if (!isDemoMode && !isAuthenticated) {
+    if (isDemoMode) {
+      console.log("[v0] Demo mode active, redirecting to /director")
+      router.push("/director")
+      return
+    }
+
+    if (!isAuthenticated) {
+      console.log("[v0] Not authenticated, redirecting to /login")
       router.push("/login")
       return
     }
 
-    // Redirect based on user role
+    console.log("[v0] Authenticated with role:", role, "- redirecting...")
     if (role === "admin" || role === "director") {
       router.push("/director")
     } else if (role === "student") {
@@ -85,7 +95,7 @@ export default function DirectorPortalDashboard() {
     } else if (role === "client") {
       router.push("/client-portal")
     } else {
-      // Default to director portal if role is unclear
+      console.log("[v0] Unknown role, defaulting to /director")
       router.push("/director")
     }
   }, [role, roleLoading, isAuthenticated, isDemoMode, router])
@@ -100,21 +110,15 @@ export default function DirectorPortalDashboard() {
 
   if (roleLoading || !mounted) {
     return (
-      <div className="min-h-screen bg-background">
-        <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
-          <div className="p-3 animate-pulse">
-            <Skeleton className="h-8 w-full mb-3" />
-            <Skeleton className="h-8 w-full mb-3" />
-            <Skeleton className="h-8 w-full" />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-full max-w-md space-y-4 p-8">
+          <div className="text-center space-y-2">
+            <Skeleton className="h-8 w-48 mx-auto" />
+            <Skeleton className="h-4 w-64 mx-auto" />
           </div>
-        </aside>
-        <div className="pl-52 pt-14">
-          <div className="p-4 space-y-4">
-            <LoadingSkeleton height="h-24" />
-            <div className="grid gap-4 lg:grid-cols-2">
-              <LoadingSkeleton height="h-80" />
-              <LoadingSkeleton height="h-80" />
-            </div>
+          <div className="space-y-3">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
           </div>
         </div>
       </div>

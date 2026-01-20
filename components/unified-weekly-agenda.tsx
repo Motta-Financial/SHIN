@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -10,22 +10,17 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   Calendar,
   Plus,
   Trash2,
-  X,
   Clock,
   BookOpen,
   FileText,
-  ChevronDown,
   ChevronRight,
   Coffee,
   Video,
-  Check,
   Pencil,
-  Send,
   Users,
   Loader2,
   MapPin,
@@ -284,34 +279,21 @@ const getWeekFocus = (week: number): string => {
   return "" // Return empty to let database values take precedence
 }
 
-export function UnifiedWeeklyAgenda({
+function UnifiedWeeklyAgenda({
   semester = "Spring 2026",
   isStudentView = false,
   studentClinic,
 }: UnifiedWeeklyAgendaProps) {
   const [schedules, setSchedules] = useState<WeekSchedule[]>([])
-  const [clientMeetings, setClientMeetings] = useState<ClientMeeting[]>([]) // State for client meetings
   const [loading, setLoading] = useState(true)
-  const [openWeeks, setOpenWeeks] = useState<Set<number>>(new Set([1]))
-  // const [editingField, setEditingField] = useState<string | null>(null) // Removed unused state
-  // const [editingSession, setEditingSession] = useState<string | null>(null) // Removed unused state
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
   const [showAddWeekDialog, setShowAddWeekDialog] = useState(false)
-  const [showAddActivityDialog, setShowAddActivityDialog] = useState(false) // This is for adding TimeBlocks
+  const [showAddActivityDialog, setShowAddActivityDialog] = useState(false)
   const [showAddAssignmentDialog, setShowAddAssignmentDialog] = useState(false)
-  const [showEditScheduleDialog, setShowEditScheduleDialog] = useState(false) // Dialog for editing schedule_data items
-  const [editingScheduleItem, setEditingScheduleItem] = useState<{
-    scheduleId: string
-    index: number
-    item: ScheduleDataItem
-  } | null>(null) // State for editing schedule_data items
   const [activeWeekForDialog, setActiveWeekForDialog] = useState<number | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [publishing, setPublishing] = useState(false)
-  const [publishSuccess, setPublishSuccess] = useState<number | null>(null) // Removed unused state
-  const [directors, setDirectors] = useState<Array<{ full_name: string; clinic: string }>>([]) // Removed unused state
-  const [copied, setCopied] = useState(false)
-  const [posting, setPosting] = useState(false) // Added posting state
-
+  const [editingActivity, setEditingActivity] = useState<{ weekNumber: number; activityId: string } | null>(null)
+  const [editingAssignment, setEditingAssignment] = useState<{ weekNumber: number; assignmentId: string } | null>(null)
+  const [clientMeetings, setClientMeetings] = useState<ClientMeeting[]>([]) // State for client meetings
   const [assignmentFile, setAssignmentFile] = useState<File | null>(null)
   const [uploadingAssignment, setUploadingAssignment] = useState(false)
 
@@ -341,11 +323,47 @@ export function UnifiedWeeklyAgenda({
     type: "deliverable",
   })
 
+  // State for dialogs and editing
+  const [saving, setSaving] = useState(false)
+  const [showEditScheduleDialog, setShowEditScheduleDialog] = useState(false)
+  const [editingScheduleItem, setEditingScheduleItem] = useState<{
+    scheduleId: string
+    index: number
+    item: ScheduleDataItem
+  } | null>(null)
+  const [publishing, setPublishing] = useState(false)
+  const [publishSuccess, setPublishSuccess] = useState<number | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [posting, setPosting] = useState(false)
+
+  const [editingTimeBlock, setEditingTimeBlock] = useState<{
+    weekNumber: number
+    timeBlockId: string
+    timeBlock: TimeBlock
+  } | null>(null)
+  const [showEditTimeBlockDialog, setShowEditTimeBlockDialog] = useState(false)
+
+  // Directors data - assuming it's fetched elsewhere or hardcoded if static
+  const directors = [] // Placeholder: In a real app, fetch this data.
+
   useEffect(() => {
     fetchSchedules()
     // fetchDirectors() // Removed unused fetch
     fetchClientMeetings() // Added fetch for client meetings
   }, [semester])
+
+  useEffect(() => {
+    if (schedules.length > 0 && selectedWeek === null) {
+      // Try to find current week based on date
+      const today = new Date()
+      const currentWeek = schedules.find((s) => {
+        const weekStart = new Date(s.week_start)
+        const weekEnd = new Date(s.week_end)
+        return today >= weekStart && today <= weekEnd
+      })
+      setSelectedWeek(currentWeek?.week_number || schedules[0].week_number)
+    }
+  }, [schedules, selectedWeek])
 
   const fetchSchedules = async () => {
     setLoading(true)
@@ -364,9 +382,7 @@ export function UnifiedWeeklyAgenda({
           room_assignment: s.room_assignment || "Main Classroom", // Default room assignment
         }))
         setSchedules(schedulesWithActivities)
-        if (schedulesWithActivities.length > 0) {
-          setOpenWeeks(new Set([schedulesWithActivities[0].week_number]))
-        }
+        // Removed the line setting openWeeks as it's no longer needed
       } else {
         const defaultWeeks = generateDefaultWeeks(semester)
         // Create all weeks in database
@@ -393,7 +409,7 @@ export function UnifiedWeeklyAgenda({
             room_assignment: s.room_assignment || "Main Classroom",
           }))
           setSchedules(schedulesWithActivities)
-          setOpenWeeks(new Set([1]))
+          // Removed the line setting openWeeks as it's no longer needed
         }
       }
     } catch (error) {
@@ -437,7 +453,7 @@ export function UnifiedWeeklyAgenda({
 
   const getDirectorName = (initials: string): string => {
     if (!initials) return ""
-    const initialsMap = getDirectorInitialsMap(directors)
+    const initialsMap = getDirectorInitialsMap(directors) // directors is not defined here
     const parts = initials.split("/")
     const names = parts.map((init) => {
       const upperInit = init.toUpperCase().trim()
@@ -446,17 +462,23 @@ export function UnifiedWeeklyAgenda({
     return names.join(" & ")
   }
 
-  const toggleWeek = (weekNumber: number) => {
-    setOpenWeeks((prev) => {
-      const next = new Set(prev)
-      if (next.has(weekNumber)) {
-        next.delete(weekNumber)
-      } else {
-        next.add(weekNumber)
-      }
-      return next
-    })
+  const selectedSchedule = schedules.find((s) => s.week_number === selectedWeek)
+
+  // Loading state
+  if (loading) {
+    return (
+      <Card className="border-0 shadow-md">
+        <CardContent className="p-8">
+          <div className="flex items-center justify-center gap-3">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <span className="text-muted-foreground">Loading course schedule...</span>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
+
+  // Removed toggleWeek as it's no longer needed with the split-pane layout
 
   // Updated to save schedule_data (class schedule)
   const updateScheduleData = async (scheduleId: string, newScheduleData: ScheduleDataItem[]) => {
@@ -624,6 +646,32 @@ export function UnifiedWeeklyAgenda({
     }
   }
 
+  const updateTimeBlock = async (weekNumber: number, timeBlockId: string, updatedBlock: TimeBlock) => {
+    const schedule = schedules.find((s) => s.week_number === weekNumber)
+    if (!schedule || !schedule.activities) return
+
+    const newActivities = schedule.activities.map((a) => (a.id === timeBlockId ? { ...a, ...updatedBlock } : a))
+
+    setSaving(true)
+    try {
+      const response = await fetch("/api/semester-schedule", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: schedule.id, schedule_data: newActivities }),
+      })
+
+      if (response.ok) {
+        setSchedules(schedules.map((s) => (s.id === schedule.id ? { ...s, activities: newActivities } : s)))
+        setShowEditTimeBlockDialog(false)
+        setEditingTimeBlock(null)
+      }
+    } catch (error) {
+      console.error("Error updating time block:", error)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const addWeek = async () => {
     try {
       const response = await fetch("/api/semester-schedule", {
@@ -653,7 +701,7 @@ export function UnifiedWeeklyAgenda({
           room_assignment: "Main Classroom",
         }
         setSchedules([...schedules, newSchedule].sort((a, b) => a.week_number - b.week_number))
-        setOpenWeeks((prev) => new Set([...prev, newSchedule.week_number]))
+        // Removed setOpenWeeks as it's no longer needed
         setShowAddWeekDialog(false)
         setNewWeek({
           week_number: schedules.length + 2,
@@ -675,11 +723,10 @@ export function UnifiedWeeklyAgenda({
       await fetch(`/api/semester-schedule?id=${id}`, { method: "DELETE" })
       const remaining = schedules.filter((s) => s.id !== id)
       setSchedules(remaining)
-      setOpenWeeks((prev) => {
-        const next = new Set(prev)
-        next.delete(weekNumber)
-        return next
-      })
+      // Removed setOpenWeeks as it's no longer needed
+      if (selectedWeek === weekNumber) {
+        setSelectedWeek(remaining.length > 0 ? remaining[0].week_number : null)
+      }
     } catch (error) {
       console.error("Error deleting week:", error)
     }
@@ -737,6 +784,15 @@ export function UnifiedWeeklyAgenda({
       .filter((block) => block.sessions.length > 0) // Remove block if it has no sessions left
 
     await updateSchedule(weekId, { activities: updatedTimeBlocks }) // Use 'activities' for TimeBlocks
+  }
+
+  // Delete Time Block directly from the week details view
+  const deleteTimeBlock = async (weekNumber: number, blockId: string) => {
+    const schedule = schedules.find((s) => s.week_number === weekNumber)
+    if (!schedule) return
+
+    const updatedTimeBlocks = schedule.activities.filter((block) => block.id !== blockId)
+    await updateSchedule(schedule.id, { activities: updatedTimeBlocks })
   }
 
   const addAssignment = async () => {
@@ -821,6 +877,14 @@ export function UnifiedWeeklyAgenda({
     if (!schedule) return
     const updatedAssignments = schedule.assignments.filter((a) => a.id !== assignmentId)
     await updateSchedule(weekId, { assignments: updatedAssignments })
+  }
+
+  // Delete Assignment directly from the week details view
+  const deleteAssignment = async (weekNumber: number, assignmentId: string) => {
+    const schedule = schedules.find((s) => s.week_number === weekNumber)
+    if (!schedule) return
+    const updatedAssignments = schedule.assignments.filter((a) => a.id !== assignmentId)
+    await updateSchedule(schedule.id, { assignments: updatedAssignments })
   }
 
   const handlePublishAgenda = async (schedule: WeekSchedule) => {
@@ -921,732 +985,632 @@ export function UnifiedWeeklyAgenda({
     }
   }
 
-  if (loading) {
-    return (
-      <Card className="border-0 shadow-sm">
-        <CardContent className="p-8 text-center text-muted-foreground">
-          <div className="animate-pulse">Loading weekly agendas...</div>
-        </CardContent>
-      </Card>
-    )
+  // Function to update week notes
+  const updateWeekNotes = async (weekNumber: number, notes: string) => {
+    const schedule = schedules.find((s) => s.week_number === weekNumber)
+    if (!schedule) return
+    await updateSchedule(schedule.id, { notes })
   }
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <Card className="border-0 shadow-sm">
-        <CardHeader className="border-b bg-muted/30 rounded-t-lg py-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5 text-primary" />
-              Unified Course & Weekly Agenda - {semester}
-            </CardTitle>
-            {!isStudentView && (
-              <Dialog open={showAddWeekDialog} onOpenChange={setShowAddWeekDialog}>
-                <DialogTrigger asChild>
-                  <Button size="sm" className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    Add Week
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add New Week</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 mt-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Week Number</Label>
-                        <Input
-                          type="number"
-                          value={newWeek.week_number}
-                          onChange={(e) => setNewWeek({ ...newWeek, week_number: Number.parseInt(e.target.value) })}
-                          min={1}
-                          max={16}
-                        />
-                      </div>
-                      <div>
-                        <Label>Week Label</Label>
-                        <Input
-                          value={newWeek.week_label}
-                          onChange={(e) => setNewWeek({ ...newWeek, week_label: e.target.value })}
-                          placeholder={`Week ${newWeek.week_number}`}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Start Date</Label>
-                        <Input
-                          type="date"
-                          value={newWeek.week_start}
-                          onChange={(e) => setNewWeek({ ...newWeek, week_start: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label>End Date</Label>
-                        <Input
-                          type="date"
-                          value={newWeek.week_end}
-                          onChange={(e) => setNewWeek({ ...newWeek, week_end: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label>Session Focus / Topic</Label>
-                      <Input
-                        value={newWeek.session_focus}
-                        onChange={(e) => setNewWeek({ ...newWeek, session_focus: e.target.value })}
-                        placeholder="e.g., Project Planning & SOW Development"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={newWeek.is_break}
-                        onCheckedChange={(checked) => setNewWeek({ ...newWeek, is_break: checked })}
-                      />
-                      <Label>This is a break week (no class)</Label>
-                    </div>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between px-1">
+        <h2 className="flex items-center gap-2 text-lg font-semibold" style={{ color: "#112250" }}>
+          <Calendar className="h-5 w-5" />
+          Unified Course & Weekly Agenda - {semester}
+        </h2>
+        {!isStudentView && (
+          <Dialog open={showAddWeekDialog} onOpenChange={setShowAddWeekDialog}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-1" style={{ backgroundColor: "#112250" }}>
+                <Plus className="h-4 w-4" />
+                Add Week
+              </Button>
+            </DialogTrigger>
+            {/* Add Week Dialog Content - unchanged */}
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Week</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Week Number</Label>
+                    <Input
+                      type="number"
+                      value={newWeek.week_number}
+                      onChange={(e) => setNewWeek({ ...newWeek, week_number: Number.parseInt(e.target.value) })}
+                      min={1}
+                      max={20}
+                    />
                   </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowAddWeekDialog(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={addWeek}>Add Week</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="p-4">
-          {schedules.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Calendar className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <p>No weeks added yet. Click "Add Week" to create your course schedule.</p>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Click on each week to expand and view/edit the course agenda and clinic schedule.
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Week Dropdowns */}
-      {schedules.map((schedule) => (
-        <Collapsible
-          key={schedule.id}
-          open={openWeeks.has(schedule.week_number)}
-          onOpenChange={() => toggleWeek(schedule.week_number)}
-        >
-          <Card className={`border-0 shadow-sm overflow-hidden ${schedule.is_break ? "bg-amber-50/50" : ""}`}>
-            {/* Week Header - Collapsible Trigger */}
-            <CollapsibleTrigger asChild>
-              <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/30 transition-colors">
-                <div className="flex items-center gap-3">
-                  {openWeeks.has(schedule.week_number) ? (
-                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                  ) : (
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  )}
-                  <div className="flex items-center gap-2">
-                    {schedule.is_break && <Coffee className="h-4 w-4 text-amber-600" />}
-                    <span className="font-semibold text-lg">
-                      {schedule.week_label || `Week ${schedule.week_number}`}
-                    </span>
-                    {schedule.is_break && <Badge className="bg-amber-100 text-amber-800 border-amber-200">Break</Badge>}
+                  <div>
+                    <Label>Week Label</Label>
+                    <Input
+                      value={newWeek.week_label}
+                      onChange={(e) => setNewWeek({ ...newWeek, week_label: e.target.value })}
+                      placeholder="Week 1"
+                    />
                   </div>
-                  <span className="text-sm text-muted-foreground">
-                    {formatDate(schedule.week_start)} - {formatDate(schedule.week_end)}
-                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Start Date</Label>
+                    <Input
+                      type="date"
+                      value={newWeek.week_start}
+                      onChange={(e) => setNewWeek({ ...newWeek, week_start: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label>End Date</Label>
+                    <Input
+                      type="date"
+                      value={newWeek.week_end}
+                      onChange={(e) => setNewWeek({ ...newWeek, week_end: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Session Focus</Label>
+                  <Input
+                    value={newWeek.session_focus}
+                    onChange={(e) => setNewWeek({ ...newWeek, session_focus: e.target.value })}
+                    placeholder="e.g., SEED Overview, Client Kickoff"
+                  />
                 </div>
                 <div className="flex items-center gap-2">
-                  {schedule.session_focus && (
-                    <Badge variant="secondary" className="font-normal">
-                      {schedule.session_focus}
-                    </Badge>
-                  )}
-                  <Badge variant="outline" className="text-xs">
-                    {schedule.activities?.length || 0} activities {/* Count TimeBlocks */}
-                  </Badge>
+                  <Switch
+                    checked={newWeek.is_break}
+                    onCheckedChange={(checked) => setNewWeek({ ...newWeek, is_break: checked })}
+                  />
+                  <Label>Break Week (No Class)</Label>
                 </div>
               </div>
-            </CollapsibleTrigger>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowAddWeekDialog(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={addWeek}>Add Week</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
 
-            {/* Collapsible Content */}
-            <CollapsibleContent>
-              <div className="border-t">
-                {/* Course Agenda Section */}
-                <div className="p-4 space-y-4 bg-white">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground flex items-center gap-2">
-                      <BookOpen className="h-4 w-4" />
-                      Course Agenda
-                    </h3>
-                    <div className="flex gap-2">
-                      {!isStudentView && (
-                        <Dialog
-                          open={showAddActivityDialog && activeWeekForDialog === schedule.week_number}
-                          onOpenChange={(open) => {
-                            setShowAddActivityDialog(open)
-                            if (open) setActiveWeekForDialog(schedule.week_number)
-                          }}
-                        >
-                          <DialogTrigger asChild>
-                            <Button size="sm" variant="outline" className="gap-1 bg-transparent">
-                              <Plus className="h-3 w-3" />
-                              Add Activity
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Add Time Block</DialogTitle> {/* Updated Title */}
-                            </DialogHeader>
-                            <div className="space-y-4 mt-4">
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <Label>Time</Label>
-                                  <Input
-                                    value={newTimeBlock.time}
-                                    onChange={(e) => setNewTimeBlock({ ...newTimeBlock, time: e.target.value })}
-                                    placeholder="5:00 PM"
-                                  />
-                                </div>
-                                <div>
-                                  <Label>Duration (min)</Label>
-                                  <Input
-                                    type="number"
-                                    value={newTimeBlock.duration}
-                                    onChange={(e) =>
-                                      setNewTimeBlock({ ...newTimeBlock, duration: Number.parseInt(e.target.value) })
-                                    }
-                                    min={5}
-                                    max={180}
-                                  />
-                                </div>
-                              </div>
-                              <div>
-                                <Label>Activity Title</Label> {/* Changed from Title to Activity Title */}
-                                <Input
-                                  value={newTimeBlock.activity}
-                                  onChange={(e) => setNewTimeBlock({ ...newTimeBlock, activity: e.target.value })}
-                                  placeholder="e.g., Lecture, Workshop"
-                                />
-                              </div>
-                              <div>
-                                <Label>Type (Color)</Label> {/* This selects the color for the TimeBlock */}
-                                <Select
-                                  value={newTimeBlock.color}
-                                  onValueChange={(v: string) => setNewTimeBlock({ ...newTimeBlock, color: v })}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="blue">Lecture</SelectItem>
-                                    <SelectItem value="purple">Workshop</SelectItem>
-                                    <SelectItem value="green">Meeting</SelectItem>
-                                    <SelectItem value="amber">Break</SelectItem>
-                                    <SelectItem value="pink">Presentation</SelectItem>
-                                    <SelectItem value="slate">Other</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            <DialogFooter>
-                              <Button variant="outline" onClick={() => setShowAddActivityDialog(false)}>
-                                Cancel
-                              </Button>
-                              <Button onClick={addTimeBlock}>Add Time Block</Button> {/* Changed function name */}
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
+      {/* Empty State */}
+      {schedules.length === 0 && (
+        <Card className="border shadow-sm">
+          <CardContent className="p-6">
+            <div className="text-center py-4 text-muted-foreground">
+              <Calendar className="h-10 w-10 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">No weeks added yet. Click "Add Week" to create your course schedule.</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {schedules.length > 0 && (
+        <div className="flex gap-3">
+          <div className="w-[240px] flex-shrink-0">
+            <div className="bg-white border rounded-lg overflow-hidden">
+              <div className="px-3 py-2 border-b bg-gray-50">
+                <h3 className="font-medium text-xs text-gray-600 uppercase tracking-wide">
+                  All Weeks ({schedules.length})
+                </h3>
+              </div>
+              <div className="max-h-[500px] overflow-y-auto">
+                {schedules.map((schedule) => {
+                  const isSelected = selectedWeek === schedule.week_number
+                  const isCurrentWeek = (() => {
+                    const today = new Date()
+                    const weekStart = new Date(schedule.week_start)
+                    const weekEnd = new Date(schedule.week_end)
+                    return today >= weekStart && today <= weekEnd
+                  })()
+
+                  return (
+                    <button
+                      key={schedule.id}
+                      onClick={() => setSelectedWeek(schedule.week_number)}
+                      className={`w-full text-left px-3 py-2 border-b last:border-b-0 transition-all ${
+                        isSelected
+                          ? "bg-[#112250] text-white"
+                          : isCurrentWeek
+                            ? "bg-amber-50 hover:bg-amber-100"
+                            : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          {schedule.is_break && (
+                            <Coffee className={`h-3.5 w-3.5 ${isSelected ? "text-amber-300" : "text-amber-600"}`} />
+                          )}
+                          <span className={`font-medium text-sm ${isSelected ? "text-white" : "text-gray-800"}`}>
+                            {schedule.week_label || `Week ${schedule.week_number}`}
+                          </span>
+                        </div>
+                        <ChevronRight className={`h-3.5 w-3.5 ${isSelected ? "text-white/70" : "text-gray-400"}`} />
+                      </div>
+                      <div className={`text-[11px] mt-0.5 ${isSelected ? "text-gray-300" : "text-gray-500"}`}>
+                        {formatDate(schedule.week_start)} - {formatDate(schedule.week_end)}
+                      </div>
+                      {(schedule.session_focus || (isCurrentWeek && !isSelected)) && (
+                        <div className="flex items-center gap-1.5 mt-1">
+                          {schedule.session_focus && (
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                isSelected ? "bg-white/20 text-white" : "bg-gray-100 text-gray-600"
+                              }`}
+                            >
+                              {schedule.session_focus}
+                            </span>
+                          )}
+                          {isCurrentWeek && !isSelected && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+                              Current
+                            </span>
+                          )}
+                        </div>
                       )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
 
-                      {!isStudentView && (
-                        <Dialog
-                          open={showAddAssignmentDialog && activeWeekForDialog === schedule.week_number}
-                          onOpenChange={(open) => {
-                            setShowAddAssignmentDialog(open)
-                            if (open) setActiveWeekForDialog(schedule.week_number)
-                            if (!open) setAssignmentFile(null) // Reset file upload on close
-                          }}
-                        >
-                          <DialogTrigger asChild>
-                            <Button size="sm" variant="outline" className="gap-1 bg-transparent">
-                              <Plus className="h-3 w-3" />
-                              Add Assignment
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Add Assignment</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-4 mt-4">
-                              <div>
-                                <Label>Title</Label>
-                                <Input
-                                  value={newAssignment.title}
-                                  onChange={(e) => setNewAssignment({ ...newAssignment, title: e.target.value })}
-                                  placeholder="Assignment title"
-                                />
-                              </div>
-                              <div className="grid grid-cols-2 gap-4">
+          <div className="flex-1 min-w-0">
+            {selectedSchedule ? (
+              <div className="bg-white border rounded-lg overflow-hidden">
+                {/* Week Header - simplified, no large colored background */}
+                <div className="px-4 py-3 border-b flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {selectedSchedule.is_break && <Coffee className="h-4 w-4 text-amber-600" />}
+                    <div>
+                      <h2 className="font-semibold text-base" style={{ color: "#112250" }}>
+                        {selectedSchedule.week_label || `Week ${selectedSchedule.week_number}`}
+                      </h2>
+                      <p className="text-xs text-gray-500">
+                        {formatDate(selectedSchedule.week_start)} - {formatDate(selectedSchedule.week_end)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {selectedSchedule.session_focus && (
+                      <Badge
+                        variant="secondary"
+                        className="text-xs font-normal"
+                        style={{ backgroundColor: "#D5CCAB", color: "#505143" }}
+                      >
+                        {selectedSchedule.session_focus}
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="text-xs font-normal">
+                      {selectedSchedule.activities?.length || 0} activities
+                    </Badge>
+                    {selectedSchedule.is_break && (
+                      <Badge className="text-xs bg-amber-100 text-amber-700 border-amber-200">Break</Badge>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  {/* Course Agenda Section */}
+                  <div className="px-4 py-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-medium text-xs uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
+                        <BookOpen className="h-3.5 w-3.5" />
+                        Course Agenda
+                      </h3>
+                      <div className="flex gap-1.5">
+                        {!isStudentView && (
+                          <Dialog
+                            open={showAddActivityDialog && activeWeekForDialog === selectedSchedule.week_number}
+                            onOpenChange={(open) => {
+                              setShowAddActivityDialog(open)
+                              if (open) setActiveWeekForDialog(selectedSchedule.week_number)
+                            }}
+                          >
+                            <DialogTrigger asChild>
+                              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 bg-transparent">
+                                <Plus className="h-3 w-3" />
+                                Add Activity
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Add Time Block</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-4 mt-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <Label>Time</Label>
+                                    <Input
+                                      value={newTimeBlock.time}
+                                      onChange={(e) => setNewTimeBlock({ ...newTimeBlock, time: e.target.value })}
+                                      placeholder="5:00 PM"
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label>Duration (min)</Label>
+                                    <Input
+                                      type="number"
+                                      value={newTimeBlock.duration}
+                                      onChange={(e) =>
+                                        setNewTimeBlock({
+                                          ...newTimeBlock,
+                                          duration: Number.parseInt(e.target.value),
+                                        })
+                                      }
+                                      min={5}
+                                      max={180}
+                                    />
+                                  </div>
+                                </div>
                                 <div>
-                                  <Label>Type</Label>
+                                  <Label>Activity Title</Label>
+                                  <Input
+                                    value={newTimeBlock.activity}
+                                    onChange={(e) => setNewTimeBlock({ ...newTimeBlock, activity: e.target.value })}
+                                    placeholder="e.g., Lecture, Workshop"
+                                  />
+                                </div>
+                                <div>
+                                  <Label>Type (Color)</Label>
                                   <Select
-                                    value={newAssignment.type}
-                                    onValueChange={(v: any) => setNewAssignment({ ...newAssignment, type: v })}
+                                    value={newTimeBlock.color}
+                                    onValueChange={(v: string) => setNewTimeBlock({ ...newTimeBlock, color: v })}
                                   >
                                     <SelectTrigger>
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="reading">Reading</SelectItem>
-                                      <SelectItem value="deliverable">Deliverable</SelectItem>
-                                      <SelectItem value="quiz">Quiz</SelectItem>
-                                      <SelectItem value="presentation">Presentation</SelectItem>
-                                      <SelectItem value="other">Other</SelectItem>
+                                      <SelectItem value="blue">Lecture</SelectItem>
+                                      <SelectItem value="purple">Workshop</SelectItem>
+                                      <SelectItem value="green">Meeting</SelectItem>
+                                      <SelectItem value="amber">Break</SelectItem>
+                                      <SelectItem value="pink">Presentation</SelectItem>
+                                      <SelectItem value="slate">Other</SelectItem>
                                     </SelectContent>
                                   </Select>
                                 </div>
+                              </div>
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => setShowAddActivityDialog(false)}>
+                                  Cancel
+                                </Button>
+                                <Button onClick={addTimeBlock}>Add Time Block</Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        )}
+
+                        {!isStudentView && (
+                          <Dialog
+                            open={showAddAssignmentDialog && activeWeekForDialog === selectedSchedule.week_number}
+                            onOpenChange={(open) => {
+                              setShowAddAssignmentDialog(open)
+                              if (open) setActiveWeekForDialog(selectedSchedule.week_number)
+                              if (!open) setAssignmentFile(null)
+                            }}
+                          >
+                            <DialogTrigger asChild>
+                              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 bg-transparent">
+                                <FileText className="h-3 w-3" />
+                                Add Assignment
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Add Assignment</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-4 mt-4">
                                 <div>
-                                  <Label>Due Date</Label>
+                                  <Label>Title</Label>
                                   <Input
-                                    type="date"
-                                    value={newAssignment.dueDate}
-                                    onChange={(e) => setNewAssignment({ ...newAssignment, dueDate: e.target.value })}
+                                    value={newAssignment.title}
+                                    onChange={(e) => setNewAssignment({ ...newAssignment, title: e.target.value })}
+                                    placeholder="Assignment title"
                                   />
                                 </div>
-                              </div>
-                              <div>
-                                <Label>Description</Label>
-                                <Textarea
-                                  value={newAssignment.description}
-                                  onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })}
-                                  placeholder="Optional description"
-                                />
-                              </div>
-
-                              <div>
-                                <Label>Attachment (Optional)</Label>
-                                <div className="mt-1 border-2 border-dashed border-slate-200 rounded-lg p-3 text-center hover:border-slate-400 transition-colors">
+                                <div>
+                                  <Label>Description</Label>
+                                  <Textarea
+                                    value={newAssignment.description}
+                                    onChange={(e) =>
+                                      setNewAssignment({ ...newAssignment, description: e.target.value })
+                                    }
+                                    placeholder="Brief description"
+                                    rows={2}
+                                  />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <Label>Due Date</Label>
+                                    <Input
+                                      type="date"
+                                      value={newAssignment.dueDate}
+                                      onChange={(e) => setNewAssignment({ ...newAssignment, dueDate: e.target.value })}
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label>Type</Label>
+                                    <Select
+                                      value={newAssignment.type}
+                                      onValueChange={(v: string) =>
+                                        setNewAssignment({
+                                          ...newAssignment,
+                                          type: v as "reading" | "deliverable" | "quiz" | "presentation" | "other",
+                                        })
+                                      }
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="reading">Reading</SelectItem>
+                                        <SelectItem value="deliverable">Deliverable</SelectItem>
+                                        <SelectItem value="quiz">Quiz</SelectItem>
+                                        <SelectItem value="presentation">Presentation</SelectItem>
+                                        <SelectItem value="other">Other</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
+                                <div>
+                                  <Label>Attach File (optional)</Label>
                                   <Input
                                     type="file"
                                     onChange={(e) => setAssignmentFile(e.target.files?.[0] || null)}
-                                    className="cursor-pointer text-sm"
-                                    accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
+                                    className="mt-1"
                                   />
-                                  {assignmentFile && (
-                                    <p className="text-xs text-muted-foreground mt-1">{assignmentFile.name}</p>
-                                  )}
                                 </div>
                               </div>
-                            </div>
-                            <DialogFooter>
-                              <Button
-                                variant="outline"
-                                onClick={() => {
-                                  setShowAddAssignmentDialog(false)
-                                  setAssignmentFile(null) // Reset file upload on cancel
-                                }}
-                              >
-                                Cancel
-                              </Button>
-                              <Button onClick={addAssignment} disabled={saving || uploadingAssignment}>
-                                {uploadingAssignment ? (
-                                  <>
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                    Uploading...
-                                  </>
-                                ) : saving ? (
-                                  "Saving..."
-                                ) : (
-                                  "Add Assignment"
-                                )}
-                              </Button>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50 h-7"
-                        onClick={() => deleteWeek(schedule.id, schedule.week_number)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Activities & Assignments Grid */}
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs uppercase tracking-wide text-muted-foreground">Class Schedule</Label>
-                        {!isStudentView && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-1 h-6 text-xs bg-transparent"
-                            onClick={() => {
-                              setEditingScheduleItem({
-                                scheduleId: schedule.id,
-                                index: -1, // -1 means adding new
-                                item: {
-                                  start_time: "",
-                                  end_time: "",
-                                  minutes: 30,
-                                  activity: "",
-                                  room_assignment: "",
-                                  zoom_link: "",
-                                },
-                              })
-                              setShowEditScheduleDialog(true)
-                            }}
-                          >
-                            <Plus className="h-3 w-3" />
-                            Add
-                          </Button>
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => setShowAddAssignmentDialog(false)}>
+                                  Cancel
+                                </Button>
+                                <Button onClick={addAssignment} disabled={saving || uploadingAssignment}>
+                                  {uploadingAssignment ? "Uploading..." : saving ? "Saving..." : "Add Assignment"}
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
                         )}
                       </div>
-                      {/* Schedule Data from Database (fetched from semester_schedule) */}
-                      {schedule.schedule_data && schedule.schedule_data.length > 0 ? (
-                        schedule.schedule_data.map((item: ScheduleDataItem, index: number) => (
-                          <div
-                            key={index}
-                            className={`grid grid-cols-12 gap-0 items-center text-sm border-b last:border-b-0 ${
-                              index % 2 === 0 ? "bg-white" : "bg-slate-50"
-                            }`}
-                          >
-                            <div className="col-span-2 p-3 font-medium text-slate-800">
-                              {item.start_time} - {item.end_time}
-                            </div>
-                            <div className="col-span-3 p-3 text-slate-600">{item.activity}</div>
-                            <div className="col-span-2 p-3">
-                              <Badge variant="secondary" className="text-xs">
-                                {item.minutes} min
-                              </Badge>
-                            </div>
-                            <div className="col-span-2 p-3 text-slate-600">{item.room_assignment || "-"}</div>
-                            <div className="col-span-2 p-3 text-slate-500 text-xs">
-                              {item.zoom_link ? (
-                                <a
-                                  href={item.zoom_link}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-600 hover:underline flex items-center gap-1"
-                                >
-                                  <Video className="h-3 w-3" /> Join
-                                </a>
-                              ) : (
-                                "-"
-                              )}
-                            </div>
-                            <div className="col-span-1 p-3">
-                              {!isStudentView && (
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-6 w-6"
-                                  onClick={() => {
-                                    setEditingScheduleItem({
-                                      scheduleId: schedule.id,
-                                      index,
-                                      item: { ...item },
-                                    })
-                                    setShowEditScheduleDialog(true)
-                                  }}
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="p-6 text-center text-muted-foreground">No schedule items for this week</div>
-                      )}
                     </div>
 
-                    <div className="space-y-2">
-                      <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                        Client Meetings This Week
-                      </Label>
-                      {getMeetingsForWeek(schedule.week_number).length === 0 ? (
-                        <p className="text-sm text-muted-foreground italic">No client meetings scheduled</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {getMeetingsForWeek(schedule.week_number).map((meeting) => (
+                    {selectedSchedule.activities && selectedSchedule.activities.length > 0 ? (
+                      <div className="space-y-2">
+                        {selectedSchedule.activities.map((timeBlock) => (
+                          <div key={timeBlock.id} className="flex border rounded-md overflow-hidden bg-white">
+                            {/* Left accent bar based on activity type */}
                             <div
-                              key={meeting.id}
-                              className="flex items-center justify-between p-3 rounded-lg border bg-teal-50 border-teal-200"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="flex flex-col items-center min-w-[70px]">
-                                  <span className="text-xs font-semibold text-[#3C507D]">{meeting.start_time}</span>
-                                  <span className="text-[10px] text-muted-foreground">to {meeting.end_time}</span>
-                                </div>
-                                <div className="h-8 w-px bg-teal-200" />
-                                <div>
-                                  <span className="text-sm font-medium text-slate-800">{meeting.client_name}</span>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    {meeting.room_assignment && (
-                                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                        <MapPin className="h-3 w-3" />
-                                        {meeting.room_assignment}
-                                      </span>
-                                    )}
-                                    {meeting.zoom_link && (
-                                      <a
-                                        href={meeting.zoom_link}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-                                      >
-                                        <Video className="h-3 w-3" />
-                                        Zoom
-                                      </a>
+                              className={`w-1 flex-shrink-0 ${
+                                timeBlock.color === "blue"
+                                  ? "bg-blue-500"
+                                  : timeBlock.color === "amber"
+                                    ? "bg-amber-500"
+                                    : timeBlock.color === "teal"
+                                      ? "bg-teal-500"
+                                      : timeBlock.color === "purple"
+                                        ? "bg-purple-500"
+                                        : timeBlock.color === "green"
+                                          ? "bg-green-500"
+                                          : timeBlock.color === "pink"
+                                            ? "bg-pink-500"
+                                            : "bg-gray-400"
+                              }`}
+                            />
+                            <div className="flex-1 px-3 py-2">
+                              <div className="flex items-start justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="text-center min-w-[50px]">
+                                    <div className="font-medium text-sm">{timeBlock.time}</div>
+                                    <div className="text-[10px] text-gray-500">{timeBlock.duration} min</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-medium text-sm">{timeBlock.activity}</div>
+                                    {timeBlock.sessions && timeBlock.sessions.length > 0 && (
+                                      <div className="text-[10px] text-gray-500">
+                                        {timeBlock.sessions.length} session(s)
+                                      </div>
                                     )}
                                   </div>
                                 </div>
+                                {!isStudentView && (
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-6 w-6 p-0 text-gray-400 hover:text-blue-600"
+                                      onClick={() => {
+                                        setEditingTimeBlock({
+                                          weekNumber: selectedSchedule.week_number,
+                                          timeBlockId: timeBlock.id,
+                                          timeBlock: { ...timeBlock },
+                                        })
+                                        setShowEditTimeBlockDialog(true)
+                                      }}
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-6 w-6 p-0 text-gray-400 hover:text-red-600"
+                                      onClick={() => deleteTimeBlock(selectedSchedule.week_number, timeBlock.id)}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                )}
                               </div>
-                              <Badge variant="outline" className="text-xs bg-white">
-                                {meeting.minutes} min
-                              </Badge>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
 
-                    {/* Time Blocks (manually added) */}
-                    <div className="space-y-2">
-                      <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                        Custom Time Blocks
-                      </Label>
-                      {(schedule.activities || []).length === 0 ? ( // Use 'activities' for TimeBlocks
-                        <p className="text-sm text-muted-foreground italic">No custom time blocks added</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {schedule.activities.map(
-                            (
-                              timeBlock, // Renamed loop variable
-                            ) => (
-                              <div
-                                key={timeBlock.id}
-                                className={`flex items-center justify-between p-2 rounded-md border ${activityTypeColors[timeBlock.color]}`} // Use color for styling
-                              >
-                                <div className="flex items-center gap-2">
-                                  <Clock className="h-3 w-3" />
-                                  <span className="text-xs font-medium">{timeBlock.time}</span>
-                                  <span className="text-sm">{timeBlock.activity}</span> {/* Use activity as title */}
-                                  <Badge variant="outline" className="text-xs">
-                                    {timeBlock.duration}m
-                                  </Badge>
+                              {/* Sessions within TimeBlock */}
+                              {timeBlock.sessions && timeBlock.sessions.length > 0 && (
+                                <div className="mt-1.5 pt-1.5 border-t border-dashed space-y-1">
+                                  {timeBlock.sessions.map((session) => (
+                                    <div
+                                      key={session.id}
+                                      className="flex items-center justify-between text-[11px] text-gray-600"
+                                    >
+                                      <div className="flex items-center gap-1.5">
+                                        <Users className="h-3 w-3 text-gray-400" />
+                                        <span>{session.team}</span>
+                                        {session.directorInitials && (
+                                          <span className="text-[10px] px-1 py-0 rounded bg-gray-100 text-gray-600">
+                                            {session.directorInitials}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {session.room && session.roomNumber && (
+                                        <span className="flex items-center gap-1 text-gray-500">
+                                          <MapPin className="h-2.5 w-2.5" />
+                                          {session.room} {session.roomNumber}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
                                 </div>
-                                {/* Modified to remove specific session */}
-                                {timeBlock.sessions.length > 0 && (
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    className="h-6 w-6"
-                                    onClick={() => removeActivity(schedule.id, timeBlock.id, timeBlock.sessions[0].id)}
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </Button>
-                                )}
-                              </div>
-                            ),
-                          )}
-                        </div>
-                      )}
-                    </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-gray-500 text-xs border rounded-md border-dashed">
+                        No activities scheduled.
+                        {!isStudentView && " Click 'Add Activity' to add one."}
+                      </div>
+                    )}
+                  </div>
 
-                    {/* Assignments */}
-                    <div className="space-y-2">
-                      <Label className="text-xs uppercase tracking-wide text-muted-foreground">Assignments</Label>
-                      {(schedule.assignments || []).length === 0 ? (
-                        <p className="text-sm text-muted-foreground italic">No assignments added</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {schedule.assignments.map((assignment) => (
-                            <div
-                              key={assignment.id}
-                              className={`flex items-center justify-between p-2 rounded-md border ${assignmentTypeColors[assignment.type]}`}
-                            >
+                  <div className="px-4 py-3 border-t">
+                    <h3 className="font-medium text-xs uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
+                      <FileText className="h-3.5 w-3.5" />
+                      Assignments & Readings
+                    </h3>
+
+                    {selectedSchedule.assignments && selectedSchedule.assignments.length > 0 ? (
+                      <div className="space-y-1.5">
+                        {selectedSchedule.assignments.map((assignment) => (
+                          <div
+                            key={assignment.id}
+                            className="flex items-start justify-between px-3 py-2 rounded border bg-gray-50"
+                          >
+                            <div className="flex-1">
                               <div className="flex items-center gap-2">
-                                <FileText className="h-3 w-3" />
-                                <span className="text-sm">{assignment.title}</span>
-                                {assignment.dueDate && (
-                                  <Badge variant="outline" className="text-xs">
-                                    Due: {formatDate(assignment.dueDate)}
-                                  </Badge>
-                                )}
-                                {assignment.file_name && ( // Display file name if attached
+                                <span className="font-medium text-sm">{assignment.title}</span>
+                                <Badge className={`text-[10px] px-1.5 py-0 ${assignmentTypeColors[assignment.type]}`}>
+                                  {assignment.type}
+                                </Badge>
+                              </div>
+                              {assignment.description && (
+                                <p className="text-xs text-gray-600 mt-0.5">{assignment.description}</p>
+                              )}
+                              <div className="flex items-center gap-3 mt-1 text-[10px] text-gray-500">
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-2.5 w-2.5" />
+                                  Due: {formatDate(assignment.dueDate)}
+                                </span>
+                                {assignment.file_url && (
                                   <a
                                     href={assignment.file_url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-blue-600 hover:underline text-xs flex items-center gap-1"
+                                    className="flex items-center gap-1 text-blue-600 hover:underline"
                                   >
-                                    <FileText className="h-3 w-3" />
-                                    {assignment.file_name}
+                                    <FileText className="h-2.5 w-2.5" />
+                                    {assignment.file_name || "Attachment"}
                                   </a>
                                 )}
                               </div>
+                            </div>
+                            {!isStudentView && (
                               <Button
-                                size="icon"
+                                size="sm"
                                 variant="ghost"
-                                className="h-6 w-6"
-                                onClick={() => removeAssignment(schedule.id, assignment.id)}
+                                className="h-6 w-6 p-0 text-gray-400 hover:text-red-600"
+                                onClick={() => deleteAssignment(selectedSchedule.week_number, assignment.id)}
                               >
-                                <X className="h-3 w-3" />
+                                <Trash2 className="h-3 w-3" />
                               </Button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Notes */}
-                  <div>
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Week Notes</Label>
-                    <Textarea
-                      value={schedule.notes || ""}
-                      onChange={(e) =>
-                        setSchedules(schedules.map((s) => (s.id === schedule.id ? { ...s, notes: e.target.value } : s)))
-                      }
-                      onBlur={() => updateSchedule(schedule.id, { notes: schedule.notes })}
-                      placeholder="Add notes for this week..."
-                      className="mt-1"
-                      rows={2}
-                    />
-                  </div>
-                </div>
-
-                {/* Clinic Schedule Section */}
-                {!schedule.is_break && (
-                  <div className="border-t">
-                    <div className="bg-slate-800 text-white p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Users className="h-5 w-5" />
-                          <div>
-                            <h3 className="font-semibold">SEED Clinic Schedule</h3>
-                            <p className="text-slate-300 text-xs">
-                              {formatDate(schedule.week_start)} • Director: Nick Vadala
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => handlePostToStudents(schedule.week_number)} // Corrected to use handlePostToStudents
-                            disabled={posting}
-                            className="gap-2 font-medium h-8 text-xs"
-                          >
-                            {posting ? (
-                              "Publishing..."
-                            ) : (
-                              <>
-                                <Send className="h-3 w-3" />
-                                Post to Students
-                              </>
                             )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => copyZoomLink(schedule.zoom_link || "")}
-                            className="gap-2 font-medium h-8 text-xs"
-                          >
-                            {copied ? <Check className="h-3 w-3" /> : <Video className="h-3 w-3" />}
-                            {copied ? "Copied!" : "Copy Zoom"}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Schedule Grid - Removed the colored banner header rows */}
-                    <div>
-                      <div className="grid grid-cols-12 gap-0 bg-slate-100 border-b text-xs font-bold text-slate-600 uppercase tracking-wider">
-                        <div className="col-span-2 p-3">Time</div>
-                        <div className="col-span-3 p-3">Activity</div>
-                        <div className="col-span-2 p-3">Duration</div>
-                        <div className="col-span-2 p-3">Location</div>
-                        <div className="col-span-2 p-3">Notes</div>
-                        <div className="col-span-1 p-3"></div>
-                      </div>
-
-                      {schedule.schedule_data && schedule.schedule_data.length > 0 ? (
-                        schedule.schedule_data.map((item: ScheduleDataItem, index: number) => (
-                          <div
-                            key={index}
-                            className={`grid grid-cols-12 gap-0 items-center text-sm border-b last:border-b-0 ${
-                              index % 2 === 0 ? "bg-white" : "bg-slate-50"
-                            }`}
-                          >
-                            <div className="col-span-2 p-3 font-medium text-slate-800">
-                              {item.start_time} - {item.end_time}
-                            </div>
-                            <div className="col-span-3 p-3 text-slate-600">{item.activity}</div>
-                            <div className="col-span-2 p-3">
-                              <Badge variant="secondary" className="text-xs">
-                                {item.minutes} min
-                              </Badge>
-                            </div>
-                            <div className="col-span-2 p-3 text-slate-600">{item.room_assignment || "-"}</div>
-                            <div className="col-span-2 p-3 text-slate-500 text-xs">
-                              {item.zoom_link ? (
-                                <a
-                                  href={item.zoom_link}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-600 hover:underline flex items-center gap-1"
-                                >
-                                  <Video className="h-3 w-3" /> Join
-                                </a>
-                              ) : (
-                                "-"
-                              )}
-                            </div>
-                            <div className="col-span-1 p-3">
-                              {!isStudentView && (
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-6 w-6"
-                                  onClick={() => {
-                                    setEditingScheduleItem({
-                                      scheduleId: schedule.id,
-                                      index,
-                                      item: { ...item },
-                                    })
-                                    setShowEditScheduleDialog(true)
-                                  }}
-                                >
-                                  <Pencil className="h-3 w-3" />
-                                </Button>
-                              )}
-                            </div>
                           </div>
-                        ))
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-4 text-gray-500 text-xs border rounded-md border-dashed">
+                        No assignments for this week.
+                        {!isStudentView && " Click 'Add Assignment' to add one."}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Week Notes Section */}
+                  {!isStudentView && (
+                    <div className="px-4 py-3 border-t">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <h3 className="font-medium text-xs uppercase tracking-wide text-gray-500">Week Notes</h3>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 text-[10px] gap-1 text-gray-500"
+                          onClick={() => {
+                            const notes = prompt("Enter notes for this week:", selectedSchedule.notes || "")
+                            if (notes !== null) {
+                              updateWeekNotes(selectedSchedule.week_number, notes)
+                            }
+                          }}
+                        >
+                          <Pencil className="h-2.5 w-2.5" />
+                          Edit
+                        </Button>
+                      </div>
+                      {selectedSchedule.notes ? (
+                        <p className="text-xs text-gray-700 bg-gray-50 rounded px-2 py-1.5">{selectedSchedule.notes}</p>
                       ) : (
-                        <div className="p-6 text-center text-muted-foreground">No schedule items for this week</div>
+                        <p className="text-xs text-gray-400 italic">No notes for this week.</p>
                       )}
                     </div>
-                  </div>
-                )}
+                  )}
+
+                  {(selectedSchedule.zoom_link || selectedSchedule.room_assignment) && (
+                    <div className="px-4 py-2 border-t bg-gray-50 flex items-center gap-4 text-xs">
+                      {selectedSchedule.zoom_link && (
+                        <a
+                          href={selectedSchedule.zoom_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-blue-600 hover:underline"
+                        >
+                          <Video className="h-3.5 w-3.5" />
+                          Join Zoom
+                        </a>
+                      )}
+                      {selectedSchedule.room_assignment && (
+                        <span className="flex items-center gap-1 text-gray-600">
+                          <MapPin className="h-3.5 w-3.5" />
+                          {selectedSchedule.room_assignment}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-      ))}
+            ) : (
+              <div className="bg-white border rounded-lg p-6">
+                <div className="text-center text-gray-500">
+                  <Calendar className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Select a week from the list to view details.</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <Dialog open={showEditScheduleDialog} onOpenChange={setShowEditScheduleDialog}>
         <DialogContent>
@@ -1788,6 +1752,150 @@ export function UnifiedWeeklyAgenda({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={showEditTimeBlockDialog} onOpenChange={setShowEditTimeBlockDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Activity</DialogTitle>
+          </DialogHeader>
+          {editingTimeBlock && (
+            <div className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Time</Label>
+                  <Input
+                    value={editingTimeBlock.timeBlock.time}
+                    onChange={(e) =>
+                      setEditingTimeBlock({
+                        ...editingTimeBlock,
+                        timeBlock: { ...editingTimeBlock.timeBlock, time: e.target.value },
+                      })
+                    }
+                    placeholder="5:00 PM"
+                  />
+                </div>
+                <div>
+                  <Label>Duration (minutes)</Label>
+                  <Input
+                    type="number"
+                    value={editingTimeBlock.timeBlock.duration}
+                    onChange={(e) =>
+                      setEditingTimeBlock({
+                        ...editingTimeBlock,
+                        timeBlock: { ...editingTimeBlock.timeBlock, duration: Number.parseInt(e.target.value) || 0 },
+                      })
+                    }
+                    min={5}
+                    max={180}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Activity Name</Label>
+                <Input
+                  value={editingTimeBlock.timeBlock.activity}
+                  onChange={(e) =>
+                    setEditingTimeBlock({
+                      ...editingTimeBlock,
+                      timeBlock: { ...editingTimeBlock.timeBlock, activity: e.target.value },
+                    })
+                  }
+                  placeholder="e.g., Clinic Sessions, All-Hands"
+                />
+              </div>
+              <div>
+                <Label>Color</Label>
+                <Select
+                  value={editingTimeBlock.timeBlock.color}
+                  onValueChange={(v) =>
+                    setEditingTimeBlock({
+                      ...editingTimeBlock,
+                      timeBlock: { ...editingTimeBlock.timeBlock, color: v },
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="blue">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded bg-blue-500" />
+                        Blue
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="amber">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded bg-amber-500" />
+                        Amber
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="teal">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded bg-teal-500" />
+                        Teal
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="purple">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded bg-purple-500" />
+                        Purple
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="green">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded bg-green-500" />
+                        Green
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="pink">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded bg-pink-500" />
+                        Pink
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowEditTimeBlockDialog(false)
+                setEditingTimeBlock(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (editingTimeBlock) {
+                  updateTimeBlock(editingTimeBlock.weekNumber, editingTimeBlock.timeBlockId, editingTimeBlock.timeBlock)
+                }
+              }}
+              disabled={saving}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
+
+export { UnifiedWeeklyAgenda }
+
+export default UnifiedWeeklyAgenda

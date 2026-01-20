@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { MainNavigation } from "@/components/main-navigation"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { WeeklyProgramSummary } from "@/components/weekly-program-summary"
-import { DirectorNotifications } from "@/components/director-notifications"
 import { ClinicView } from "@/components/clinic-view"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -29,6 +28,7 @@ import {
   ExternalLink,
   Bell,
   Eye,
+  KeyRound,
 } from "lucide-react"
 import { useDirectors } from "@/hooks/use-directors"
 import { useDemoMode } from "@/contexts/demo-mode-context"
@@ -40,10 +40,12 @@ import {
   getElapsedWeeksRequiringDebrief,
   type SemesterWeek,
 } from "@/lib/semester-utils"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog" // Added Dialog imports
 
 interface QuickStats {
   totalHours: number
   activeStudents: number
+  totalStudents: number
   activeClients: number
   debriefsSubmitted: number
   pendingReviews: number
@@ -120,6 +122,11 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
         ? `/api/supabase/v-complete-mapping?directorId=${selectedDirectorId}`
         : "/api/supabase/v-complete-mapping"
 
+    // Fetch all students to get total student count
+    const allStudentsRes = await fetch("/api/supabase/students") // Assuming an endpoint exists for all students
+    const allStudentsData = await allStudentsRes.json()
+    const totalStudents = allStudentsData.students ? allStudentsData.students.length : 0
+
     const [debriefsRes, mappingRes] = await Promise.all([
       fetchWithRetry("/api/supabase/debriefs"),
       fetchWithRetry(mappingUrl),
@@ -176,20 +183,23 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
       }
     })
 
+    // TODO: Implement logic for pendingReviews, hoursChange, studentsChange based on more data
     return {
       totalHours: Math.round(totalHours * 10) / 10,
       activeStudents: activeStudents.size,
+      totalStudents: totalStudents,
       activeClients: activeClients.size,
       debriefsSubmitted,
-      pendingReviews: 0,
-      hoursChange: 0,
-      studentsChange: 0,
+      pendingReviews: 0, // Placeholder
+      hoursChange: 0, // Placeholder
+      studentsChange: 0, // Placeholder
     }
   } catch (error) {
     console.error("Error fetching quick stats:", error)
     return {
       totalHours: 0,
       activeStudents: 0,
+      totalStudents: 0,
       activeClients: 0,
       debriefsSubmitted: 0,
       pendingReviews: 0,
@@ -223,6 +233,7 @@ export default function DirectorDashboard() {
   const [quickStats, setQuickStats] = useState<QuickStats>({
     totalHours: 0,
     activeStudents: 0,
+    totalStudents: 0,
     activeClients: 0,
     debriefsSubmitted: 0,
     pendingReviews: 0,
@@ -232,6 +243,10 @@ export default function DirectorDashboard() {
   const [isLoading, setIsLoading] = useState(true)
   const [signedAgreements, setSignedAgreements] = useState<string[]>([])
   const [activeSemesterId, setActiveSemesterId] = useState<string | null>(null) // Added for semesterId
+  const [hoursDialogOpen, setHoursDialogOpen] = useState(false)
+  const [debriefsDialogOpen, setDebriefsDialogOpen] = useState(false)
+  const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false)
+  const [attendancePassword, setAttendancePassword] = useState<string>("") // Added attendance password state
   const [debriefsData, setDebriefsData] = useState<{
     total: number
     pending: number
@@ -263,12 +278,14 @@ export default function DirectorDashboard() {
     recentClientActivity: Array<{ client: string; activity: string; time: string; type: string }>
     studentQuestions: Array<{ student: string; question: string; time: string; answered: boolean }>
     weeklyProgress: { hoursTarget: number; hoursActual: number; debriefsExpected: number; debriefsSubmitted: number }
+    notifications: Array<{ type: string; title: string; time: string }> // Added for notifications
   }>({
     urgentItems: [],
     attendanceSummary: { present: 0, absent: 0, rate: 0 },
     recentClientActivity: [],
     studentQuestions: [],
     weeklyProgress: { hoursTarget: 0, hoursActual: 0, debriefsExpected: 0, debriefsSubmitted: 0 },
+    notifications: [], // Initialize notifications
   })
 
   const isInternalOrLegalDirector = role === "admin" || role === "legal" // Assuming these roles should see the clinic selection
@@ -335,25 +352,31 @@ export default function DirectorDashboard() {
         const defaultWeek = currentWeek && weeks.includes(currentWeek) ? currentWeek : weeks[0]
         setSelectedWeeks([defaultWeek])
 
+        // Fetch stats with the default week and selected director
         const stats = await getQuickStats([defaultWeek], selectedDirectorId)
+        setQuickStats(stats)
+      } else if (weeks.length === 0) {
+        // If no weeks are available, fetch stats with empty selection to potentially show zero states
+        const stats = await getQuickStats([], selectedDirectorId)
         setQuickStats(stats)
       }
       setIsLoading(false)
     }
 
     fetchInitialData()
-  }, [])
+  }, [selectedDirectorId]) // Depend on selectedDirectorId to fetch initial stats correctly
 
   useEffect(() => {
     const fetchStats = async () => {
-      if (selectedWeeks.length > 0 || selectedDirectorId !== "all") {
+      // Only fetch if weeks are selected or if it's not the initial load state
+      if (selectedWeeks.length > 0 || (availableWeeks.length > 0 && !isLoading)) {
         const stats = await getQuickStats(selectedWeeks, selectedDirectorId)
         setQuickStats(stats)
       }
     }
 
     fetchStats()
-  }, [selectedWeeks, selectedDirectorId])
+  }, [selectedWeeks, selectedDirectorId, availableWeeks, isLoading]) // Added dependencies
 
   useEffect(() => {
     async function fetchDebriefsData() {
@@ -367,7 +390,11 @@ export default function DirectorDashboard() {
           const filteredDebriefs =
             selectedDirectorId && selectedDirectorId !== "all"
               ? debriefs.filter((d: any) => {
-                  // Match by clinic or client director
+                  // This filtering needs to be more robust. For now, assume we can get director's clinic or clients from their mapped data.
+                  // A more complex approach might involve fetching director's associated clinics/clients first.
+                  // Placeholder: If director is selected, we'd need a way to link debriefs to that director.
+                  // For simplicity, we'll assume the debriefs fetched are generally relevant,
+                  // and specific director filtering might happen client-side if needed or via API params.
                   return true // For now include all, can be enhanced with director filtering
                 })
               : debriefs
@@ -411,6 +438,7 @@ export default function DirectorDashboard() {
         console.error("Error fetching debriefs data:", error)
       }
     }
+    // Fetch debriefs data when director selection changes or on initial load if relevant
     fetchDebriefsData()
   }, [selectedDirectorId])
 
@@ -463,9 +491,12 @@ export default function DirectorDashboard() {
           const text = await attendanceRes.text()
           try {
             attendanceData = JSON.parse(text)
-          } catch {
-            console.error("Attendance API returned non-JSON response")
+          } catch (e) {
+            console.error("Attendance API returned non-JSON response:", e)
+            attendanceData = { records: [] } // Ensure it's an empty array if parsing fails
           }
+        } else {
+          console.error("Failed to fetch attendance data:", attendanceRes.status)
         }
 
         const scheduleRes = await fetch("/api/semester-schedule")
@@ -473,6 +504,8 @@ export default function DirectorDashboard() {
         if (scheduleRes.ok) {
           const scheduleJson = await scheduleRes.json()
           semesterScheduleData = scheduleJson.schedules || []
+        } else {
+          console.error("Failed to fetch semester schedule data:", scheduleRes.status)
         }
 
         // Fetch announcements for recent activity
@@ -482,9 +515,12 @@ export default function DirectorDashboard() {
           const text = await announcementsRes.text()
           try {
             announcementsData = JSON.parse(text)
-          } catch {
-            console.error("Announcements API returned non-JSON response")
+          } catch (e) {
+            console.error("Announcements API returned non-JSON response:", e)
+            announcementsData = { announcements: [] }
           }
+        } else {
+          console.error("Failed to fetch announcements data:", announcementsRes.status)
         }
 
         // Fetch client meetings
@@ -494,9 +530,12 @@ export default function DirectorDashboard() {
           const text = await meetingsRes.text()
           try {
             meetingsData = JSON.parse(text)
-          } catch {
-            console.error("Meetings API returned non-JSON response")
+          } catch (e) {
+            console.error("Meetings API returned non-JSON response:", e)
+            meetingsData = { meetings: [] }
           }
+        } else {
+          console.error("Failed to fetch meetings data:", meetingsRes.status)
         }
 
         const allAttendanceRecords = attendanceData.records || attendanceData.attendance || []
@@ -505,13 +544,15 @@ export default function DirectorDashboard() {
 
         // Get unique students who attended
         const studentsWithAttendance = new Set(allAttendanceRecords.map((r: any) => r.student_id))
-        const presentCount = studentsWithAttendance.size
+        const presentCount = studentsWithAttendance.size // This is the count of unique students present in *any* class
 
-        // Calculate rate based on elapsed classes (if 1 class has occurred, and student attended, rate is 100%)
+        // Calculate rate based on elapsed classes and total active students
+        // This calculation needs refinement. If we have `quickStats.activeStudents`, we should use that.
+        // The `presentCount` is the number of unique students who attended *at least once* in the period.
+        // A better attendance rate might be total attendances / (activeStudents * elapsedClasses)
+        const totalPossibleAttendances = quickStats.activeStudents * elapsedClasses
         const attendanceRate =
-          elapsedClasses > 0
-            ? Math.round((allAttendanceRecords.length / (quickStats.activeStudents * elapsedClasses || 1)) * 100)
-            : 0
+          totalPossibleAttendances > 0 ? Math.round((allAttendanceRecords.length / totalPossibleAttendances) * 100) : 0
 
         // Build urgent items
         const urgentItems: Array<{ type: string; message: string; count?: number; action?: string }> = []
@@ -525,10 +566,11 @@ export default function DirectorDashboard() {
           })
         }
 
-        if (attendanceRate < 80 && elapsedClasses > 0) {
+        // Adjusted attendance rate check for urgency
+        if (elapsedClasses > 0 && quickStats.activeStudents > 0 && attendanceRate < 80) {
           urgentItems.push({
             type: "alert",
-            message: `Attendance rate at ${attendanceRate}% (${elapsedClasses}/${totalClasses} classes completed)`,
+            message: `Low attendance rate: ${attendanceRate}% (${elapsedClasses}/${totalClasses} classes completed)`,
             action: "View Details",
           })
         }
@@ -545,35 +587,54 @@ export default function DirectorDashboard() {
           })
         })
 
-        const elapsedWeeks = getElapsedWeeksRequiringDebrief(semesterScheduleData).length
-        const expectedDebriefs = (quickStats.activeStudents || 0) * elapsedWeeks
+        // Filter announcements too, perhaps? For now, sticking to meetings.
+        // announcementsData.announcements?.slice(0, 3).forEach((announcement: any) => {
+        //   recentActivity.push({
+        //     client: "SEED Program", // Or derive from announcement context
+        //     activity: announcement.title || "New Announcement",
+        //     time: announcement.created_at || "",
+        //     type: "announcement",
+        //   })
+        // })
+
+        const elapsedWeeksForDebrief = getElapsedWeeksRequiringDebrief(semesterScheduleData)
+        const expectedDebriefs = (quickStats.activeStudents || 0) * elapsedWeeksForDebrief.length
         const weeklyProgress = {
-          hoursTarget: (quickStats.activeStudents || 0) * 3 * elapsedWeeks, // 3 hours target per student per week
+          hoursTarget: (quickStats.activeStudents || 0) * 3 * elapsedWeeksForDebrief.length, // Assuming 3 hours target per student per week
           hoursActual: quickStats.totalHours || 0,
           debriefsExpected: expectedDebriefs,
           debriefsSubmitted: quickStats.debriefsSubmitted || 0,
         }
 
+        // Placeholder for notifications - fetch real data if available
+        const placeholderNotifications = [
+          { type: "debrief", title: "Student A submitted a debrief", time: "2h ago" },
+          { type: "session", title: "Client Meeting: Project X", time: "yesterday" },
+          { type: "alert", title: "Low attendance detected for Week 10", time: "2 days ago" },
+        ]
+
         setOverviewData({
           urgentItems,
           attendanceSummary: {
-            present: allAttendanceRecords.length,
-            absent: quickStats.activeStudents * elapsedClasses - allAttendanceRecords.length,
+            present: allAttendanceRecords.length, // This is total attendance entries, not unique students
+            absent: Math.max(0, totalPossibleAttendances - allAttendanceRecords.length), // Max 0 to avoid negative numbers
             rate: Math.min(attendanceRate, 100), // Cap at 100%
           },
           recentClientActivity: recentActivity,
-          studentQuestions: [],
+          studentQuestions: [], // Placeholder, needs dedicated fetch
           weeklyProgress,
+          notifications: placeholderNotifications, // Assign placeholder notifications
         })
       } catch (error) {
         console.error("Error fetching overview data:", error)
       }
     }
 
-    if (!isLoading) {
+    // Fetch overview data only after initial loading is complete and relevant data (quickStats, debriefsData) is available
+    if (!isLoading && quickStats && debriefsData) {
       fetchOverviewData()
     }
-  }, [isLoading, quickStats, debriefsData])
+  }, [isLoading, quickStats, debriefsData]) // Depend on isLoading, quickStats, and debriefsData
 
   useEffect(() => {
     async function fetchClinics() {
@@ -582,6 +643,8 @@ export default function DirectorDashboard() {
         if (response.ok) {
           const data = await response.json()
           setClinics(data.clinics || [])
+        } else {
+          console.error("Failed to fetch clinics:", response.status)
         }
       } catch (error) {
         console.error("Error fetching clinics:", error)
@@ -590,10 +653,51 @@ export default function DirectorDashboard() {
     fetchClinics()
   }, [])
 
+  // Add useEffect to fetch attendance password
+  useEffect(() => {
+    const fetchAttendancePassword = async () => {
+      try {
+        // Find current week number from weekSchedule
+        const today = new Date()
+        const currentWeekData = weekSchedule.find((w) => {
+          const start = new Date(w.weekStart)
+          const end = new Date(w.weekEnd)
+          return today >= start && today <= end
+        })
+
+        const weekNum = currentWeekData?.weekNumber || 1
+
+        const response = await fetch(`/api/attendance-password?weekNumber=${weekNum}`)
+        const data = await response.json()
+
+        if (data.passwords && data.passwords.length > 0) {
+          setAttendancePassword(data.passwords[0].password)
+        } else {
+          setAttendancePassword("Not set")
+        }
+      } catch (error) {
+        console.error("[v0] Error fetching attendance password:", error)
+        setAttendancePassword("Error loading")
+      }
+    }
+
+    if (weekSchedule.length > 0) {
+      fetchAttendancePassword()
+    }
+  }, [weekSchedule])
+
   const handleCurrentWeekDetected = (currentWeek: string) => {
+    // This function is called by DashboardHeader when it detects the current week.
+    // It's used to initialize selectedWeeks if it's empty.
     if (!currentWeekSetRef.current && selectedWeeks.length === 0) {
       currentWeekSetRef.current = true
       setSelectedWeeks([currentWeek])
+      // Optionally, refetch stats if selectedWeeks was empty and now has a value
+      // const fetchStatsAfterSettingWeek = async () => {
+      //   const stats = await getQuickStats([currentWeek], selectedDirectorId)
+      //   setQuickStats(stats)
+      // }
+      // fetchStatsAfterSettingWeek()
     }
   }
 
@@ -606,10 +710,16 @@ export default function DirectorDashboard() {
   }
 
   const handleRefresh = async () => {
-    setIsLoading(true)
+    setIsLoading(true) // Set loading to true before refetching
+    // Refetch quick stats
     const stats = await getQuickStats(selectedWeeks, selectedDirectorId)
     setQuickStats(stats)
-    setIsLoading(false)
+
+    // Optionally refetch other data if needed, e.g., debriefs, overview
+    // await fetchDebriefsData(); // Assuming fetchDebriefsData is accessible or can be called here
+    // await fetchOverviewData(); // Assuming fetchOverviewData is accessible or can be called here
+
+    setIsLoading(false) // Set loading to false after refetching
   }
 
   const getWeekLabel = (weekValue: string) => {
@@ -620,7 +730,13 @@ export default function DirectorDashboard() {
   const getPeriodLabel = () => {
     if (selectedWeeks.length === 0) return "All Weeks"
     if (selectedWeeks.length === 1) return getWeekLabel(selectedWeeks[0])
-    return `${selectedWeeks.length} weeks`
+    // Sort selectedWeeks chronologically to display the range correctly
+    const sortedWeeks = [...selectedWeeks].sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+    const firstWeekLabel = getWeekLabel(sortedWeeks[0])
+    const lastWeekLabel = getWeekLabel(sortedWeeks[sortedWeeks.length - 1])
+    if (sortedWeeks.length === availableWeeks.length) return "Full Semester"
+    if (firstWeekLabel === lastWeekLabel) return firstWeekLabel // Should not happen if length > 1
+    return `${firstWeekLabel} – ${lastWeekLabel}`
   }
 
   const getDisplayName = () => {
@@ -666,8 +782,16 @@ export default function DirectorDashboard() {
     )
   }
 
+  // Redirect to login if not authenticated and not in demo mode
   if (!isDemoMode && !isAuthenticated) {
-    return null
+    // router.push("/login"); // This should ideally be handled by a guard, but for component-level logic:
+    return null // Or a loading indicator/message
+  }
+
+  // If authenticated but lacks access, redirect
+  if (isAuthenticated && role && !canAccessPortal(role, "director")) {
+    // router.push(getDefaultPortal(role)); // Again, ideally handled elsewhere
+    return null // Or a message indicating lack of access
   }
 
   return (
@@ -677,21 +801,75 @@ export default function DirectorDashboard() {
       </aside>
 
       <div className="pl-52 pt-14">
-        <div className="bg-[#3d4559] mx-4 mt-4 rounded-xl p-5 text-white shadow-lg">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-full bg-[#8fa68f] flex items-center justify-center text-xl font-bold text-white">
-                {getInitials()}
+        <div className="bg-gradient-to-r from-[#112250] via-[#1a2d52] to-[#112250] mx-4 mt-4 rounded-2xl p-8 text-white shadow-xl border border-[#3C507D]/30">
+          {/* Main Welcome Section */}
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            {/* Left Side - Welcome Message */}
+            <div className="flex items-start gap-5">
+              {/* Avatar with gold ring */}
+              <div className="relative">
+                <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-[#E0C58F] to-[#d0b57f] flex items-center justify-center text-2xl font-bold text-[#112250] shadow-lg">
+                  {getInitials()}
+                </div>
+                <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 border-2 border-[#112250] flex items-center justify-center">
+                  <CheckCircle2 className="h-3 w-3 text-white" />
+                </div>
               </div>
-              <div>
-                <h1 className="text-2xl font-bold">Welcome{getDisplayName() ? `, ${getDisplayName()}` : ""}!</h1>
-                <p className="text-[#9aacba]">{getRoleTitle()}</p>
+
+              {/* Welcome Text */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <h1 className="text-3xl lg:text-4xl font-bold text-[#F5F0E9] tracking-tight">
+                    Welcome{getDisplayName() ? ` ${getDisplayName()}` : ""}!
+                  </h1>
+                  <Badge className="bg-[#E0C58F]/20 text-[#E0C58F] border-[#E0C58F]/30 text-xs font-medium">
+                    {role === "admin" ? "Admin" : "Director"}
+                  </Badge>
+                </div>
+                <p className="text-xl lg:text-2xl text-[#9aacba] font-medium">
+                  Here's what happened at <span className="text-[#E0C58F] font-semibold">SEED</span>{" "}
+                  <span className="relative inline-block">
+                    <span className="text-white font-bold underline decoration-[#E0C58F] decoration-2 underline-offset-4">
+                      this week
+                    </span>
+                  </span>
+                </p>
+                <div className="flex items-center gap-3 mt-1">
+                  <Badge className="bg-[#3C507D] text-[#F5F0E9] border-[#3C507D] text-sm font-semibold px-3 py-1">
+                    Week {(() => {
+                      const now = new Date()
+                      const start = new Date(now.getFullYear(), 0, 1)
+                      const diff = now.getTime() - start.getTime()
+                      const oneWeek = 1000 * 60 * 60 * 24 * 7
+                      return Math.ceil(diff / oneWeek)
+                    })()}
+                  </Badge>
+                  <span className="text-[#E0C58F] font-medium text-sm">
+                    {(() => {
+                      const now = new Date()
+                      const dayOfWeek = now.getDay()
+                      const monday = new Date(now)
+                      // Calculate Monday of the current week
+                      monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
+                      const sunday = new Date(monday)
+                      sunday.setDate(monday.getDate() + 6)
+                      const formatDate = (date: Date) =>
+                        date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                      return `${formatDate(monday)} – ${formatDate(sunday)}, ${now.getFullYear()}`
+                    })()}
+                  </span>
+                </div>
+                <p className="text-sm text-[#6b7a8a]">
+                  {getRoleTitle()} • {getPeriodLabel()}
+                </p>
               </div>
             </div>
-            <div className="flex items-center gap-6">
+
+            {/* Right Side - Controls */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               {(isDemoMode || role === "admin") && directors.length > 0 && (
                 <Select value={selectedDirectorId} onValueChange={handleDirectorChange}>
-                  <SelectTrigger className="w-[200px] bg-white/10 border-white/20 text-white">
+                  <SelectTrigger className="w-[200px] bg-[#1a2d52] border-[#3C507D] text-[#F5F0E9] hover:bg-[#3C507D] transition-colors">
                     <SelectValue placeholder="Select Director" />
                   </SelectTrigger>
                   <SelectContent>
@@ -704,17 +882,46 @@ export default function DirectorDashboard() {
                   </SelectContent>
                 </Select>
               )}
-              <div className="text-right">
-                <p className="text-sm text-[#9aacba]">Current Period</p>
-                <p className="font-medium">{getPeriodLabel()}</p>
+
+              {/* Quick Stats Preview */}
+              <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-[#1a2d52] border border-[#3C507D]/50">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-[#E0C58F]">{quickStats.activeStudents}</p>
+                  <p className="text-xs text-[#6b7a8a]">Students</p>
+                </div>
+                <div className="w-px h-8 bg-[#3C507D]" />
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-[#E0C58F]">{quickStats.debriefsSubmitted}</p>
+                  <p className="text-xs text-[#6b7a8a]">Debriefs</p>
+                </div>
+                <div className="w-px h-8 bg-[#3C507D]" />
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-[#E0C58F]">{quickStats.totalHours}</p>
+                  <p className="text-xs text-[#6b7a8a]">Hours</p>
+                </div>
               </div>
             </div>
           </div>
+
+          {/* Urgent Items Banner (if any) */}
+          {overviewData.urgentItems.length > 0 && (
+            <div className="mt-6 flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+              <Bell className="h-5 w-5 text-amber-400 shrink-0" />
+              <p className="text-sm text-amber-200">
+                <span className="font-semibold">
+                  {overviewData.urgentItems.length} item{overviewData.urgentItems.length > 1 ? "s" : ""} need
+                  {overviewData.urgentItems.length === 1 ? "s" : ""} your attention:
+                </span>{" "}
+                {overviewData.urgentItems.map((item) => item.message).join(" • ")}
+              </p>
+            </div>
+          )}
         </div>
+        {/* End of redesigned header */}
 
         <DashboardHeader
           selectedWeeks={selectedWeeks}
-          onWeeksChange={setSelectedWeeks}
+          onWeeksChange={handleWeekChange}
           availableWeeks={availableWeeks}
           selectedDirectorId={selectedDirectorId}
           onDirectorChange={handleDirectorChange}
@@ -758,59 +965,196 @@ export default function DirectorDashboard() {
               )}
 
               {/* Weekly Overview Stats */}
-              <div className="grid gap-6 md:grid-cols-3">
-                <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
+              <div className="flex gap-4 items-stretch">
+                {/* Left side: Attendance password + 3 compact summary cards */}
+                <div className="flex flex-col gap-3">
+                  <div
+                    className="flex items-center justify-between px-4 py-3 rounded-xl shadow-sm"
+                    style={{
+                      background: "linear-gradient(135deg, #878568 0%, #6A6352 100%)",
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center h-9 w-9 rounded-lg bg-white/20">
+                        <KeyRound className="h-5 w-5 text-white" />
+                      </div>
                       <div>
-                        <p className="text-xs font-medium text-blue-600 uppercase tracking-wide">Hours Logged</p>
-                        <p className="text-3xl font-bold text-blue-900 mt-1">{quickStats.totalHours}</p>
-                        <p className="text-xs text-blue-600 mt-1">
-                          {overviewData.weeklyProgress.hoursTarget > 0
-                            ? `${Math.round((quickStats.totalHours / overviewData.weeklyProgress.hoursTarget) * 100)}% of target`
-                            : "This period"}
+                        <p className="text-xs text-white/80 font-medium">This week's attendance password</p>
+                        <p className="text-lg font-bold text-white tracking-wider">
+                          {attendancePassword || "Loading..."}
                         </p>
                       </div>
-                      <div className="h-12 w-12 rounded-full bg-blue-200/50 flex items-center justify-center">
-                        <Clock className="h-6 w-6 text-blue-600" />
-                      </div>
                     </div>
-                  </CardContent>
-                </Card>
+                    <a
+                      href="/class-course?tab=attendance"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 transition-colors text-white text-sm font-medium"
+                    >
+                      <span>Open Attendance</span>
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
 
-                <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 border-emerald-200">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-medium text-emerald-600 uppercase tracking-wide">Students Active</p>
-                        <p className="text-3xl font-bold text-emerald-900 mt-1">{quickStats.activeStudents}</p>
-                        <p className="text-xs text-emerald-600 mt-1">Submitted work</p>
+                  {/* 3 Summary Cards Row */}
+                  <div className="flex gap-3 items-start">
+                    {/* Hours Logged Card */}
+                    <Card
+                      className="group w-[160px] bg-white border border-gray-200 shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
+                      onClick={() => setHoursDialogOpen(true)}
+                    >
+                      <CardContent className="p-2.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm text-gray-700 font-semibold">Total hours</p>
+                          <Clock className="h-4 w-4" style={{ color: "#878568" }} />
+                        </div>
+                        <p className="text-3xl font-bold text-gray-900 mt-1">{quickStats.totalHours}</p>
+                        <div className="mt-1.5 space-y-0.5 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Target</span>
+                            <span className="text-gray-700 font-medium">
+                              {overviewData.weeklyProgress.hoursTarget || 0}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Remaining</span>
+                            <span className="font-medium" style={{ color: "#878568" }}>
+                              {Math.max(0, (overviewData.weeklyProgress.hoursTarget || 0) - quickStats.totalHours)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="mt-1.5 h-0.5 w-8 rounded-full" style={{ backgroundColor: "#878568" }} />
+                      </CardContent>
+                    </Card>
+
+                    {/* Debriefs Card */}
+                    <Card
+                      className="group w-[160px] bg-white border border-gray-200 shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
+                      onClick={() => setDebriefsDialogOpen(true)}
+                    >
+                      <CardContent className="p-2.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm text-gray-700 font-semibold">Debriefs</p>
+                          <FileText className="h-4 w-4" style={{ color: "#6A6352" }} />
+                        </div>
+                        <div className="flex items-baseline gap-1 mt-1">
+                          <span className="text-3xl font-bold text-gray-900">{quickStats.debriefsSubmitted}</span>
+                          <span className="text-lg text-gray-400">
+                            /{overviewData.weeklyProgress.debriefsExpected || quickStats.totalStudents || 0}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 space-y-0.5 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Submitted</span>
+                            <span className="text-gray-700 font-medium">{quickStats.debriefsSubmitted}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Missing</span>
+                            <span className="text-red-500 font-medium">
+                              {Math.max(
+                                0,
+                                (overviewData.weeklyProgress.debriefsExpected || quickStats.totalStudents || 0) -
+                                  quickStats.debriefsSubmitted,
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="mt-1.5 h-0.5 w-8 rounded-full" style={{ backgroundColor: "#6A6352" }} />
+                      </CardContent>
+                    </Card>
+
+                    {/* Attendance Card */}
+                    <Card
+                      className="group w-[160px] bg-white border border-gray-200 shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
+                      onClick={() => setAttendanceDialogOpen(true)}
+                    >
+                      <CardContent className="p-2.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm text-gray-700 font-semibold">Attendance</p>
+                          <Users className="h-4 w-4" style={{ color: "#505143" }} />
+                        </div>
+                        <div className="flex items-baseline gap-1 mt-1">
+                          <span className="text-3xl font-bold text-gray-900">
+                            {overviewData.attendanceSummary.present}
+                          </span>
+                          <span className="text-lg text-gray-400">
+                            /{quickStats.totalStudents || quickStats.activeStudents || 0}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 space-y-0.5 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Present</span>
+                            <span className="text-gray-700 font-medium">{overviewData.attendanceSummary.present}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500">Absent</span>
+                            <span className="text-red-500 font-medium">
+                              {Math.max(
+                                0,
+                                (quickStats.totalStudents || quickStats.activeStudents || 0) -
+                                  overviewData.attendanceSummary.present,
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="mt-1.5 h-0.5 w-8 rounded-full" style={{ backgroundColor: "#505143" }} />
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+
+                {/* Right side: Recent Activity - takes remaining space */}
+                <Card className="flex-1 bg-white border border-gray-200 shadow-sm flex flex-col">
+                  <CardContent className="pt-1 pb-2 px-2 flex flex-col flex-1 h-full">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Bell className="h-4 w-4" style={{ color: "#878568" }} />
+                        <p className="text-base text-gray-800 font-bold">Recent Activity</p>
                       </div>
-                      <div className="h-12 w-12 rounded-full bg-emerald-200/50 flex items-center justify-center">
-                        <Users className="h-6 w-6 text-emerald-600" />
-                      </div>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                        {overviewData.notifications.length} updates
+                      </span>
                     </div>
-                  </CardContent>
-                </Card>
 
-                <Card className="bg-gradient-to-br from-purple-50 to-purple-100/50 border-purple-200">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs font-medium text-purple-600 uppercase tracking-wide">Active Clients</p>
-                        <p className="text-3xl font-bold text-purple-900 mt-1">{quickStats.activeClients}</p>
-                        <p className="text-xs text-purple-600 mt-1">With activity</p>
-                      </div>
-                      <div className="h-12 w-12 rounded-full bg-purple-200/50 flex items-center justify-center">
-                        <Briefcase className="h-6 w-6 text-purple-600" />
-                      </div>
+                    <div className="flex-1 overflow-y-auto space-y-1">
+                      {overviewData.notifications.length > 0 ? (
+                        overviewData.notifications.slice(0, 15).map((notification, index) => (
+                          <div
+                            key={index}
+                            className="flex items-start gap-2 p-2 rounded-lg transition-colors hover:bg-gray-50"
+                          >
+                            <div
+                              className="h-7 w-7 rounded-full flex items-center justify-center flex-shrink-0"
+                              style={{ backgroundColor: notification.type === "alert" ? "#fee2e2" : "#f3f4f6" }}
+                            >
+                              {notification.type === "debrief" && (
+                                <FileText className="h-3.5 w-3.5" style={{ color: "#6A6352" }} />
+                              )}
+                              {notification.type === "session" && (
+                                <Calendar className="h-3.5 w-3.5" style={{ color: "#878568" }} />
+                              )}
+                              {notification.type === "alert" && <AlertCircle className="h-3.5 w-3.5 text-red-500" />}
+                              {!["debrief", "session", "alert"].includes(notification.type) && (
+                                <Bell className="h-3.5 w-3.5" style={{ color: "#505143" }} />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-gray-800 leading-tight">{notification.title}</p>
+                              <p className="text-xs text-gray-400 mt-0.5">{notification.time}</p>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                          <Bell className="h-6 w-6 mb-1 opacity-50" />
+                          <p className="text-xs">No recent activity</p>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Two Column Layout: Clinic Health & Activity Feed */}
-              <div className="grid gap-6 lg:grid-cols-3">
+              {/* Two Column Layout: Clinic Health & Quick Actions */}
+              <div className="grid gap-6 lg:grid-cols-3 items-stretch">
                 {/* Clinic Health Summary - 2 columns */}
                 <div className="lg:col-span-2 space-y-4">
                   <Card>
@@ -838,7 +1182,7 @@ export default function DirectorDashboard() {
                               <div className="flex justify-between text-sm mb-1">
                                 <span className="text-muted-foreground">Hours Logged</span>
                                 <span className="font-medium">
-                                  {quickStats.totalHours} / {overviewData.weeklyProgress.hoursTarget || "—"} target
+                                  {quickStats.totalHours} / {overviewData.weeklyProgress.hoursTarget || "—"}
                                 </span>
                               </div>
                               <Progress
@@ -939,64 +1283,47 @@ export default function DirectorDashboard() {
                 </div>
 
                 {/* Activity Feed - 1 column */}
-                <div className="space-y-4">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg flex items-center gap-2">
-                          <Bell className="h-4 w-4" />
-                          Recent Activity
-                        </CardTitle>
-                      </div>
+                <div className="h-full">
+                  <Card className="h-full border-l-4 border-l-[#6A6352] flex flex-col">
+                    <CardHeader className="pb-2 bg-gradient-to-r from-[#F5F0E9] to-white rounded-t-lg">
+                      <CardTitle className="text-lg font-bold text-[#505143]">Quick Actions</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3">
-                      <Suspense fallback={<div className="text-sm text-muted-foreground">Loading...</div>}>
-                        <DirectorNotifications selectedClinic={selectedDirectorId} compact={true} />
-                      </Suspense>
-                    </CardContent>
-                  </Card>
-
-                  {/* Quick Actions */}
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-lg">Quick Actions</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
+                    <CardContent className="space-y-2 pt-3 flex-1 flex flex-col justify-start">
                       <Button
                         variant="outline"
-                        className="w-full justify-start gap-2 bg-transparent"
+                        className="w-full justify-start gap-2 bg-[#FEF3E7] hover:bg-[#FDE8D3] border-[#E8D5C4] text-[#6A6352] font-medium"
                         onClick={() => router.push("/debriefs")}
                       >
-                        <FileText className="h-4 w-4" />
+                        <FileText className="h-4 w-4 text-[#C17F59]" />
                         Review Debriefs
                         {debriefsData.pending > 0 && (
-                          <Badge variant="secondary" className="ml-auto">
+                          <Badge className="ml-auto bg-[#C17F59] text-white hover:bg-[#A66B47]">
                             {debriefsData.pending}
                           </Badge>
                         )}
                       </Button>
                       <Button
                         variant="outline"
-                        className="w-full justify-start gap-2 bg-transparent"
-                        onClick={() => router.push("/class-course")}
+                        className="w-full justify-start gap-2 bg-[#EEF4EE] hover:bg-[#E0EBE0] border-[#C5D5C5] text-[#505143] font-medium"
+                        onClick={() => router.push("/class-course?tab=agenda")}
                       >
-                        <Calendar className="h-4 w-4" />
+                        <Calendar className="h-4 w-4 text-[#6B8E6B]" />
                         View Schedule
                       </Button>
                       <Button
                         variant="outline"
-                        className="w-full justify-start gap-2 bg-transparent"
+                        className="w-full justify-start gap-2 bg-[#F0EDE8] hover:bg-[#E5E0D8] border-[#D5CCAB] text-[#6A6352] font-medium"
                         onClick={() => router.push("/client-engagements")}
                       >
-                        <Briefcase className="h-4 w-4" />
+                        <Briefcase className="h-4 w-4 text-[#8B7355]" />
                         Client Engagements
                       </Button>
                       <Button
                         variant="outline"
-                        className="w-full justify-start gap-2 bg-transparent"
+                        className="w-full justify-start gap-2 bg-[#EDF1F5] hover:bg-[#DEE5ED] border-[#C5D0DC] text-[#4A5568] font-medium"
                         onClick={() => router.push("/roster")}
                       >
-                        <Users className="h-4 w-4" />
+                        <Users className="h-4 w-4 text-[#5A7A9A]" />
                         View Roster
                       </Button>
                     </CardContent>
@@ -1008,9 +1335,9 @@ export default function DirectorDashboard() {
               <div className="grid gap-6">
                 <Suspense fallback={<div>Loading summary...</div>}>
                   <WeeklyProgramSummary
-                    selectedClinic={selectedDirectorId}
+                    selectedClinic={selectedDirectorId} // This prop might need adjustment based on its usage in WeeklyProgramSummary
                     selectedWeeks={selectedWeeks}
-                    directorId={selectedDirectorId}
+                    directorId={selectedDirectorId} // This prop might need adjustment based on its usage in WeeklyProgramSummary
                   />
                 </Suspense>
               </div>
@@ -1373,6 +1700,303 @@ export default function DirectorDashboard() {
           </Tabs>
         </main>
       </div>
+
+      {/* Dialogs for detailed views */}
+      <Dialog open={hoursDialogOpen} onOpenChange={setHoursDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-blue-600">
+              <Clock className="h-5 w-5" />
+              Hours Logged Details
+            </DialogTitle>
+            <DialogDescription>Breakdown of hours logged this week</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Summary Stats */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="p-4 rounded-lg bg-blue-50 text-center">
+                <p className="text-3xl font-bold text-blue-600">{quickStats.totalHours}</p>
+                <p className="text-sm text-muted-foreground">Total Hours</p>
+              </div>
+              <div className="p-4 rounded-lg bg-slate-50 text-center">
+                <p className="text-3xl font-bold text-slate-600">{overviewData.weeklyProgress.hoursTarget || 0}</p>
+                <p className="text-sm text-muted-foreground">Target Hours</p>
+              </div>
+              <div className="p-4 rounded-lg bg-emerald-50 text-center">
+                <p className="text-3xl font-bold text-emerald-600">
+                  {overviewData.weeklyProgress.hoursTarget > 0
+                    ? Math.round((quickStats.totalHours / overviewData.weeklyProgress.hoursTarget) * 100)
+                    : 0}
+                  %
+                </p>
+                <p className="text-sm text-muted-foreground">Progress</p>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Weekly Progress</span>
+                <span className="font-medium">
+                  {quickStats.totalHours} / {overviewData.weeklyProgress.hoursTarget || 0} hours
+                </span>
+              </div>
+              <Progress
+                value={
+                  overviewData.weeklyProgress.hoursTarget > 0
+                    ? Math.min((quickStats.totalHours / overviewData.weeklyProgress.hoursTarget) * 100, 100)
+                    : 0
+                }
+                className="h-3"
+              />
+            </div>
+
+            {/* Student Hours List */}
+            <div className="space-y-2">
+              <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Hours by Student</h4>
+              <div className="border rounded-lg divide-y max-h-60 overflow-y-auto">
+                {debriefsData.recentDebriefs.length > 0 ? (
+                  debriefsData.recentDebriefs.map((debrief: any, index: number) => (
+                    <div key={debrief.id || index} className="flex items-center justify-between p-3 hover:bg-slate-50">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-sm font-medium text-blue-600">
+                          {(debrief.studentName || debrief.student_name || "S").charAt(0)}
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">
+                            {debrief.studentName || debrief.student_name || "Student"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {debrief.clientName || debrief.client_name || "Client"}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                        {debrief.hours || debrief.total_hours || 0} hrs
+                      </Badge>
+                    </div>
+                  ))
+                ) : (
+                  <p className="p-4 text-sm text-muted-foreground text-center">No hours data available</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={debriefsDialogOpen} onOpenChange={setDebriefsDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-600">
+              <FileText className="h-5 w-5" />
+              Debrief Submissions
+            </DialogTitle>
+            <DialogDescription>Students who have and haven't submitted debriefs this week</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Summary Stats */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="p-4 rounded-lg bg-emerald-50 text-center">
+                <p className="text-3xl font-bold text-emerald-600">{quickStats.debriefsSubmitted}</p>
+                <p className="text-sm text-muted-foreground">Submitted</p>
+              </div>
+              <div className="p-4 rounded-lg bg-red-50 text-center">
+                <p className="text-3xl font-bold text-red-600">
+                  {Math.max(
+                    0,
+                    (overviewData.weeklyProgress.debriefsExpected || quickStats.totalStudents || 0) -
+                      quickStats.debriefsSubmitted,
+                  )}
+                </p>
+                <p className="text-sm text-muted-foreground">Missing</p>
+              </div>
+              <div className="p-4 rounded-lg bg-slate-50 text-center">
+                <p className="text-3xl font-bold text-slate-600">
+                  {overviewData.weeklyProgress.debriefsExpected || quickStats.totalStudents || 0}
+                </p>
+                <p className="text-sm text-muted-foreground">Expected Total</p>
+              </div>
+            </div>
+
+            {/* Submitted List */}
+            <div className="space-y-2">
+              <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                Submitted ({quickStats.debriefsSubmitted})
+              </h4>
+              <div className="border rounded-lg divide-y max-h-48 overflow-y-auto">
+                {debriefsData.recentDebriefs.length > 0 ? (
+                  debriefsData.recentDebriefs.map((debrief: any, index: number) => (
+                    <div key={debrief.id || index} className="flex items-center justify-between p-3 hover:bg-slate-50">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">
+                            {debrief.studentName || debrief.student_name || "Student"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {debrief.clientName || debrief.client_name || "Client"}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {debrief.submittedAt || debrief.submitted_at
+                          ? new Date(debrief.submittedAt || debrief.submitted_at).toLocaleDateString()
+                          : "Recently"}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="p-4 text-sm text-muted-foreground text-center">No submissions yet</p>
+                )}
+              </div>
+            </div>
+
+            {/* Missing List */}
+            {(() => {
+              const expected = overviewData.weeklyProgress.debriefsExpected || quickStats.totalStudents || 0
+              const missing = Math.max(0, expected - quickStats.debriefsSubmitted)
+              if (missing === 0) return null
+              return (
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-red-500" />
+                    Not Submitted ({missing})
+                  </h4>
+                  <div className="border border-red-200 rounded-lg bg-red-50/50 p-4">
+                    <p className="text-sm text-red-700">
+                      {missing} student{missing > 1 ? "s have" : " has"} not yet submitted a debrief this week.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 text-red-600 border-red-200 hover:bg-red-100 bg-transparent"
+                    >
+                      Send Reminder
+                    </Button>
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={attendanceDialogOpen} onOpenChange={setAttendanceDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-violet-600">
+              <Users className="h-5 w-5" />
+              Student Attendance
+            </DialogTitle>
+            <DialogDescription>Attendance breakdown for this week</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Summary Stats */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="p-4 rounded-lg bg-emerald-50 text-center">
+                <p className="text-3xl font-bold text-emerald-600">{overviewData.attendanceSummary.present}</p>
+                <p className="text-sm text-muted-foreground">Present</p>
+              </div>
+              <div className="p-4 rounded-lg bg-red-50 text-center">
+                <p className="text-3xl font-bold text-red-600">
+                  {Math.max(
+                    0,
+                    (quickStats.totalStudents || quickStats.activeStudents || 0) -
+                      overviewData.attendanceSummary.present,
+                  )}
+                </p>
+                <p className="text-sm text-muted-foreground">Absent</p>
+              </div>
+              <div className="p-4 rounded-lg bg-violet-50 text-center">
+                <p className="text-3xl font-bold text-violet-600">{overviewData.attendanceSummary.rate}%</p>
+                <p className="text-sm text-muted-foreground">Attendance Rate</p>
+              </div>
+            </div>
+
+            {/* Attendance Progress */}
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Attendance Rate</span>
+                <span className="font-medium">
+                  {overviewData.attendanceSummary.present} /{" "}
+                  {quickStats.totalStudents || quickStats.activeStudents || 0} students
+                </span>
+              </div>
+              <Progress value={overviewData.attendanceSummary.rate} className="h-3" />
+            </div>
+
+            {/* Present Students */}
+            <div className="space-y-2">
+              <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                Present Students ({overviewData.attendanceSummary.present})
+              </h4>
+              <div className="border rounded-lg divide-y max-h-40 overflow-y-auto">
+                {debriefsData.recentDebriefs.length > 0 ? (
+                  debriefsData.recentDebriefs
+                    .slice(0, overviewData.attendanceSummary.present)
+                    .map((debrief: any, index: number) => (
+                      <div
+                        key={debrief.id || index}
+                        className="flex items-center justify-between p-3 hover:bg-slate-50"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">
+                              {debrief.studentName || debrief.student_name || "Student"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {debrief.clientName || debrief.client_name || "Client"}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+                          Present
+                        </Badge>
+                      </div>
+                    ))
+                ) : (
+                  <p className="p-4 text-sm text-muted-foreground text-center">No attendance data available</p>
+                )}
+              </div>
+            </div>
+
+            {/* Absent Students */}
+            {(() => {
+              const total = quickStats.totalStudents || quickStats.activeStudents || 0
+              const absent = Math.max(0, total - overviewData.attendanceSummary.present)
+              if (absent === 0) return null
+              return (
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-red-500" />
+                    Absent Students ({absent})
+                  </h4>
+                  <div className="border border-red-200 rounded-lg bg-red-50/50 p-4">
+                    <p className="text-sm text-red-700">
+                      {absent} student{absent > 1 ? "s were" : " was"} absent this week.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 text-red-600 border-red-200 hover:bg-red-100 bg-transparent"
+                    >
+                      View Absent Students
+                    </Button>
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
