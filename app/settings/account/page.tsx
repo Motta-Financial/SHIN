@@ -4,6 +4,7 @@ import type React from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useState, useEffect, useRef } from "react"
 import { MainNavigation } from "@/components/main-navigation"
+import { getErrorMessage, isAuthError } from "@/lib/error-handler"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -205,10 +206,10 @@ export default function AccountManagementPage() {
           phone: "",
           bio: "",
         })
-      } catch (err) {
-        console.error("[v0] Error fetching profile:", err)
-        setError("Failed to load profile data")
-      } finally {
+} catch (err) {
+  console.error("[v0] Error fetching profile:", err)
+  setError(getErrorMessage(err))
+  } finally {
         setIsLoading(false)
       }
     }
@@ -251,11 +252,11 @@ export default function AccountManagementPage() {
       setSuccessMessage("Profile updated successfully!")
 
       setTimeout(() => setSuccessMessage(null), 3000)
-    } catch (err: any) {
-      console.error("[v0] Error saving profile:", err)
-      setError(err.message || "Failed to save profile changes")
-    } finally {
-      setIsSaving(false)
+} catch (err: any) {
+  console.error("[v0] Error saving profile:", err)
+  setError(getErrorMessage(err))
+  } finally {
+  setIsSaving(false)
     }
   }
 
@@ -297,11 +298,11 @@ export default function AccountManagementPage() {
       setSuccessMessage("Profile photo updated!")
 
       setTimeout(() => setSuccessMessage(null), 3000)
-    } catch (err: any) {
-      console.error("[v0] Error uploading photo:", err)
-      setError(err.message || "Failed to upload photo")
-    } finally {
-      setIsUploading(false)
+} catch (err: any) {
+  console.error("[v0] Error uploading photo:", err)
+  setError(getErrorMessage(err))
+  } finally {
+  setIsUploading(false)
     }
   }
 
@@ -386,11 +387,11 @@ export default function AccountManagementPage() {
       setShowPasswordSection(false)
 
       setTimeout(() => setPasswordSuccess(null), 5000)
-    } catch (err: any) {
-      console.error("[v0] Error changing password:", err)
-      setPasswordError(err.message || "Failed to change password. Please try again.")
-    } finally {
-      setIsChangingPassword(false)
+} catch (err: any) {
+  console.error("[v0] Error changing password:", err)
+  setPasswordError(getErrorMessage(err))
+  } finally {
+  setIsChangingPassword(false)
     }
   }
 

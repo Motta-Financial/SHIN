@@ -48,6 +48,8 @@ import {
 import { UnifiedWeeklyAgenda } from "@/components/unified-weekly-agenda"
 import { useDemoMode } from "@/contexts/demo-mode-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useUserRole } from "@/hooks/use-user-role"
+import { useCurrentSemester } from "@/hooks/use-current-semester"
 import { ClinicAgendaTab } from "@/components/clinic-agenda-tab"
 
 // Mock announcements - REMOVED - will fetch from database
@@ -459,8 +461,9 @@ export default function ClassCoursePage() {
   const [newAnnouncementAudience, setNewAnnouncementAudience] = useState<"students" | "directors">("students")
   const [postingAnnouncement, setPostingAnnouncement] = useState(false)
   const [clinics, setClinics] = useState<Array<{ id: string; name: string }>>([])
-  const { isDemoMode } = useDemoMode()
-
+const { isDemoMode } = useDemoMode()
+  const { fullName: userName, email: userEmail } = useUserRole()
+  
   // State for student selection in demo mode
   interface Student {
     id: string
@@ -481,15 +484,15 @@ export default function ClassCoursePage() {
   // Agenda section state
   const [agendaSection, setAgendaSection] = useState<"weekly" | "semester">("weekly")
 
-  const semesterName = "Spring 2026" // Define semester name
-  const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
-
+const semesterName = "Spring 2026" // Define semester name
+  const { semesterId } = useCurrentSemester()
+  
   const [semesterSchedule, setSemesterSchedule] = useState<any[]>([])
 
   useEffect(() => {
-    const fetchSemesterSchedule = async () => {
-      try {
-        const res = await fetch(`/api/semester-schedule?semesterId=${SPRING_2026_SEMESTER_ID}`)
+const fetchSemesterSchedule = async () => {
+  try {
+  const res = await fetch(`/api/semester-schedule?semesterId=${semesterId}`)
         if (res.ok) {
           const data = await res.json()
           setSemesterSchedule(data.schedules || [])
@@ -710,10 +713,10 @@ export default function ClassCoursePage() {
       formData.append("title", uploadTitle)
       formData.append("description", uploadDescription)
       formData.append("targetClinic", uploadTargetClinic)
-      formData.append("category", uploadCategory)
-      // TODO: Get from actual authenticated user
-      formData.append("uploadedByName", "Program Director")
-      formData.append("uploadedByEmail", "director@example.com")
+formData.append("category", uploadCategory)
+    // Use actual authenticated user info
+    formData.append("uploadedByName", userName || "Program Director")
+    formData.append("uploadedByEmail", userEmail || "director@example.com")
 
       const res = await fetch("/api/course-materials", {
         method: "POST",
@@ -1102,10 +1105,9 @@ export default function ClassCoursePage() {
   // Fetch attendance records
   useEffect(() => {
     const fetchAttendanceRecords = async () => {
-      setLoadingAttendance(true)
-      try {
-        const semesterId = SPRING_2026_SEMESTER_ID // Spring 2026
-        const res = await fetch(`/api/supabase/attendance?semesterId=${semesterId}`)
+setLoadingAttendance(true)
+  try {
+  const res = await fetch(`/api/supabase/attendance?semesterId=${semesterId}`)
         if (res.ok) {
           const data = await res.json()
           console.log("[v0] Fetched attendance records for Spring 2026:", data.attendance?.length || 0)
@@ -1188,10 +1190,10 @@ export default function ClassCoursePage() {
       const res = await fetch("/api/attendance-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          weekNumber: weekNumber,
-          semesterId: SPRING_2026_SEMESTER_ID,
-          password: newPassword,
+body: JSON.stringify({
+  weekNumber: weekNumber,
+  semesterId: semesterId,
+  password: newPassword,
           weekStart: weekInfo.week_start || null,
           weekEnd: weekInfo.week_end || null,
         }),

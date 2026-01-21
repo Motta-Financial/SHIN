@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
+import { getCurrentSemesterId } from "@/lib/semester"
 
 export async function GET(request: Request) {
   try {
@@ -7,7 +8,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const studentId = searchParams.get("studentId")
     const studentEmail = searchParams.get("studentEmail")
-    const semesterId = searchParams.get("semesterId") || "a1b2c3d4-e5f6-7890-abcd-202601120000" // Default to Spring 2026
+    const defaultSemesterId = await getCurrentSemesterId()
+    const semesterId = searchParams.get("semesterId") || defaultSemesterId
 
     let query = supabase
       .from("attendance")
@@ -68,7 +70,7 @@ export async function POST(request: Request) {
 
     const { studentId, studentName, studentEmail, clinic, weekNumber, weekEnding, classDate, password } = body
 
-    const semesterId = "a1b2c3d4-e5f6-7890-abcd-202601120000"
+    const semesterId = await getCurrentSemesterId()
 
     if (!studentId || !studentName || !studentEmail || !clinic || !weekNumber) {
       return NextResponse.json(

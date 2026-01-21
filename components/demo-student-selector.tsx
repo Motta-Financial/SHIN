@@ -22,8 +22,6 @@ const DEMO_STUDENTS = [
   { id: "dcc89bec-3661-4dc4-bb00-5022fad1e959", name: "Dwayne Smith" },
 ]
 
-const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
-
 function getStoredStudentId(): string {
   if (typeof window === "undefined") return DEFAULT_STUDENT_ID
   const stored = localStorage.getItem(STORAGE_KEY)

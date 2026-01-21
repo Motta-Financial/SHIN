@@ -2,20 +2,24 @@ import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 
 // API to get current student's complete profile with all relationships
+// Supports both UUID-based lookup (preferred) and email fallback
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const email = searchParams.get("email")
+    const studentId = searchParams.get("studentId")
+    const authUserId = searchParams.get("authUserId")
+    const email = searchParams.get("email") // Legacy fallback
 
-    if (!email) {
-      return NextResponse.json({ success: false, error: "Email required" }, { status: 400 })
+    if (!studentId && !authUserId && !email) {
+      return NextResponse.json({ success: false, error: "studentId, authUserId, or email required" }, { status: 400 })
     }
 
     const supabase = await createClient()
 
-    // Get student with all fields from students table
-    const { data: student, error: studentError } = await supabase
-      .from("students")
+    // Build query - prefer UUID-based lookups over email
+    // Using students_current for current semester data
+    let query = supabase
+      .from("students_current")
       .select(`
         id,
         first_name,
@@ -37,8 +41,18 @@ export async function GET(request: NextRequest) {
         created_at,
         updated_at
       `)
-      .eq("email", email)
-      .maybeSingle()
+
+    // Use UUID-based lookup if available (preferred)
+    if (studentId) {
+      query = query.eq("id", studentId)
+    } else if (authUserId) {
+      query = query.eq("user_id", authUserId)
+    } else if (email) {
+      // Legacy fallback - email lookup
+      query = query.eq("email", email)
+    }
+
+    const { data: student, error: studentError } = await query.maybeSingle()
 
     if (studentError) {
       console.error("[v0] Error fetching student:", studentError)
@@ -69,9 +83,9 @@ export async function GET(request: NextRequest) {
       `)
       .eq("student_id", student.id)
 
-    // Get debriefs for this student
+    // Get debriefs for this student (current semester)
     const { data: debriefs } = await supabase
-      .from("debriefs")
+      .from("debriefs_current")
       .select(`
         id,
         week_ending,
@@ -90,9 +104,9 @@ export async function GET(request: NextRequest) {
       .eq("student_id", student.id)
       .order("week_ending", { ascending: false })
 
-    // Get attendance records
+    // Get attendance records (current semester)
     const { data: attendance } = await supabase
-      .from("attendance")
+      .from("attendance_current")
       .select(`
         week_number,
         week_ending,
@@ -103,9 +117,9 @@ export async function GET(request: NextRequest) {
       .eq("student_id", student.id)
       .order("week_ending", { ascending: false })
 
-    // Get documents uploaded by this student
+    // Get documents uploaded by this student (current semester)
     const { data: documents } = await supabase
-      .from("documents")
+      .from("documents_current")
       .select(`
         id,
         file_name,
@@ -135,9 +149,9 @@ export async function GET(request: NextRequest) {
       `)
       .in("document_id", documentIds.length > 0 ? documentIds : ["00000000-0000-0000-0000-000000000000"])
 
-    // Get directors for student's clinic
+    // Get directors for student's clinic (current semester)
     const { data: directors } = await supabase
-      .from("directors")
+      .from("directors_current")
       .select(`
         id,
         full_name,

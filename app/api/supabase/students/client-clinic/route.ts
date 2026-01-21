@@ -1,16 +1,16 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
-
-const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
+import { getCurrentSemesterId } from "@/lib/semester"
 
 export async function GET() {
   try {
     const supabase = createServiceClient()
+    const currentSemesterId = await getCurrentSemesterId()
 
     const { data, error } = await supabase
       .from("v_complete_mapping")
       .select("*")
-      .eq("semester_id", SPRING_2026_SEMESTER_ID)
+      .eq("semester_id", currentSemesterId)
 
     if (error) {
       console.log("[v0] Supabase v_complete_mapping error:", error.message)

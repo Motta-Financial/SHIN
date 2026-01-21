@@ -24,8 +24,6 @@ interface Debrief {
   weekNumber: number
 }
 
-const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
-
 export default function StudentDebriefsPage() {
   const [debriefs, setDebriefs] = useState<Debrief[]>([])
   const [loading, setLoading] = useState(true)
@@ -77,7 +75,7 @@ export default function StudentDebriefsPage() {
 
       try {
         const response = await fetch(
-          `/api/supabase/debriefs?semesterId=${SPRING_2026_SEMESTER_ID}&studentId=${authStudentId}`,
+          `/api/supabase/debriefs?studentId=${authStudentId}`,
         )
         const data = await response.json()
         if (data.debriefs) {

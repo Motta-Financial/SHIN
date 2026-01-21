@@ -5,6 +5,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { MainNavigation } from "@/components/main-navigation"
+import { getErrorMessage, isAuthError, isPermissionError } from "@/lib/error-handler"
 import { useDemoMode } from "@/contexts/demo-mode-context"
 import { StudentPortalHeader } from "@/components/student-portal-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -579,10 +580,13 @@ export default function StudentPortal() {
               setSelectedStudentId(uniqueStudents[0].id)
             }
           }
-        } catch (error) {
-          console.error("Error fetching students:", error)
-        }
-      } else if (role === "student") {
+} catch (error) {
+  console.error("Error fetching students:", error)
+  if (isAuthError(error)) {
+    router.push("/sign-in")
+  }
+  }
+  } else if (role === "student") {
         if (authStudentId) {
           console.log("[v0] StudentPortal - Using student ID from auth:", authStudentId)
           setSelectedStudentId(authStudentId)
@@ -806,10 +810,13 @@ export default function StudentPortal() {
           }
         }
         fetchStudentNotifications()
-      } catch (error) {
-        console.error("Error fetching data:", error)
-      } finally {
-        setLoading(false)
+} catch (error) {
+  console.error("Error fetching data:", error)
+  if (isAuthError(error)) {
+    router.push("/sign-in")
+  }
+  } finally {
+  setLoading(false)
       }
     }
 

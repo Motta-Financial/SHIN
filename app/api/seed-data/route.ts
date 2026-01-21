@@ -5,12 +5,12 @@ export async function GET() {
   try {
     const supabase = await createClient()
 
-    // Fetch all SEED data
+    // Fetch all SEED data (using *_current views for current semester)
     const [studentsRes, directorsRes, clientsRes, assignmentsRes] = await Promise.all([
-      supabase.from("students").select("*").order("last_name"),
-      supabase.from("directors").select("*").order("full_name"),
+      supabase.from("students_current").select("*").order("last_name"),
+      supabase.from("directors_current").select("*").order("full_name"),
       supabase
-        .from("clients")
+        .from("clients_current")
         .select(`
         *,
         primary_director:directors(full_name, email, clinic)
@@ -18,8 +18,8 @@ export async function GET() {
         .order("name"),
       supabase.from("client_assignments").select(`
         *,
-        student:students(full_name, email, clinic),
-        client:clients(name)
+        student:students_current(full_name, email, clinic),
+        client:clients_current(name)
       `),
     ])
 
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     const { clinic, clientName } = await request.json()
     const supabase = await createClient()
 
-    let query = supabase.from("students").select("*")
+    let query = supabase.from("students_current").select("*")
 
     if (clinic) {
       query = query.eq("clinic", clinic)

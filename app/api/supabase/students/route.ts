@@ -6,8 +6,9 @@ export async function GET() {
   try {
     const supabase = createServiceClient()
 
+    // Using students_current view for current semester data
     const { data, error } = await supabase
-      .from("students")
+      .from("students_current")
       .select(`
         id,
         first_name,

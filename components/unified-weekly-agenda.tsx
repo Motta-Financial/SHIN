@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useCurrentSemester } from "@/hooks/use-current-semester"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -94,6 +95,13 @@ interface ClientMeeting {
   notes?: string
 }
 
+interface RecordingLink {
+  id: string
+  title: string
+  url: string
+  date?: string
+}
+
 interface WeekSchedule {
   id: string
   week_number: number
@@ -110,6 +118,7 @@ interface WeekSchedule {
   semester: string
   zoom_link?: string
   room_assignment?: string // Added room_assignment
+  recording_links?: RecordingLink[] // Class recording links
   created_at: string
   updated_at: string
   schedule_data?: ScheduleDataItem[] // Kept for original schedule data
@@ -283,8 +292,9 @@ function UnifiedWeeklyAgenda({
   semester = "Spring 2026",
   isStudentView = false,
   studentClinic,
-}: UnifiedWeeklyAgendaProps) {
+  }: UnifiedWeeklyAgendaProps) {
   const [schedules, setSchedules] = useState<WeekSchedule[]>([])
+  const { semesterId } = useCurrentSemester()
   const [loading, setLoading] = useState(true)
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
   const [showAddWeekDialog, setShowAddWeekDialog] = useState(false)
@@ -423,9 +433,7 @@ function UnifiedWeeklyAgenda({
 
   const fetchClientMeetings = async () => {
     try {
-      // Assuming a placeholder semester ID for fetching client meetings
-      // In a real app, this would likely be dynamic or passed as a prop
-      const semesterId = "a1b2c3d4-e5f6-7890-abcd-202601120000" // Placeholder
+      // Use dynamic semester ID from hook
       const res = await fetch(`/api/scheduled-client-meetings?semesterId=${encodeURIComponent(semesterId)}`)
       if (res.ok) {
         const data = await res.json()
@@ -990,6 +998,35 @@ function UnifiedWeeklyAgenda({
     const schedule = schedules.find((s) => s.week_number === weekNumber)
     if (!schedule) return
     await updateSchedule(schedule.id, { notes })
+  }
+
+  // Function to update zoom link
+  const updateZoomLink = async (weekNumber: number, zoomLink: string) => {
+    const schedule = schedules.find((s) => s.week_number === weekNumber)
+    if (!schedule) return
+    await updateSchedule(schedule.id, { zoom_link: zoomLink })
+  }
+
+  // Function to add recording link
+  const addRecordingLink = async (weekNumber: number, title: string, url: string) => {
+    const schedule = schedules.find((s) => s.week_number === weekNumber)
+    if (!schedule) return
+    const newRecording: RecordingLink = {
+      id: crypto.randomUUID(),
+      title,
+      url,
+      date: new Date().toISOString(),
+    }
+    const updatedRecordings = [...(schedule.recording_links || []), newRecording]
+    await updateSchedule(schedule.id, { recording_links: updatedRecordings })
+  }
+
+  // Function to remove recording link
+  const removeRecordingLink = async (weekNumber: number, recordingId: string) => {
+    const schedule = schedules.find((s) => s.week_number === weekNumber)
+    if (!schedule) return
+    const updatedRecordings = (schedule.recording_links || []).filter((r) => r.id !== recordingId)
+    await updateSchedule(schedule.id, { recording_links: updatedRecordings })
   }
 
   return (
@@ -1577,27 +1614,110 @@ function UnifiedWeeklyAgenda({
                     </div>
                   )}
 
-                  {(selectedSchedule.zoom_link || selectedSchedule.room_assignment) && (
-                    <div className="px-4 py-2 border-t bg-gray-50 flex items-center gap-4 text-xs">
-                      {selectedSchedule.zoom_link && (
+                  {/* Zoom & Room Section - Always visible for directors, conditionally for students */}
+                  <div className="px-4 py-3 border-t">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-medium text-xs uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
+                        <Video className="h-3.5 w-3.5" />
+                        Class Zoom Link
+                      </h3>
+                      {!isStudentView && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 text-[10px] gap-1 text-gray-500"
+                          onClick={() => {
+                            const link = prompt("Enter Zoom meeting link:", selectedSchedule.zoom_link || "")
+                            if (link !== null) {
+                              updateZoomLink(selectedSchedule.week_number, link)
+                            }
+                          }}
+                        >
+                          <Pencil className="h-2.5 w-2.5" />
+                          {selectedSchedule.zoom_link ? "Edit" : "Add"}
+                        </Button>
+                      )}
+                    </div>
+                    {selectedSchedule.zoom_link ? (
+                      <div className="flex items-center gap-3">
                         <a
                           href={selectedSchedule.zoom_link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-blue-600 hover:underline"
+                          className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline bg-blue-50 px-2.5 py-1.5 rounded-md"
                         >
                           <Video className="h-3.5 w-3.5" />
-                          Join Zoom
+                          Join Class Zoom Meeting
                         </a>
-                      )}
-                      {selectedSchedule.room_assignment && (
-                        <span className="flex items-center gap-1 text-gray-600">
-                          <MapPin className="h-3.5 w-3.5" />
-                          {selectedSchedule.room_assignment}
-                        </span>
+                        {selectedSchedule.room_assignment && (
+                          <span className="flex items-center gap-1 text-xs text-gray-600 bg-gray-100 px-2.5 py-1.5 rounded-md">
+                            <MapPin className="h-3.5 w-3.5" />
+                            {selectedSchedule.room_assignment}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 italic">No Zoom link added for this week.</p>
+                    )}
+                  </div>
+
+                  {/* Class Recordings Section */}
+                  <div className="px-4 py-3 border-t">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-medium text-xs uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
+                        <Video className="h-3.5 w-3.5 text-red-500" />
+                        Class Recordings
+                      </h3>
+                      {!isStudentView && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-[10px] gap-1 bg-transparent"
+                          onClick={() => {
+                            const title = prompt("Recording title (e.g., 'Week 2 - Full Class'):")
+                            if (title) {
+                              const url = prompt("Enter recording URL:")
+                              if (url) {
+                                addRecordingLink(selectedSchedule.week_number, title, url)
+                              }
+                            }
+                          }}
+                        >
+                          <Plus className="h-2.5 w-2.5" />
+                          Add Recording
+                        </Button>
                       )}
                     </div>
-                  )}
+                    {selectedSchedule.recording_links && selectedSchedule.recording_links.length > 0 ? (
+                      <div className="space-y-1.5">
+                        {selectedSchedule.recording_links.map((recording) => (
+                          <div key={recording.id} className="flex items-center justify-between bg-gray-50 rounded-md px-2.5 py-1.5 group">
+                            <a
+                              href={recording.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 text-xs text-red-600 hover:underline"
+                            >
+                              <Video className="h-3 w-3" />
+                              {recording.title}
+                            </a>
+                            {!isStudentView && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600"
+                                onClick={() => removeRecordingLink(selectedSchedule.week_number, recording.id)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-400 italic">No recordings added for this week.</p>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -1754,108 +1874,270 @@ function UnifiedWeeklyAgenda({
       </Dialog>
 
       <Dialog open={showEditTimeBlockDialog} onOpenChange={setShowEditTimeBlockDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Activity</DialogTitle>
           </DialogHeader>
           {editingTimeBlock && (
             <div className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Time</Label>
-                  <Input
-                    value={editingTimeBlock.timeBlock.time}
-                    onChange={(e) =>
-                      setEditingTimeBlock({
-                        ...editingTimeBlock,
-                        timeBlock: { ...editingTimeBlock.timeBlock, time: e.target.value },
-                      })
-                    }
-                    placeholder="5:00 PM"
-                  />
-                </div>
-                <div>
-                  <Label>Duration (minutes)</Label>
-                  <Input
-                    type="number"
-                    value={editingTimeBlock.timeBlock.duration}
-                    onChange={(e) =>
-                      setEditingTimeBlock({
-                        ...editingTimeBlock,
-                        timeBlock: { ...editingTimeBlock.timeBlock, duration: Number.parseInt(e.target.value) || 0 },
-                      })
-                    }
-                    min={5}
-                    max={180}
-                  />
+              {/* Activity Header Settings */}
+              <div className="p-3 bg-gray-50 rounded-lg border">
+                <h4 className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-3">Activity Settings</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Time</Label>
+                    <Input
+                      value={editingTimeBlock.timeBlock.time}
+                      onChange={(e) =>
+                        setEditingTimeBlock({
+                          ...editingTimeBlock,
+                          timeBlock: { ...editingTimeBlock.timeBlock, time: e.target.value },
+                        })
+                      }
+                      placeholder="5:00 PM"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Duration (min)</Label>
+                    <Input
+                      type="number"
+                      value={editingTimeBlock.timeBlock.duration}
+                      onChange={(e) =>
+                        setEditingTimeBlock({
+                          ...editingTimeBlock,
+                          timeBlock: { ...editingTimeBlock.timeBlock, duration: Number.parseInt(e.target.value) || 0 },
+                        })
+                      }
+                      min={5}
+                      max={180}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Activity Name</Label>
+                    <Input
+                      value={editingTimeBlock.timeBlock.activity}
+                      onChange={(e) =>
+                        setEditingTimeBlock({
+                          ...editingTimeBlock,
+                          timeBlock: { ...editingTimeBlock.timeBlock, activity: e.target.value },
+                        })
+                      }
+                      placeholder="e.g., Clinic Sessions"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Color</Label>
+                    <Select
+                      value={editingTimeBlock.timeBlock.color}
+                      onValueChange={(v) =>
+                        setEditingTimeBlock({
+                          ...editingTimeBlock,
+                          timeBlock: { ...editingTimeBlock.timeBlock, color: v },
+                        })
+                      }
+                    >
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="blue">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded bg-blue-500" />
+                            Blue
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="amber">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded bg-amber-500" />
+                            Amber
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="teal">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded bg-teal-500" />
+                            Teal
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="purple">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded bg-purple-500" />
+                            Purple
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="green">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded bg-green-500" />
+                            Green
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="pink">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded bg-pink-500" />
+                            Pink
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
-              <div>
-                <Label>Activity Name</Label>
-                <Input
-                  value={editingTimeBlock.timeBlock.activity}
-                  onChange={(e) =>
-                    setEditingTimeBlock({
-                      ...editingTimeBlock,
-                      timeBlock: { ...editingTimeBlock.timeBlock, activity: e.target.value },
-                    })
-                  }
-                  placeholder="e.g., Clinic Sessions, All-Hands"
-                />
-              </div>
-              <div>
-                <Label>Color</Label>
-                <Select
-                  value={editingTimeBlock.timeBlock.color}
-                  onValueChange={(v) =>
-                    setEditingTimeBlock({
-                      ...editingTimeBlock,
-                      timeBlock: { ...editingTimeBlock.timeBlock, color: v },
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="blue">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded bg-blue-500" />
-                        Blue
+
+              {/* Sessions Section */}
+              <div className="border rounded-lg">
+                <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b">
+                  <h4 className="text-xs font-medium text-gray-600 uppercase tracking-wide flex items-center gap-1.5">
+                    <Users className="h-3.5 w-3.5" />
+                    Sessions ({editingTimeBlock.timeBlock.sessions?.length || 0})
+                  </h4>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 text-xs gap-1 bg-transparent"
+                    onClick={() => {
+                      const newSession: AgendaSession = {
+                        id: crypto.randomUUID(),
+                        activity: editingTimeBlock.timeBlock.activity,
+                        team: "",
+                        directorInitials: "",
+                        room: "",
+                        roomNumber: "",
+                        notes: "",
+                      }
+                      setEditingTimeBlock({
+                        ...editingTimeBlock,
+                        timeBlock: {
+                          ...editingTimeBlock.timeBlock,
+                          sessions: [...(editingTimeBlock.timeBlock.sessions || []), newSession],
+                        },
+                      })
+                    }}
+                  >
+                    <Plus className="h-3 w-3" />
+                    Add Session
+                  </Button>
+                </div>
+                
+                <div className="divide-y max-h-[300px] overflow-y-auto">
+                  {editingTimeBlock.timeBlock.sessions?.map((session, idx) => (
+                    <div key={session.id} className="p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-gray-500">Session {idx + 1}</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-5 w-5 p-0 text-gray-400 hover:text-red-600"
+                          onClick={() => {
+                            setEditingTimeBlock({
+                              ...editingTimeBlock,
+                              timeBlock: {
+                                ...editingTimeBlock.timeBlock,
+                                sessions: editingTimeBlock.timeBlock.sessions.filter((s) => s.id !== session.id),
+                              },
+                            })
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
                       </div>
-                    </SelectItem>
-                    <SelectItem value="amber">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded bg-amber-500" />
-                        Amber
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-[10px] text-gray-500">Team/Clinic</Label>
+                          <Input
+                            value={session.team}
+                            onChange={(e) => {
+                              const updatedSessions = editingTimeBlock.timeBlock.sessions.map((s) =>
+                                s.id === session.id ? { ...s, team: e.target.value } : s
+                              )
+                              setEditingTimeBlock({
+                                ...editingTimeBlock,
+                                timeBlock: { ...editingTimeBlock.timeBlock, sessions: updatedSessions },
+                              })
+                            }}
+                            placeholder="e.g., Accounting Clinic"
+                            className="h-7 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-[10px] text-gray-500">Director Initials</Label>
+                          <Input
+                            value={session.directorInitials}
+                            onChange={(e) => {
+                              const updatedSessions = editingTimeBlock.timeBlock.sessions.map((s) =>
+                                s.id === session.id ? { ...s, directorInitials: e.target.value } : s
+                              )
+                              setEditingTimeBlock({
+                                ...editingTimeBlock,
+                                timeBlock: { ...editingTimeBlock.timeBlock, sessions: updatedSessions },
+                              })
+                            }}
+                            placeholder="e.g., KM"
+                            className="h-7 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-[10px] text-gray-500">Room Type</Label>
+                          <Input
+                            value={session.room}
+                            onChange={(e) => {
+                              const updatedSessions = editingTimeBlock.timeBlock.sessions.map((s) =>
+                                s.id === session.id ? { ...s, room: e.target.value } : s
+                              )
+                              setEditingTimeBlock({
+                                ...editingTimeBlock,
+                                timeBlock: { ...editingTimeBlock.timeBlock, sessions: updatedSessions },
+                              })
+                            }}
+                            placeholder="e.g., Room, Main"
+                            className="h-7 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-[10px] text-gray-500">Room Number</Label>
+                          <Input
+                            value={session.roomNumber}
+                            onChange={(e) => {
+                              const updatedSessions = editingTimeBlock.timeBlock.sessions.map((s) =>
+                                s.id === session.id ? { ...s, roomNumber: e.target.value } : s
+                              )
+                              setEditingTimeBlock({
+                                ...editingTimeBlock,
+                                timeBlock: { ...editingTimeBlock.timeBlock, sessions: updatedSessions },
+                              })
+                            }}
+                            placeholder="e.g., 201"
+                            className="h-7 text-xs"
+                          />
+                        </div>
                       </div>
-                    </SelectItem>
-                    <SelectItem value="teal">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded bg-teal-500" />
-                        Teal
+                      <div>
+                        <Label className="text-[10px] text-gray-500">Notes</Label>
+                        <Input
+                          value={session.notes}
+                          onChange={(e) => {
+                            const updatedSessions = editingTimeBlock.timeBlock.sessions.map((s) =>
+                              s.id === session.id ? { ...s, notes: e.target.value } : s
+                            )
+                            setEditingTimeBlock({
+                              ...editingTimeBlock,
+                              timeBlock: { ...editingTimeBlock.timeBlock, sessions: updatedSessions },
+                            })
+                          }}
+                          placeholder="Optional notes for this session"
+                          className="h-7 text-xs"
+                        />
                       </div>
-                    </SelectItem>
-                    <SelectItem value="purple">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded bg-purple-500" />
-                        Purple
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="green">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded bg-green-500" />
-                        Green
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="pink">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded bg-pink-500" />
-                        Pink
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                    </div>
+                  ))}
+                  
+                  {(!editingTimeBlock.timeBlock.sessions || editingTimeBlock.timeBlock.sessions.length === 0) && (
+                    <div className="p-4 text-center text-xs text-gray-500">
+                      No sessions yet. Click "Add Session" to create one.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1885,7 +2167,7 @@ function UnifiedWeeklyAgenda({
               ) : (
                 <>
                   <Save className="h-4 w-4 mr-2" />
-                  Save
+                  Save Changes
                 </>
               )}
             </Button>

@@ -5,13 +5,15 @@ import { getCachedData, setCachedData } from "@/lib/api-cache"
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const email = searchParams.get("email")
+    const authUserId = searchParams.get("authUserId")
+    const clientId = searchParams.get("clientId")
+    const email = searchParams.get("email") // Legacy fallback
 
-    if (!email || email === "null" || email === "undefined") {
+    if ((!authUserId && !clientId && !email) || email === "null" || email === "undefined") {
       return NextResponse.json({ documents: [] })
     }
 
-    const cacheKey = `client-documents:${email}`
+    const cacheKey = `client-documents:${clientId || authUserId || email}`
     const cachedData = getCachedData(cacheKey)
     if (cachedData) {
       console.log("[v0] Client Documents API - Returning cached response")
@@ -20,11 +22,19 @@ export async function GET(request: Request) {
 
     const supabase = await createClient()
 
-    const { data: client, error: clientError } = await supabase
-      .from("clients")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle()
+    // Build query - prefer UUID-based lookups over email
+    let query = supabase.from("clients").select("id, email")
+    
+    if (clientId) {
+      query = query.eq("id", clientId)
+    } else if (authUserId) {
+      query = query.eq("auth_user_id", authUserId)
+    } else if (email) {
+      // Legacy fallback
+      query = query.eq("email", email)
+    }
+    
+    const { data: client, error: clientError } = await query.maybeSingle()
 
     if (clientError) {
       console.error("Error fetching client:", clientError)
@@ -35,11 +45,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ documents: [] })
     }
 
-    // Get documents uploaded by this client
+    // Get documents uploaded by this client (use client's email from DB record)
     const { data: documents, error } = await supabase
       .from("client_documents")
       .select("*")
-      .eq("uploaded_by_email", email)
+      .eq("uploaded_by_email", client.email)
       .order("uploaded_at", { ascending: false })
 
     if (error) {

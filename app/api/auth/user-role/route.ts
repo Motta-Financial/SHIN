@@ -7,22 +7,16 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const emailParam = searchParams.get("email")
 
-    // Get current user
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser()
 
-    console.log("[v0] user-role API - Auth check:", { user: user?.email, authError })
-
     if (authError || !user) {
-      console.log("[v0] user-role API - Not authenticated")
       return NextResponse.json({ role: null, error: "Not authenticated" }, { status: 401 })
     }
 
     const userEmail = emailParam || user.email || ""
-
-    console.log("[v0] user-role API - Checking role for email:", userEmail)
 
     // Check directors first
     const { data: directorData, error: directorError } = await supabase
@@ -31,14 +25,11 @@ export async function GET(request: NextRequest) {
       .filter("email", "ilike", userEmail)
       .maybeSingle()
 
-    console.log("[v0] user-role API - Director check:", { directorData, directorError })
-
     if (directorError) {
-      console.error("[v0] user-role API - Director query error:", directorError)
+      console.error("user-role API - Director query error:", directorError)
     }
 
     if (directorData) {
-      console.log("[v0] user-role API - Found director role")
       return NextResponse.json({
         role: directorData.role || "director",
         email: userEmail,
@@ -56,14 +47,11 @@ export async function GET(request: NextRequest) {
       .filter("email", "ilike", userEmail)
       .maybeSingle()
 
-    console.log("[v0] user-role API - Student check:", { studentData, studentError })
-
     if (studentError) {
-      console.error("[v0] user-role API - Student query error:", studentError)
+      console.error("user-role API - Student query error:", studentError)
     }
 
     if (studentData) {
-      console.log("[v0] user-role API - Found student role")
       return NextResponse.json({
         role: "student",
         email: userEmail,
@@ -82,14 +70,11 @@ export async function GET(request: NextRequest) {
       .filter("email", "ilike", userEmail)
       .maybeSingle()
 
-    console.log("[v0] user-role API - Client check:", { clientData, clientError })
-
     if (clientError) {
-      console.error("[v0] user-role API - Client query error:", clientError)
+      console.error("user-role API - Client query error:", clientError)
     }
 
     if (clientData) {
-      console.log("[v0] user-role API - Found client role")
       return NextResponse.json({
         role: "client",
         email: userEmail,
@@ -99,8 +84,6 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // No role found
-    console.log("[v0] user-role API - No role found for user:", userEmail)
     return NextResponse.json(
       {
         role: null,
@@ -110,7 +93,7 @@ export async function GET(request: NextRequest) {
       { status: 404 },
     )
   } catch (error) {
-    console.error("[v0] user-role API - Error:", error)
+    console.error("user-role API - Error:", error)
     return NextResponse.json({ role: null, error: "Internal server error" }, { status: 500 })
   }
 }

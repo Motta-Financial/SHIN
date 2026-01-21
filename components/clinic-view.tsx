@@ -29,9 +29,7 @@ import {
 import { createClient } from "@/lib/supabase/client"
 import DocumentUpload from "@/components/shared/DocumentUpload"
 import { useRouter } from "next/navigation"
-
-// Spring 2026 semester ID - used to filter data
-const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
+import { useCurrentSemester } from "@/hooks/use-current-semester"
 
 interface ClinicViewProps {
   selectedClinic: string
@@ -94,6 +92,7 @@ export default function ClinicView({ selectedClinic, selectedWeeks }: ClinicView
   const [materials, setMaterials] = useState<CourseMaterial[]>([])
   const [debriefs, setDebriefs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const { semesterId } = useCurrentSemester()
   const [activeSubTab, setActiveSubTab] = useState("overview")
   const [expandedCard, setExpandedCard] = useState<string | null>(null)
   const [expandedClient, setExpandedClient] = useState<string | null>(null)
@@ -139,8 +138,8 @@ export default function ClinicView({ selectedClinic, selectedWeeks }: ClinicView
           /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedClinic),
       )
 
-      // Also pass semesterId to filter by Spring 2026 only
-      const mappingUrl = `/api/supabase/v-complete-mapping?semesterId=${SPRING_2026_SEMESTER_ID}`
+      // API uses current semester by default
+      const mappingUrl = `/api/supabase/v-complete-mapping`
       const mappingRes = await fetch(mappingUrl)
       let mappingData: CompleteMapping[] = []
 
@@ -192,9 +191,8 @@ export default function ClinicView({ selectedClinic, selectedWeeks }: ClinicView
       }
 
       const { data: scheduleData } = await supabase
-        .from("semester_schedule")
+        .from("semester_schedule_current")
         .select("*")
-        .eq("semester_id", SPRING_2026_SEMESTER_ID)
         .order("week_number", { ascending: true })
 
       if (scheduleData) {

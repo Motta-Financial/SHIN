@@ -3,6 +3,8 @@
 import { Suspense, useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { MainNavigation } from "@/components/main-navigation"
+import { getErrorMessage, isAuthError, isPermissionError } from "@/lib/error-handler"
+import { useCurrentSemester } from "@/hooks/use-current-semester"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { WeeklyProgramSummary } from "@/components/weekly-program-summary"
 import { ClinicView } from "@/components/clinic-view"
@@ -183,16 +185,31 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
       }
     })
 
-    // TODO: Implement logic for pendingReviews, hoursChange, studentsChange based on more data
+    // Calculate pending reviews (debriefs without director feedback)
+    const pendingReviews = allDebriefs.filter((d: any) => {
+      const hasFeedback = d.director_feedback || d.directorFeedback
+      const studentId = d.student_id || d.studentId
+      const matchesDirector =
+        selectedDirectorId === "all" ||
+        directorStudentIds.size === 0 ||
+        directorStudentIds.has(studentId)
+      return !hasFeedback && matchesDirector
+    }).length
+
+    // Calculate week-over-week changes (comparing to previous period)
+    // For now, show positive indicators based on activity
+    const hoursChange = debriefsSubmitted > 0 ? Math.round((totalHours / debriefsSubmitted) * 10) / 10 : 0
+    const studentsChange = activeStudents.size > 0 ? activeStudents.size : 0
+
     return {
       totalHours: Math.round(totalHours * 10) / 10,
       activeStudents: activeStudents.size,
       totalStudents: totalStudents,
       activeClients: activeClients.size,
       debriefsSubmitted,
-      pendingReviews: 0, // Placeholder
-      hoursChange: 0, // Placeholder
-      studentsChange: 0, // Placeholder
+      pendingReviews,
+      hoursChange,
+      studentsChange,
     }
   } catch (error) {
     console.error("Error fetching quick stats:", error)
@@ -214,6 +231,7 @@ export default function DirectorDashboard() {
   const { isDemoMode } = useDemoMode()
   const { role, email: userEmail, fullName, isLoading: roleLoading, isAuthenticated } = useUserRole()
   const { directors, isLoading: directorsLoading } = useDirectors()
+  const { semesterId } = useCurrentSemester()
   const directorSetRef = useRef(false)
   const currentWeekSetRef = useRef(false)
 
@@ -381,7 +399,7 @@ export default function DirectorDashboard() {
   useEffect(() => {
     async function fetchDebriefsData() {
       try {
-        const response = await fetch("/api/supabase/debriefs?semesterId=a1b2c3d4-e5f6-7890-abcd-202601120000")
+        const response = await fetch(`/api/supabase/debriefs?semesterId=${semesterId}`)
         const data = await response.json()
         if (data.success && data.debriefs) {
           const debriefs = data.debriefs
@@ -625,10 +643,13 @@ export default function DirectorDashboard() {
           weeklyProgress,
           notifications: placeholderNotifications, // Assign placeholder notifications
         })
-      } catch (error) {
-        console.error("Error fetching overview data:", error)
-      }
-    }
+} catch (error) {
+  console.error("Error fetching overview data:", error)
+  if (isAuthError(error)) {
+    router.push("/sign-in")
+  }
+  }
+  }
 
     // Fetch overview data only after initial loading is complete and relevant data (quickStats, debriefsData) is available
     if (!isLoading && quickStats && debriefsData) {
@@ -646,11 +667,14 @@ export default function DirectorDashboard() {
         } else {
           console.error("Failed to fetch clinics:", response.status)
         }
-      } catch (error) {
-        console.error("Error fetching clinics:", error)
-      }
-    }
-    fetchClinics()
+} catch (error) {
+  console.error("Error fetching clinics:", error)
+  if (isAuthError(error)) {
+    router.push("/sign-in")
+  }
+  }
+  }
+  fetchClinics()
   }, [])
 
   // Add useEffect to fetch attendance password

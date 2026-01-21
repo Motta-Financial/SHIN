@@ -21,10 +21,10 @@ export async function GET(request: Request) {
   const results: any[] = []
 
   try {
-    // Search Documents
+    // Search Documents (using documents_current for current semester)
     if (activeFilters.includes("documents")) {
       const { data: documents } = await supabase
-        .from("documents")
+        .from("documents_current")
         .select("id, file_name, description, student_name, client_name, clinic, uploaded_at, submission_type")
         .or(
           `file_name.ilike.${searchTerm},description.ilike.${searchTerm},student_name.ilike.${searchTerm},client_name.ilike.${searchTerm}`,
@@ -48,10 +48,10 @@ export async function GET(request: Request) {
       }
     }
 
-    // Search Debriefs
+    // Search Debriefs (using debriefs_current for current semester)
     if (activeFilters.includes("debriefs")) {
       const { data: debriefs } = await supabase
-        .from("debriefs")
+        .from("debriefs_current")
         .select("id, student_email, client_name, clinic, work_summary, questions, status, week_ending, hours_worked")
         .or(
           `work_summary.ilike.${searchTerm},questions.ilike.${searchTerm},client_name.ilike.${searchTerm},student_email.ilike.${searchTerm}`,
@@ -75,10 +75,10 @@ export async function GET(request: Request) {
       }
     }
 
-    // Search Students (director only)
+    // Search Students (director only, using students_current for current semester)
     if (activeFilters.includes("students") && portal === "director") {
       const { data: students } = await supabase
-        .from("students")
+        .from("students_current")
         .select("id, full_name, email, clinic, client_team, status, academic_level")
         .or(`full_name.ilike.${searchTerm},email.ilike.${searchTerm},clinic.ilike.${searchTerm}`)
         .limit(10)
@@ -98,10 +98,10 @@ export async function GET(request: Request) {
       }
     }
 
-    // Search Clients (director only)
+    // Search Clients (director only, using clients_current for current semester)
     if (activeFilters.includes("clients") && portal === "director") {
       const { data: clients } = await supabase
-        .from("clients")
+        .from("clients_current")
         .select("id, name, contact_name, email, project_type, status")
         .or(`name.ilike.${searchTerm},contact_name.ilike.${searchTerm},email.ilike.${searchTerm}`)
         .limit(10)
@@ -121,10 +121,10 @@ export async function GET(request: Request) {
       }
     }
 
-    // Search Attendance
+    // Search Attendance (using attendance_current for current semester)
     if (activeFilters.includes("attendance")) {
       const { data: attendance } = await supabase
-        .from("attendance")
+        .from("attendance_current")
         .select("student_id, student_name, student_email, class_date, week_number, clinic, notes")
         .or(`student_name.ilike.${searchTerm},student_email.ilike.${searchTerm},notes.ilike.${searchTerm}`)
         .order("class_date", { ascending: false })

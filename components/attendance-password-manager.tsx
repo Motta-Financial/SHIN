@@ -17,6 +17,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Key, Eye, EyeOff, Calendar, AlertTriangle, CheckCircle2, Lock } from "lucide-react"
+import { useCurrentSemester } from "@/hooks/use-current-semester"
 
 interface AttendancePassword {
   id: string
@@ -54,6 +55,7 @@ export function AttendancePasswordManager({
   const [showPassword, setShowPassword] = useState<{ [key: string]: boolean }>({})
   const [submitting, setSubmitting] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const { semesterId } = useCurrentSemester()
 
   useEffect(() => {
     fetchData()
@@ -88,7 +90,7 @@ export function AttendancePasswordManager({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           weekNumber: selectedWeek.week_number,
-          semesterId: "a1b2c3d4-e5f6-7890-abcd-202601120000", // Current semester
+          semesterId: semesterId,
           password: newPassword,
           weekStart: selectedWeek.week_start,
           weekEnd: selectedWeek.week_end,

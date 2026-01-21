@@ -52,8 +52,6 @@ interface FilterState {
   status: string
 }
 
-const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
-
 export function DebriefsContent() {
   const [debriefs, setDebriefs] = useState<Debrief[]>([])
   const [loading, setLoading] = useState(true)
@@ -73,7 +71,7 @@ export function DebriefsContent() {
   useEffect(() => {
     async function fetchDebriefs() {
       try {
-        const response = await fetch(`/api/supabase/debriefs?semesterId=${SPRING_2026_SEMESTER_ID}`)
+        const response = await fetch(`/api/supabase/debriefs`)
         const data = await response.json()
         if (data.success && data.debriefs) {
           setDebriefs(data.debriefs)

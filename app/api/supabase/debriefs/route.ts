@@ -1,8 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
 import { getCachedData, setCachedData } from "@/lib/api-cache"
-
-const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
+import { getCurrentSemesterId } from "@/lib/semester"
 
 export async function GET(request: Request) {
   try {
@@ -73,10 +72,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ debriefs: [] })
     }
 
+    const currentSemesterId = await getCurrentSemesterId()
     const { data: mappingData, error: mappingError } = await supabase
       .from("v_complete_mapping")
       .select("*")
-      .eq("semester_id", SPRING_2026_SEMESTER_ID)
+      .eq("semester_id", currentSemesterId)
 
     if (mappingError) {
       console.log("[v0] Error fetching v_complete_mapping:", mappingError.message)

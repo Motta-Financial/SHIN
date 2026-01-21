@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { MainNavigation } from "@/components/main-navigation"
+import { getErrorMessage, isAuthError, isPermissionError } from "@/lib/error-handler"
 import { ClientPortalHeader } from "@/components/client-portal-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -218,10 +219,13 @@ export default function ClientPortalPage() {
             setSelectedClientId(data.clients[0].id)
           }
         }
-      } catch (error) {
-        console.error("Error fetching clients:", error)
-      }
-    }
+} catch (error) {
+  console.error("Error fetching clients:", error)
+  if (isAuthError(error)) {
+    router.push("/sign-in")
+  }
+  }
+  }
 
     if (!roleLoading) {
       fetchAvailableClients()
@@ -261,7 +265,7 @@ export default function ClientPortalPage() {
 
         await delay(150)
         const docsRes = await fetchWithRetry(
-          `/api/client-portal/client-documents?email=${encodeURIComponent(clientEmail)}`,
+          `/api/client-portal/client-documents?clientId=${clientId}`,
         )
         const docsData = docsRes.ok ? await docsRes.json() : { documents: [] }
         setClientDocuments(docsData.documents || [])
@@ -291,10 +295,13 @@ export default function ClientPortalPage() {
         setDeliverables([])
         setProgress({ totalHours: 0, uniqueStudents: 0, weeklyProgress: [] })
       }
-    } catch (error) {
-      console.error("Error fetching client data:", error)
-    } finally {
-      setLoading(false)
+} catch (error) {
+  console.error("Error fetching client data:", error)
+  if (isAuthError(error)) {
+    router.push("/sign-in")
+  }
+  } finally {
+  setLoading(false)
     }
   }, [selectedClientId])
 
@@ -352,8 +359,8 @@ export default function ClientPortalPage() {
   }
 
   const refreshDocuments = () => {
-    if (client?.email) {
-      fetch(`/api/client-portal/client-documents?email=${encodeURIComponent(client.email)}`)
+    if (client?.id) {
+      fetch(`/api/client-portal/client-documents?clientId=${client.id}`)
         .then((res) => res.json())
         .then((data) => setClientDocuments(data.documents || []))
     }

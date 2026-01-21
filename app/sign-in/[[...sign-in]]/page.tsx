@@ -26,8 +26,6 @@ export default function SignInPage() {
     setIsLoading(true)
     setError(null)
 
-    console.log("[v0] SignIn - Attempting sign in for:", email)
-
     try {
       const supabase = createClient()
       const { data, error: authError } = await supabase.auth.signInWithPassword({
@@ -36,32 +34,24 @@ export default function SignInPage() {
       })
 
       if (authError) {
-        console.log("[v0] SignIn - Auth error:", authError.message)
         setError(authError.message)
         setIsLoading(false)
         return
       }
 
       if (!data.user) {
-        console.log("[v0] SignIn - No user data returned")
         setError("Authentication failed. Please try again.")
         setIsLoading(false)
         return
       }
 
-      console.log("[v0] SignIn - Auth success! User:", data.user.email)
-
       // This ensures cookies are written before navigation
       await new Promise((resolve) => setTimeout(resolve, 500))
-
-      // Verify session is set
-      const { data: sessionData } = await supabase.auth.getSession()
-      console.log("[v0] SignIn - Session verified:", !!sessionData.session)
 
       // Navigate to auth loading page which will detect role and redirect
       router.push("/auth/loading")
     } catch (err) {
-      console.error("[v0] SignIn - Error:", err)
+      console.error("SignIn - Error:", err)
       const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred"
       setError(errorMessage)
       setIsLoading(false)
@@ -83,7 +73,6 @@ export default function SignInPage() {
             />
           </div>
 
-          {/* Divider text */}
           <div className="flex items-center gap-3 w-full">
             <div className="flex-1 h-px bg-gradient-to-r from-transparent via-slate-300 to-slate-300"></div>
             <span className="text-slate-500 text-sm font-medium">powered by</span>

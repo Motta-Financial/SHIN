@@ -1,16 +1,16 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
-
-const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
+import { getCurrentSemesterId } from "@/lib/semester"
 
 export async function GET(request: Request) {
   try {
     const supabase = createServiceClient()
+    const currentSemesterId = await getCurrentSemesterId()
 
     const { searchParams } = new URL(request.url)
     const emailFilter = searchParams.get("email")
 
-    let query = supabase.from("v_complete_mapping").select("*").eq("semester_id", SPRING_2026_SEMESTER_ID)
+    let query = supabase.from("v_complete_mapping").select("*").eq("semester_id", currentSemesterId)
 
     if (emailFilter) {
       console.log("[v0] students/overview - Filtering by email:", emailFilter)

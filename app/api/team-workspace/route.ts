@@ -1,11 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-
-const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
+import { getCurrentSemesterId } from "@/lib/semester"
 
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient()
+    const currentSemesterId = await getCurrentSemesterId()
     const { searchParams } = new URL(req.url)
     const email = searchParams.get("email")
     const studentId = searchParams.get("studentId")
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     const { data: allTeamData, error: viewError } = await supabase
       .from("v_complete_mapping")
       .select("*")
-      .eq("semester_id", SPRING_2026_SEMESTER_ID)
+      .eq("semester_id", currentSemesterId)
 
     if (viewError) {
       console.error("[v0] Error fetching from v_complete_mapping:", viewError)

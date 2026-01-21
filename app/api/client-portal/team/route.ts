@@ -1,8 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
-
-// Spring 2026 semester ID
-const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
+import { getCurrentSemesterId } from "@/lib/semester"
 
 export async function GET(request: Request) {
   try {
@@ -37,11 +35,12 @@ export async function GET(request: Request) {
       )
     }
 
+    const currentSemesterId = await getCurrentSemesterId()
     const { data: mappingData, error: mappingError } = await supabase
       .from("v_complete_mapping")
       .select("*")
       .eq("client_id", client.id)
-      .eq("semester_id", SPRING_2026_SEMESTER_ID)
+      .eq("semester_id", currentSemesterId)
 
     if (mappingError) {
       console.error("Error fetching from v_complete_mapping:", mappingError)

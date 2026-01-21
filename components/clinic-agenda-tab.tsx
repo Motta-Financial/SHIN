@@ -25,6 +25,7 @@ import {
   AlertCircle,
 } from "lucide-react"
 import { useUserRole } from "@/hooks/use-user-role"
+import { useCurrentSemester } from "@/hooks/use-current-semester"
 import { createClient } from "@/utils/supabase/client"
 
 interface AgendaItem {
@@ -68,16 +69,16 @@ interface ClinicAgendaTabProps {
   semesterId?: string
 }
 
-const SPRING_2026_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
-
 export function ClinicAgendaTab({
   clinicId: propClinicId,
   clinicName: propClinicName,
   directorId: propDirectorId,
   directorName: propDirectorName,
-  semesterId = SPRING_2026_SEMESTER_ID,
+  semesterId: propSemesterId,
 }: ClinicAgendaTabProps) {
-  const { email, isLoading: userLoading } = useUserRole()
+  const { email, authUserId, directorId: userDirectorId, isLoading: userLoading } = useUserRole()
+  const { semesterId: currentSemesterId } = useCurrentSemester()
+  const semesterId = propSemesterId || currentSemesterId
   const [directorInfo, setDirectorInfo] = useState<DirectorInfo | null>(null)
   const [loadingDirector, setLoadingDirector] = useState(true)
 
@@ -121,16 +122,17 @@ export function ClinicAgendaTab({
         return
       }
 
-      if (!email || userLoading) return
+      if (!authUserId || userLoading) return
 
       setLoadingDirector(true)
       try {
         const supabase = createClient()
 
+        // Use auth_user_id for UUID-based lookup (preferred over email)
         const { data: directors, error: directorError } = await supabase
           .from("directors")
           .select("id, full_name, clinic_id")
-          .eq("email", email)
+          .eq("auth_user_id", authUserId)
           .limit(1)
 
         if (directorError) {
@@ -141,7 +143,7 @@ export function ClinicAgendaTab({
 
         const director = directors?.[0]
         if (!director) {
-          console.log("[v0] No director found for email:", email)
+          console.log("[v0] No director found for auth_user_id:", authUserId)
           setLoadingDirector(false)
           return
         }
@@ -173,7 +175,7 @@ export function ClinicAgendaTab({
     }
 
     fetchDirectorInfo()
-  }, [email, userLoading, propClinicId, propDirectorId])
+  }, [authUserId, userLoading, propClinicId, propDirectorId])
 
   useEffect(() => {
     if (clinicId && !loadingDirector) {

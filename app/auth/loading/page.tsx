@@ -12,40 +12,23 @@ export default function AuthLoadingPage() {
   const hasStartedRef = useRef(false)
 
   useEffect(() => {
-    // Prevent double execution
     if (hasStartedRef.current) return
     hasStartedRef.current = true
 
     const detectRoleAndRedirect = async () => {
-      console.log("[v0] AuthLoading - Starting role detection")
-
       try {
         const supabase = createClient()
 
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
 
-        console.log("[v0] AuthLoading - Session check:", {
-          hasSession: !!sessionData.session,
-          email: sessionData.session?.user?.email,
-          error: sessionError?.message,
-        })
-
-        // If no session, try to get user directly (session might be in cookies)
         let user = sessionData.session?.user
 
         if (!user) {
-          console.log("[v0] AuthLoading - No session, trying getUser...")
-          const { data: userData, error: userError } = await supabase.auth.getUser()
-
-          if (userError) {
-            console.log("[v0] AuthLoading - getUser error:", userError.message)
-          } else {
-            user = userData.user
-          }
+          const { data: userData } = await supabase.auth.getUser()
+          user = userData.user
         }
 
         if (!user) {
-          console.log("[v0] AuthLoading - No user found, redirecting to sign-in")
           router.push("/sign-in")
           return
         }
@@ -54,9 +37,6 @@ export default function AuthLoadingPage() {
         clearAuthCache()
 
         const userEmail = user.email
-        console.log("[v0] AuthLoading - User email:", userEmail)
-
-        console.log("[v0] AuthLoading - Calling detect-role API...")
 
         const response = await fetch("/api/auth/detect-role", {
           method: "POST",
@@ -65,35 +45,28 @@ export default function AuthLoadingPage() {
           credentials: "include",
         })
 
-        console.log("[v0] AuthLoading - API response status:", response.status)
-
         const responseText = await response.text()
-        console.log("[v0] AuthLoading - API response:", responseText.substring(0, 500))
 
         let data: any
         try {
           data = JSON.parse(responseText)
         } catch (parseError) {
-          console.error("[v0] AuthLoading - Failed to parse response")
+          console.error("AuthLoading - Failed to parse response")
           setStatus("Server error. Please try again.")
           setTimeout(() => router.push("/sign-in"), 2000)
           return
         }
 
-        console.log("[v0] AuthLoading - Parsed data:", data)
-
         if (response.ok && data.redirect) {
-          console.log("[v0] AuthLoading - Redirecting to:", data.redirect)
           router.push(data.redirect)
           return
         }
 
-        // No role found
-        console.error("[v0] AuthLoading - No role found. Error:", data.error)
+        console.error("AuthLoading - No role found. Error:", data.error)
         setStatus("Account not configured. Please contact support.")
         setTimeout(() => router.push("/sign-in"), 3000)
       } catch (error) {
-        console.error("[v0] AuthLoading - Error:", error)
+        console.error("AuthLoading - Error:", error)
         setStatus("Error loading your account. Redirecting...")
         setTimeout(() => router.push("/sign-in"), 2000)
       }
