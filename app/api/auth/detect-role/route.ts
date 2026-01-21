@@ -10,12 +10,15 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.supabase_SUPABASE_SERVICE_ROLE_KEY
 
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error("detect-role - Missing Supabase env vars")
-      return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
+      console.error("detect-role - Missing Supabase env vars. URL:", !!supabaseUrl, "Key:", !!supabaseServiceKey)
+      return NextResponse.json({ 
+        error: "Server configuration error",
+        debug: { hasUrl: !!supabaseUrl, hasKey: !!supabaseServiceKey }
+      }, { status: 500 })
     }
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)

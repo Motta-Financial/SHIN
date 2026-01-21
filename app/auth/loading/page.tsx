@@ -62,9 +62,17 @@ export default function AuthLoadingPage() {
           return
         }
 
-        console.error("AuthLoading - No role found. Error:", data.error)
-        setStatus("Account not configured. Please contact support.")
-        setTimeout(() => router.push("/sign-in"), 3000)
+        console.error("AuthLoading - No role found. Status:", response.status, "Error:", data.error, "Debug:", data.debug)
+        
+        // Show more helpful error message based on the error type
+        if (response.status === 500) {
+          setStatus("Server configuration error. Please try again later.")
+        } else if (response.status === 404) {
+          setStatus(`No account found for ${userEmail}. Please contact support.`)
+        } else {
+          setStatus("Account not configured. Please contact support.")
+        }
+        setTimeout(() => router.push("/sign-in"), 4000)
       } catch (error) {
         console.error("AuthLoading - Error:", error)
         setStatus("Error loading your account. Redirecting...")
