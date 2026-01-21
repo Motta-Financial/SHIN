@@ -29,17 +29,25 @@ export async function getCurrentSemesterId(): Promise<string> {
   try {
     const supabase = await createClient()
     
+    // app_settings is a key-value table with columns: key (text), value (uuid)
+    // Use maybeSingle() to handle case where key doesn't exist yet
     const { data, error } = await supabase
       .from("app_settings")
-      .select("current_semester_id")
-      .single()
+      .select("value")
+      .eq("key", "current_semester_id")
+      .maybeSingle()
     
-    if (error || !data?.current_semester_id) {
+    if (error) {
       console.warn("[semester] Failed to fetch current semester, using fallback:", error?.message)
       return FALLBACK_SEMESTER_ID
     }
     
-    cachedSemesterId = data.current_semester_id
+    // If no row found or value is null, use fallback
+    if (!data?.value) {
+      return FALLBACK_SEMESTER_ID
+    }
+    
+    cachedSemesterId = data.value
     cacheTimestamp = now
     
     return cachedSemesterId
@@ -56,26 +64,30 @@ export async function getCurrentSemester(): Promise<{ id: string; name: string }
   try {
     const supabase = await createClient()
     
+    // app_settings is a key-value table with columns: key (text), value (uuid)
+    // Use maybeSingle() to handle case where key doesn't exist yet
     const { data: settings, error: settingsError } = await supabase
       .from("app_settings")
-      .select("current_semester_id")
-      .single()
+      .select("value")
+      .eq("key", "current_semester_id")
+      .maybeSingle()
     
-    if (settingsError || !settings?.current_semester_id) {
+    if (settingsError || !settings?.value) {
       return { id: FALLBACK_SEMESTER_ID, name: FALLBACK_SEMESTER_NAME }
     }
     
+    // Try to get semester name from semester_config table
     const { data: semester, error: semesterError } = await supabase
-      .from("semesters")
-      .select("id, name")
-      .eq("id", settings.current_semester_id)
+      .from("semester_config")
+      .select("id, semester")
+      .eq("id", settings.value)
       .single()
     
     if (semesterError || !semester) {
-      return { id: settings.current_semester_id, name: FALLBACK_SEMESTER_NAME }
+      return { id: settings.value, name: FALLBACK_SEMESTER_NAME }
     }
     
-    return { id: semester.id, name: semester.name }
+    return { id: semester.id, name: semester.semester }
   } catch (error) {
     console.error("[semester] Error fetching current semester details:", error)
     return { id: FALLBACK_SEMESTER_ID, name: FALLBACK_SEMESTER_NAME }
