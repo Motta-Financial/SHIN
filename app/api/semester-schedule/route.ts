@@ -2,6 +2,13 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 
+// Helper to get Supabase URL and service role key with fallbacks
+function getSupabaseConfig() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.supabase_SUPABASE_SERVICE_ROLE_KEY
+  return { supabaseUrl, serviceRoleKey }
+}
+
 function isRateLimitError(error: unknown): boolean {
   if (error && typeof error === "object") {
     const err = error as { message?: string; status?: number; code?: string }
@@ -23,7 +30,14 @@ export async function GET(request: Request) {
   const includeClassSessions = searchParams.get("includeClassSessions") === "true"
 
   const cookieStore = await cookies()
-  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+  const { supabaseUrl, serviceRoleKey } = getSupabaseConfig()
+  
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error("[v0] semester-schedule API - Missing env vars. URL:", !!supabaseUrl, "Key:", !!serviceRoleKey)
+    return NextResponse.json({ schedules: [], error: "Server configuration error" }, { status: 500 })
+  }
+  
+  const supabase = createServerClient(supabaseUrl, serviceRoleKey, {
     cookies: {
       get(name: string) {
         return cookieStore.get(name)?.value
@@ -36,21 +50,25 @@ export async function GET(request: Request) {
 
     if (!activeSemesterId && !includeAll) {
       if (semester) {
-        const { data: semesterConfig } = await supabase
+        const { data: semesterConfig, error: semesterError } = await supabase
           .from("semester_config")
           .select("id, semester")
           .eq("semester", semester)
-          .single()
+          .maybeSingle()
+        console.log("[v0] semester-schedule API - Looking for semester:", semester, "Found:", semesterConfig, "Error:", semesterError)
         activeSemesterId = semesterConfig?.id || null
       } else {
-        const { data: activeSemester } = await supabase
+        const { data: activeSemester, error: activeError } = await supabase
           .from("semester_config")
           .select("id")
           .eq("is_active", true)
           .maybeSingle()
+        console.log("[v0] semester-schedule API - Looking for active semester. Found:", activeSemester, "Error:", activeError)
         activeSemesterId = activeSemester?.id || null
       }
     }
+    
+    console.log("[v0] semester-schedule API - Using activeSemesterId:", activeSemesterId)
 
     const selectFields = includeClassSessions
       ? `*, class_sessions!semester_schedule_class_session_id_fkey(id, class_number, class_label, class_date, class_start_time, class_end_time)`
@@ -63,6 +81,8 @@ export async function GET(request: Request) {
     }
 
     const { data, error } = await query
+    
+    console.log("[v0] semester-schedule API - Query result count:", data?.length, "Error:", error)
 
     if (error) throw error
 
@@ -94,7 +114,13 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const cookieStore = await cookies()
-  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+  const { supabaseUrl, serviceRoleKey } = getSupabaseConfig()
+  
+  if (!supabaseUrl || !serviceRoleKey) {
+    return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
+  }
+  
+  const supabase = createServerClient(supabaseUrl, serviceRoleKey, {
     cookies: {
       get(name: string) {
         return cookieStore.get(name)?.value
@@ -155,7 +181,13 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   const cookieStore = await cookies()
-  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+  const { supabaseUrl, serviceRoleKey } = getSupabaseConfig()
+  
+  if (!supabaseUrl || !serviceRoleKey) {
+    return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
+  }
+  
+  const supabase = createServerClient(supabaseUrl, serviceRoleKey, {
     cookies: {
       get(name: string) {
         return cookieStore.get(name)?.value
@@ -186,7 +218,13 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   const cookieStore = await cookies()
-  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+  const { supabaseUrl, serviceRoleKey } = getSupabaseConfig()
+  
+  if (!supabaseUrl || !serviceRoleKey) {
+    return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
+  }
+  
+  const supabase = createServerClient(supabaseUrl, serviceRoleKey, {
     cookies: {
       get(name: string) {
         return cookieStore.get(name)?.value
