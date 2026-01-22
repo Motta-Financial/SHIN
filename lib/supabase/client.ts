@@ -6,8 +6,17 @@ export function createClient() {
   if (client) {
     return client
   }
+  
+  // Browser client uses NEXT_PUBLIC_ prefixed env vars
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error("[v0] createClient (browser) - Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY")
+    throw new Error("Missing Supabase credentials")
+  }
 
-  client = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+  client = createBrowserClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       storageKey: "supabase-auth-token",

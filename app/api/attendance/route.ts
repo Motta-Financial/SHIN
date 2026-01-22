@@ -3,7 +3,16 @@ import { createClient } from "@supabase/supabase-js"
 import { getCachedData, setCachedData } from "@/lib/api-cache"
 
 function getSupabaseClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  // Handle multiple possible env var names
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.supabase_SUPABASE_SERVICE_ROLE_KEY
+  
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error("[v0] getSupabaseClient - Missing env vars. URL:", !!supabaseUrl, "Key:", !!serviceRoleKey)
+    throw new Error("Missing Supabase credentials")
+  }
+  
+  return createClient(supabaseUrl, serviceRoleKey)
 }
 
 export async function GET(request: Request) {
