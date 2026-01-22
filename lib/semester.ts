@@ -77,11 +77,12 @@ export async function getCurrentSemester(): Promise<{ id: string; name: string }
     }
     
     // Try to get semester name from semester_config table
+    // Use maybeSingle() to handle case where row doesn't exist or RLS blocks access
     const { data: semester, error: semesterError } = await supabase
       .from("semester_config")
       .select("id, semester")
       .eq("id", settings.value)
-      .single()
+      .maybeSingle()
     
     if (semesterError || !semester) {
       return { id: settings.value, name: FALLBACK_SEMESTER_NAME }
