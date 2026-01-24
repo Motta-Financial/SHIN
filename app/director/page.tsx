@@ -560,12 +560,20 @@ export default function DirectorDashboard() {
         const elapsedClasses = getElapsedClassCount(semesterScheduleData)
         const totalClasses = getTotalClassCount(semesterScheduleData)
 
-        // Filter attendance records by is_present boolean
-        const presentRecords = allAttendanceRecords.filter((r: any) => r.is_present)
-        const absentRecords = allAttendanceRecords.filter((r: any) => !r.is_present)
+        // Debug: Log the actual attendance data structure
+        console.log("[v0] Attendance records sample:", allAttendanceRecords.slice(0, 3))
+        console.log("[v0] Total attendance records:", allAttendanceRecords.length)
 
-        // Get unique students who were present
-        const studentsWithAttendance = new Set(presentRecords.map((r: any) => r.student_id))
+        // Filter attendance records by is_present boolean
+        // Note: API returns camelCase fields (studentId, is_present)
+        const presentRecords = allAttendanceRecords.filter((r: any) => r.is_present === true)
+        const absentRecords = allAttendanceRecords.filter((r: any) => r.is_present === false)
+        
+        console.log("[v0] Present records count:", presentRecords.length)
+        console.log("[v0] Absent records count:", absentRecords.length)
+
+        // Get unique students who were present (API returns studentId in camelCase)
+        const studentsWithAttendance = new Set(presentRecords.map((r: any) => r.studentId || r.student_id))
         const presentCount = studentsWithAttendance.size // This is the count of unique students present in *any* class
 
         // Calculate total possible attendances (students × elapsed classes)

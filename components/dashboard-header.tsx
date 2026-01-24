@@ -57,15 +57,22 @@ interface DashboardHeaderProps {
 }
 
 // Helper functions for sequential fetching with retry
-async function fetchWithRetry(url: string, retries = 3, delay = 500): Promise<Response> {
+async function fetchWithRetry(url: string, retries = 5, delay = 1000): Promise<Response> {
   for (let i = 0; i < retries; i++) {
-    const res = await fetch(url)
-    if (res.ok) return res
-    if (res.status === 429) {
+    try {
+      const res = await fetch(url)
+      if (res.ok) return res
+      if (res.status === 429) {
+        // Exponential backoff for rate limits
+        const backoffDelay = delay * Math.pow(2, i)
+        await new Promise((resolve) => setTimeout(resolve, backoffDelay))
+        continue
+      }
+      return res
+    } catch (error) {
+      if (i === retries - 1) throw error
       await new Promise((resolve) => setTimeout(resolve, delay * (i + 1)))
-      continue
     }
-    return res
   }
   return fetch(url)
 }
@@ -74,7 +81,8 @@ async function fetchSequentially(urls: string[]): Promise<Response[]> {
   const results: Response[] = []
   for (const url of urls) {
     if (results.length > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 150))
+      // Increased delay between requests to prevent rate limiting
+      await new Promise((resolve) => setTimeout(resolve, 300))
     }
     const res = await fetchWithRetry(url)
     results.push(res)
@@ -121,7 +129,17 @@ export function DashboardHeader({
 
         const [scheduleRes, clinicsRes, clientsRes] = await fetchSequentially(urls)
 
-        const scheduleData = await scheduleRes.json()
+        // Safe JSON parsing helper
+        const safeParseJson = async (res: Response, fallback: any = {}) => {
+          if (!res.ok) return fallback
+          try {
+            return await res.json()
+          } catch {
+            return fallback
+          }
+        }
+
+        const scheduleData = await safeParseJson(scheduleRes, { success: false })
         if (scheduleData.success && scheduleData.schedule) {
           setSchedule(scheduleData.schedule)
 
@@ -130,7 +148,7 @@ export function DashboardHeader({
           }
         }
 
-        const clinicsData = await clinicsRes.json()
+        const clinicsData = await safeParseJson(clinicsRes, { clinics: [] })
         if (clinicsData.clinics && clinicsData.clinics.length > 0) {
           setClinics(clinicsData.clinics)
         } else {
@@ -142,10 +160,8 @@ export function DashboardHeader({
           ])
         }
 
-        const clientsData = await clientsRes.json()
-        console.log("[v0] DashboardHeader - clientsData:", clientsData)
-        if (clientsData.clients) {
-          console.log("[v0] DashboardHeader - Setting clients count:", clientsData.clients.length)
+        const clientsData = await safeParseJson(clientsRes, { clients: [] })
+        if (clientsData.clients && clientsData.clients.length > 0) {
           setClients(clientsData.clients)
           setFilteredClients(clientsData.clients)
         }

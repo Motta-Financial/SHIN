@@ -20,7 +20,8 @@ export async function GET(request: NextRequest) {
         week_ending,
         class_date,
         clinic,
-        notes,
+        is_present,
+        attendance_notes,
         user_id
       `)
       .order("week_ending", { ascending: false })
@@ -68,7 +69,8 @@ export async function POST(request: NextRequest) {
           week_ending: weekEnding,
           class_date: classDate,
           clinic,
-          notes,
+          is_present: true,
+          attendance_notes: notes,
         },
         {
           onConflict: "student_id,week_ending",

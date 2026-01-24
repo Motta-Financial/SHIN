@@ -21,7 +21,8 @@ export async function GET(request: Request) {
         week_number,
         week_ending,
         clinic,
-        notes,
+        is_present,
+        attendance_notes,
         user_id,
         semester_id
       `)
@@ -51,7 +52,8 @@ export async function GET(request: Request) {
       weekNumber: record.week_number,
       weekEnding: record.week_ending,
       clinic: record.clinic,
-      notes: record.notes,
+      is_present: record.is_present,
+      attendance_notes: record.attendance_notes,
       userId: record.user_id,
       semesterId: record.semester_id, // Include semester_id in the response
     }))
@@ -125,7 +127,8 @@ export async function POST(request: Request) {
         week_ending: weekEnding,
         class_date: classDate,
         semester_id: semesterId,
-        notes: `Submitted at ${new Date().toISOString()}`,
+        is_present: true,
+        attendance_notes: `Submitted at ${new Date().toISOString()}`,
       })
       .select()
 

@@ -125,8 +125,8 @@ export async function GET(request: Request) {
     if (activeFilters.includes("attendance")) {
       const { data: attendance } = await supabase
         .from("attendance_current")
-        .select("student_id, student_name, student_email, class_date, week_number, clinic, notes")
-        .or(`student_name.ilike.${searchTerm},student_email.ilike.${searchTerm},notes.ilike.${searchTerm}`)
+        .select("student_id, student_name, student_email, class_date, week_number, clinic, is_present, attendance_notes")
+        .or(`student_name.ilike.${searchTerm},student_email.ilike.${searchTerm},attendance_notes.ilike.${searchTerm}`)
         .order("class_date", { ascending: false })
         .limit(10)
 
@@ -136,11 +136,11 @@ export async function GET(request: Request) {
             id: `${att.student_id}-${att.class_date}`,
             type: "attendance",
             title: `${att.student_name || att.student_email || "Unknown"} - Week ${att.week_number || "?"}`,
-            subtitle: `${att.clinic || "No Clinic"} • ${att.class_date ? new Date(att.class_date).toLocaleDateString() : "No date"}`,
-            description: att.notes,
+            subtitle: `${att.clinic || "No Clinic"} • ${att.class_date ? new Date(att.class_date).toLocaleDateString() : "No date"} • ${att.is_present ? "Present" : "Absent"}`,
+            description: att.attendance_notes,
             date: att.class_date,
             url: portal === "student" ? "/students?tab=attendance" : "/student-progress",
-            metadata: { clinic: att.clinic },
+            metadata: { clinic: att.clinic, is_present: att.is_present },
           })),
         )
       }
