@@ -180,7 +180,8 @@ export async function GET(request: NextRequest) {
     const totalHours = debriefs?.reduce((sum, d) => sum + (d.hours_worked || 0), 0) || 0
     const uniqueClients = new Set(debriefs?.map((d) => d.client_name).filter(Boolean))
     const submissionCount = debriefs?.length || 0
-    const attendanceCount = attendance?.length || 0
+    // Only count attendance records where notes === "Present" (not "Absent")
+    const attendanceCount = attendance?.filter((a) => a.notes === "Present").length || 0
     const pendingQuestions = debriefs?.filter((d) => d.questions && d.questions.trim().length > 0) || []
 
     return NextResponse.json({

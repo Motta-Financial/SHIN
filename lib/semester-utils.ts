@@ -78,6 +78,7 @@ export function getTotalClassCount(schedule: SemesterWeek[]): number {
 
 /**
  * Calculate attendance rate based on elapsed classes
+ * Only counts records where notes === "Present" (not "Absent")
  * @returns { attended: number, total: number, rate: number }
  */
 export function calculateAttendanceRate(
@@ -85,7 +86,8 @@ export function calculateAttendanceRate(
   schedule: SemesterWeek[],
   useElapsed = true,
 ): { attended: number; total: number; rate: number } {
-  const attended = attendanceRecords.length
+  // Only count records where notes === "Present"
+  const attended = attendanceRecords.filter((r) => r.notes === "Present").length
   const total = useElapsed ? getElapsedClassCount(schedule) : getTotalClassCount(schedule)
   const rate = total > 0 ? Math.round((attended / total) * 100) : 0
 
@@ -146,6 +148,7 @@ export function hasClassOccurred(week: SemesterWeek): boolean {
 
 /**
  * Get class status for a week
+ * Only considers records where notes === "Present" as attended
  */
 export function getClassStatus(
   week: SemesterWeek,
@@ -153,7 +156,10 @@ export function getClassStatus(
 ): "attended" | "missed" | "upcoming" | "break" {
   if (week.is_break) return "break"
 
-  const hasAttended = attendanceRecords.some((a) => Number(a.weekNumber || a.week_number) === week.week_number)
+  // Only count as attended if notes === "Present" (not "Absent")
+  const hasAttended = attendanceRecords.some(
+    (a) => Number(a.weekNumber || a.week_number) === week.week_number && a.notes === "Present",
+  )
 
   if (hasAttended) return "attended"
   if (hasClassOccurred(week)) return "missed"

@@ -39,7 +39,8 @@ export async function GET(request: Request) {
     }
 
     let debriefsQuery = supabase.from("debriefs").select("student_id, hours_worked")
-    let attendanceQuery = supabase.from("attendance").select("student_id")
+    // Select notes field to filter by Present/Absent status
+    let attendanceQuery = supabase.from("attendance").select("student_id, notes")
 
     if (studentId) {
       debriefsQuery = debriefsQuery.eq("student_id", studentId)
@@ -59,9 +60,10 @@ export async function GET(request: Request) {
       {} as Record<string, number>,
     )
 
+    // Only count attendance records where notes === "Present" (not "Absent")
     const attendanceByStudent = (attendance || []).reduce(
       (acc, a) => {
-        if (a.student_id) {
+        if (a.student_id && a.notes === "Present") {
           acc[a.student_id] = (acc[a.student_id] || 0) + 1
         }
         return acc
