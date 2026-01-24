@@ -560,9 +560,9 @@ export default function DirectorDashboard() {
         const elapsedClasses = getElapsedClassCount(semesterScheduleData)
         const totalClasses = getTotalClassCount(semesterScheduleData)
 
-        // Filter attendance records by Present/Absent status (stored in notes field)
-        const presentRecords = allAttendanceRecords.filter((r: any) => r.notes === "Present")
-        const absentRecords = allAttendanceRecords.filter((r: any) => r.notes === "Absent")
+        // Filter attendance records by is_present boolean
+        const presentRecords = allAttendanceRecords.filter((r: any) => r.is_present)
+        const absentRecords = allAttendanceRecords.filter((r: any) => !r.is_present)
 
         // Get unique students who were present
         const studentsWithAttendance = new Set(presentRecords.map((r: any) => r.student_id))

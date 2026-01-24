@@ -303,7 +303,7 @@ export function ClinicPerformance({
       }
     >()
 
-    // Calculate attendance by clinic - use notes field for Present/Absent status
+    // Calculate attendance by clinic - use is_present boolean
     const clinicAttendance = new Map<string, { attended: number; total: number }>()
     attendance.forEach((record: any) => {
       const clinic = normalizeClinicName(record.clinic || "")
@@ -312,8 +312,8 @@ export function ClinicPerformance({
       }
       const att = clinicAttendance.get(clinic)!
       att.total++
-      // Check notes field for "Present" (attendance status is stored in notes column)
-      if (record.notes === "Present") {
+      // Check is_present boolean for attendance status
+      if (record.is_present) {
         att.attended++
       }
     })

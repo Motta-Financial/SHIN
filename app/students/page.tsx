@@ -1297,8 +1297,8 @@ export default function StudentPortal() {
   }
 
   const totalHours = debriefs.reduce((sum, d) => sum + d.hoursWorked, 0)
-  // Only count attendance records where notes === "Present" (not "Absent")
-  const totalAttendance = attendanceRecords.filter((r) => r.notes === "Present").length
+  // Only count attendance records where is_present is true
+  const totalAttendance = attendanceRecords.filter((r) => r.is_present).length
   const completedDebriefs = debriefs.filter((d) => d.status === "reviewed").length
   const pendingDebriefs = debriefs.filter((d) => d.status === "pending").length
 
@@ -2216,7 +2216,7 @@ export default function StudentPortal() {
                         <div>
                           <p className="text-sm text-green-700">Classes Attended</p>
                           <p className="text-2xl font-bold text-green-800">
-                            {attendanceRecords.filter((r) => r.notes === "Present").length}/{semesterSchedule.filter((w) => !w.is_break).length}
+                            {attendanceRecords.filter((r) => r.is_present).length}/{semesterSchedule.filter((w) => !w.is_break).length}
                           </p>
                         </div>
                         <CheckCircle2 className="h-8 w-8 text-green-600" />

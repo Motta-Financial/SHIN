@@ -2686,9 +2686,9 @@ body: JSON.stringify({
 
                             if (weekAttendance.length === 0) return null
 
-                            // Split attendance records by Present/Absent status (stored in notes field)
-                            const presentRecords = weekAttendance.filter((r) => r.notes === "Present")
-                            const absentRecords = weekAttendance.filter((r) => r.notes === "Absent")
+                            // Split attendance records by is_present boolean
+                            const presentRecords = weekAttendance.filter((r) => r.is_present)
+                            const absentRecords = weekAttendance.filter((r) => !r.is_present)
 
                             // Group present students by clinic
                             const byClinic = presentRecords.reduce(
