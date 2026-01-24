@@ -2686,8 +2686,12 @@ body: JSON.stringify({
 
                             if (weekAttendance.length === 0) return null
 
-                            // Group by clinic
-                            const byClinic = weekAttendance.reduce(
+                            // Split attendance records by Present/Absent status (stored in notes field)
+                            const presentRecords = weekAttendance.filter((r) => r.notes === "Present")
+                            const absentRecords = weekAttendance.filter((r) => r.notes === "Absent")
+
+                            // Group present students by clinic
+                            const byClinic = presentRecords.reduce(
                               (acc, record) => {
                                 const clinic = record.clinic || "Unknown Clinic"
                                 if (!acc[clinic]) acc[clinic] = []
@@ -2697,21 +2701,19 @@ body: JSON.stringify({
                               {} as Record<string, typeof weekAttendance>,
                             )
 
-                            // Calculate absent students for this week
-                            const presentStudentIds = new Set(weekAttendance.map((r) => r.student_id).filter(Boolean))
-                            const absentStudents = rosterData.filter(
-                              (student) => !presentStudentIds.has(student.student_id),
-                            )
-
-                            // Group absent students by clinic
-                            const absentByClinic = absentStudents.reduce(
-                              (acc, student) => {
-                                const clinic = student.student_clinic_name || "Unknown Clinic"
+                            // Group absent students by clinic (from attendance records with notes="Absent")
+                            const absentByClinic = absentRecords.reduce(
+                              (acc, record) => {
+                                const clinic = record.clinic || "Unknown Clinic"
                                 if (!acc[clinic]) acc[clinic] = []
-                                acc[clinic].push(student)
+                                acc[clinic].push({
+                                  student_id: record.studentId,
+                                  student_name: record.studentName,
+                                  student_clinic_name: record.clinic,
+                                })
                                 return acc
                               },
-                              {} as Record<string, typeof absentStudents>,
+                              {} as Record<string, Array<{ student_id: string; student_name: string; student_clinic_name: string }>>,
                             )
 
                             return (
@@ -2730,9 +2732,15 @@ body: JSON.stringify({
                                         })}
                                     </p>
                                   </div>
-                                  <div className="text-right">
-                                    <p className="text-2xl font-bold text-green-600">{weekAttendance.length}</p>
-                                    <p className="text-xs text-slate-500">Students Present</p>
+                                  <div className="text-right flex gap-4">
+                                    <div>
+                                      <p className="text-2xl font-bold text-green-600">{presentRecords.length}</p>
+                                      <p className="text-xs text-slate-500">Present</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-2xl font-bold text-red-600">{absentRecords.length}</p>
+                                      <p className="text-xs text-slate-500">Absent</p>
+                                    </div>
                                   </div>
                                 </div>
 

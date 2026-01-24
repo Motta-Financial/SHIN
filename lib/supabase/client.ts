@@ -23,8 +23,19 @@ export function createClient() {
       storage: typeof window !== "undefined" ? window.localStorage : undefined,
       autoRefreshToken: true,
       detectSessionInUrl: true,
+      flowType: "pkce",
     },
   })
+  
+  // Handle auth errors gracefully - clear stale tokens on refresh token errors
+  if (typeof window !== "undefined") {
+    client.auth.onAuthStateChange((event, session) => {
+      if (event === "TOKEN_REFRESHED" && !session) {
+        // Token refresh failed, clear local storage to reset auth state
+        localStorage.removeItem("supabase-auth-token")
+      }
+    })
+  }
 
   return client
 }

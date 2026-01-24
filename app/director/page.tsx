@@ -560,17 +560,21 @@ export default function DirectorDashboard() {
         const elapsedClasses = getElapsedClassCount(semesterScheduleData)
         const totalClasses = getTotalClassCount(semesterScheduleData)
 
-        // Get unique students who attended
-        const studentsWithAttendance = new Set(allAttendanceRecords.map((r: any) => r.student_id))
+        // Filter attendance records by Present/Absent status (stored in notes field)
+        const presentRecords = allAttendanceRecords.filter((r: any) => r.notes === "Present")
+        const absentRecords = allAttendanceRecords.filter((r: any) => r.notes === "Absent")
+
+        // Get unique students who were present
+        const studentsWithAttendance = new Set(presentRecords.map((r: any) => r.student_id))
         const presentCount = studentsWithAttendance.size // This is the count of unique students present in *any* class
 
-        // Calculate rate based on elapsed classes and total active students
-        // This calculation needs refinement. If we have `quickStats.activeStudents`, we should use that.
-        // The `presentCount` is the number of unique students who attended *at least once* in the period.
-        // A better attendance rate might be total attendances / (activeStudents * elapsedClasses)
-        const totalPossibleAttendances = quickStats.activeStudents * elapsedClasses
+        // Calculate total possible attendances (students × elapsed classes)
+        const totalPossibleAttendances = elapsedClasses * (quickStats.activeStudents || 0)
+
+        // Calculate rate based on present vs total records
+        const totalRecords = allAttendanceRecords.length
         const attendanceRate =
-          totalPossibleAttendances > 0 ? Math.round((allAttendanceRecords.length / totalPossibleAttendances) * 100) : 0
+          totalRecords > 0 ? Math.round((presentRecords.length / totalRecords) * 100) : 0
 
         // Build urgent items
         const urgentItems: Array<{ type: string; message: string; count?: number; action?: string }> = []
@@ -634,8 +638,8 @@ export default function DirectorDashboard() {
         setOverviewData({
           urgentItems,
           attendanceSummary: {
-            present: allAttendanceRecords.length, // This is total attendance entries, not unique students
-            absent: Math.max(0, totalPossibleAttendances - allAttendanceRecords.length), // Max 0 to avoid negative numbers
+            present: presentRecords.length, // Count of records marked as "Present"
+            absent: absentRecords.length, // Count of records marked as "Absent"
             rate: Math.min(attendanceRate, 100), // Cap at 100%
           },
           recentClientActivity: recentActivity,
