@@ -497,7 +497,8 @@ export default function StudentPortal() {
   })
 
   const demoStudentId = useDemoStudent(DEMO_STUDENTS[0].id)
-  const [selectedStudentId, setSelectedStudentId] = useState<string>(authStudentId || demoStudentId)
+  // For directors/admins, don't initialize with demo student - let the fetch set a real student
+  const [selectedStudentId, setSelectedStudentId] = useState<string>(authStudentId || "")
 
   const [availableStudents, setAvailableStudents] = useState<AvailableStudent[]>([])
 
@@ -1367,6 +1368,55 @@ export default function StudentPortal() {
           <div className="p-4">
             <Card className="p-8 text-center">
               <p className="text-slate-500">Loading your portal...</p>
+            </Card>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // For directors/admins waiting for student list to load, show a helpful message
+  if (!currentStudent && isAdminOrDirector && availableStudents.length === 0) {
+    return (
+      <div className="min-h-screen bg-background">
+        <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+          <MainNavigation />
+        </aside>
+        <div className="pl-52 pt-14">
+          <div className="p-4">
+            <Card className="p-8 text-center">
+              <p className="text-slate-500">Loading student list...</p>
+            </Card>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // For directors with students available but none selected yet
+  if (!currentStudent && isAdminOrDirector && availableStudents.length > 0 && !selectedStudentId) {
+    return (
+      <div className="min-h-screen bg-background">
+        <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+          <MainNavigation />
+        </aside>
+        <div className="pl-52 pt-14">
+          <div className="p-4">
+            <Card className="p-6 text-center">
+              <h2 className="text-xl font-semibold mb-2">Select a Student</h2>
+              <p className="text-muted-foreground mb-4">Choose a student to view their portal.</p>
+              <Select value={selectedStudentId} onValueChange={setSelectedStudentId}>
+                <SelectTrigger className="w-[280px] mx-auto">
+                  <SelectValue placeholder="Select a student..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableStudents.map((student) => (
+                    <SelectItem key={student.id} value={student.id}>
+                      {student.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Card>
           </div>
         </div>
