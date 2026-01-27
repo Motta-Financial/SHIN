@@ -2,6 +2,29 @@ import { createBrowserClient } from "@supabase/ssr"
 
 let client: ReturnType<typeof createBrowserClient> | undefined
 
+// Helper to clear all Supabase auth data from storage
+function clearAuthData() {
+  if (typeof window === "undefined") return
+  
+  // Clear localStorage items related to Supabase auth
+  const keysToRemove: string[] = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key && (key.startsWith("sb-") || key.includes("supabase") || key === "supabase-auth-token")) {
+      keysToRemove.push(key)
+    }
+  }
+  keysToRemove.forEach(key => localStorage.removeItem(key))
+  
+  // Clear cookies related to Supabase
+  document.cookie.split(";").forEach(cookie => {
+    const name = cookie.split("=")[0].trim()
+    if (name.startsWith("sb-") || name.includes("supabase")) {
+      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`
+    }
+  })
+}
+
 export function createClient() {
   if (client) {
     return client
@@ -32,9 +55,33 @@ export function createClient() {
     client.auth.onAuthStateChange((event, session) => {
       if (event === "TOKEN_REFRESHED" && !session) {
         // Token refresh failed, clear local storage to reset auth state
-        localStorage.removeItem("supabase-auth-token")
+        clearAuthData()
+      }
+      if (event === "SIGNED_OUT") {
+        clearAuthData()
       }
     })
+    
+    // Wrap getSession to handle refresh token errors
+    const originalGetSession = client.auth.getSession.bind(client.auth)
+    client.auth.getSession = async () => {
+      try {
+        const result = await originalGetSession()
+        if (result.error?.message?.includes("refresh_token_not_found") || 
+            result.error?.message?.includes("Invalid Refresh Token")) {
+          clearAuthData()
+          return { data: { session: null }, error: null }
+        }
+        return result
+      } catch (error: any) {
+        if (error?.message?.includes("refresh_token_not_found") || 
+            error?.message?.includes("Invalid Refresh Token")) {
+          clearAuthData()
+          return { data: { session: null }, error: null }
+        }
+        throw error
+      }
+    }
   }
 
   return client
