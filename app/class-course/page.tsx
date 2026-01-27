@@ -96,6 +96,7 @@ interface AgendaSession {
   room: string
   roomNumber: string
   notes: string
+  zoom_link?: string
 }
 
 interface TimeBlock {

@@ -55,6 +55,7 @@ interface AgendaSession {
   room: string
   roomNumber: string
   notes: string
+  zoom_link?: string
 }
 
 interface TimeBlock {
@@ -746,22 +747,23 @@ function UnifiedWeeklyAgenda({
     const schedule = schedules.find((s) => s.week_number === activeWeekForDialog)
     if (!schedule) return
 
-    const timeBlockToAdd: TimeBlock = {
-      id: crypto.randomUUID(),
-      ...newTimeBlock,
-      sessions: [
-        // Default session for a new time block
-        {
-          id: `${crypto.randomUUID()}-session`,
-          activity: newTimeBlock.activity, // Use the activity as the session activity
-          team: "All Teams",
-          directorInitials: "",
-          room: "",
-          roomNumber: "",
-          notes: "",
-        },
-      ],
-    }
+const timeBlockToAdd: TimeBlock = {
+  id: crypto.randomUUID(),
+  ...newTimeBlock,
+  sessions: [
+  // Default session for a new time block
+  {
+  id: `${crypto.randomUUID()}-session`,
+  activity: newTimeBlock.activity, // Use the activity as the session activity
+  team: "All Teams",
+  directorInitials: "",
+  room: "",
+  roomNumber: "",
+  notes: "",
+  zoom_link: "",
+  },
+  ],
+  }
     const updatedTimeBlocks = [...(schedule.activities || []), timeBlockToAdd] // Use 'activities' for TimeBlocks
     await updateSchedule(schedule.id, { activities: updatedTimeBlocks }) // Use 'activities' for TimeBlocks
     setShowAddActivityDialog(false) // Close dialog after adding
@@ -1487,26 +1489,46 @@ function UnifiedWeeklyAgenda({
 
                               {/* Sessions within TimeBlock */}
                               {timeBlock.sessions && timeBlock.sessions.length > 0 && (
-                                <div className="mt-1.5 pt-1.5 border-t border-dashed space-y-1">
+                                <div className="mt-1.5 pt-1.5 border-t border-dashed space-y-1.5">
                                   {timeBlock.sessions.map((session) => (
                                     <div
                                       key={session.id}
-                                      className="flex items-center justify-between text-[11px] text-gray-600"
+                                      className="text-[11px] text-gray-600"
                                     >
-                                      <div className="flex items-center gap-1.5">
-                                        <Users className="h-3 w-3 text-gray-400" />
-                                        <span>{session.team}</span>
-                                        {session.directorInitials && (
-                                          <span className="text-[10px] px-1 py-0 rounded bg-gray-100 text-gray-600">
-                                            {session.directorInitials}
-                                          </span>
-                                        )}
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5">
+                                          <Users className="h-3 w-3 text-gray-400" />
+                                          <span>{session.team}</span>
+                                          {session.directorInitials && (
+                                            <span className="text-[10px] px-1 py-0 rounded bg-gray-100 text-gray-600">
+                                              {session.directorInitials}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          {session.zoom_link && (
+                                            <a
+                                              href={session.zoom_link}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="flex items-center gap-1 text-blue-600 hover:text-blue-700 hover:underline"
+                                            >
+                                              <Video className="h-2.5 w-2.5" />
+                                              <span className="text-[10px]">Zoom</span>
+                                            </a>
+                                          )}
+                                          {session.room && session.roomNumber && (
+                                            <span className="flex items-center gap-1 text-gray-500">
+                                              <MapPin className="h-2.5 w-2.5" />
+                                              {session.room} {session.roomNumber}
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
-                                      {session.room && session.roomNumber && (
-                                        <span className="flex items-center gap-1 text-gray-500">
-                                          <MapPin className="h-2.5 w-2.5" />
-                                          {session.room} {session.roomNumber}
-                                        </span>
+                                      {session.notes && (
+                                        <div className="ml-4 mt-0.5 text-[10px] text-gray-500 italic">
+                                          {session.notes}
+                                        </div>
                                       )}
                                     </div>
                                   ))}
@@ -2005,6 +2027,7 @@ function UnifiedWeeklyAgenda({
                         room: "",
                         roomNumber: "",
                         notes: "",
+                        zoom_link: "",
                       }
                       setEditingTimeBlock({
                         ...editingTimeBlock,
@@ -2126,6 +2149,26 @@ function UnifiedWeeklyAgenda({
                             })
                           }}
                           placeholder="Optional notes for this session"
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] text-gray-500 flex items-center gap-1">
+                          <Video className="h-3 w-3" />
+                          Zoom Link
+                        </Label>
+                        <Input
+                          value={session.zoom_link || ""}
+                          onChange={(e) => {
+                            const updatedSessions = editingTimeBlock.timeBlock.sessions.map((s) =>
+                              s.id === session.id ? { ...s, zoom_link: e.target.value } : s
+                            )
+                            setEditingTimeBlock({
+                              ...editingTimeBlock,
+                              timeBlock: { ...editingTimeBlock.timeBlock, sessions: updatedSessions },
+                            })
+                          }}
+                          placeholder="https://zoom.us/j/..."
                           className="h-7 text-xs"
                         />
                       </div>
