@@ -1197,6 +1197,8 @@ body: JSON.stringify({
   password: newPassword,
           weekStart: weekInfo.week_start || null,
           weekEnd: weekInfo.week_end || null,
+          userEmail: userEmail,
+          createdByName: userName,
         }),
       })
 

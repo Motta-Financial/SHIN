@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { weekNumber, semesterId, password, weekStart, weekEnd, createdByName } = body
+    const { weekNumber, semesterId, password, weekStart, weekEnd, createdByName, userEmail } = body
 
     if (!weekNumber || !semesterId || !password) {
       return NextResponse.json(
@@ -58,49 +58,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
-
-    // Get current user for created_by field
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+    if (!userEmail) {
+      return NextResponse.json({ error: "User email is required for authorization" }, { status: 400 })
     }
 
-    // Check if user is a director or admin
-    const userEmail = user.email
-    console.log("[v0] Attendance password - user email:", userEmail)
+    // Use service role client for all operations
+    const serviceClient = getServiceClient()
 
-    // Check if user is in directors_current
-    const { data: director } = await supabase
+    // Check if user is in directors_current (by email passed from client)
+    const { data: director } = await serviceClient
       .from("directors_current")
-      .select("id, email")
+      .select("id, email, full_name")
       .eq("email", userEmail)
       .single()
 
-    // Check if user is an admin
-    const { data: profile } = await supabase
+    // Check if user is an admin (by email in profiles)
+    const { data: adminProfile } = await serviceClient
       .from("profiles")
-      .select("is_admin")
-      .eq("id", user.id)
-      .single()
+      .select("id, is_admin, full_name")
+      .eq("is_admin", true)
+      .limit(100)
+
+    // Find if current email matches any admin
+    const { data: authUser } = await serviceClient.auth.admin.getUserByEmail(userEmail)
+    const isAdmin = authUser?.user ? adminProfile?.some(p => p.id === authUser.user.id) : false
 
     const isDirector = !!director
-    const isAdmin = profile?.is_admin === true
-
-    console.log("[v0] Attendance password - isDirector:", isDirector, "isAdmin:", isAdmin)
-
+    
     if (!isDirector && !isAdmin) {
       return NextResponse.json(
         { error: "Only directors and admins can set attendance passwords" },
         { status: 403 },
       )
     }
-
-    // Use service role client for write operation (already authorized above)
-    const serviceClient = getServiceClient()
 
     // Generate default dates if not provided (assuming Spring 2026 starts Jan 13, 2026)
     const defaultWeekStart = weekStart || new Date(2026, 0, 13 + (weekNumber - 1) * 7).toISOString().split("T")[0]
@@ -116,8 +106,8 @@ export async function POST(request: NextRequest) {
           password,
           week_start: defaultWeekStart,
           week_end: defaultWeekEnd,
-          created_by: user?.id || null,
-          created_by_name: createdByName || user?.email || "Admin",
+          created_by: authUser?.user?.id || null,
+          created_by_name: createdByName || director?.full_name || userEmail,
           updated_at: new Date().toISOString(),
         },
         {
