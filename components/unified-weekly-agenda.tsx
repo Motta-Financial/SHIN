@@ -1036,7 +1036,6 @@ const timeBlockToAdd: TimeBlock = {
   const downloadAgendaPDF = async () => {
     if (!selectedSchedule) return
     
-    // Dynamically import jspdf
     const { default: jsPDF } = await import('jspdf')
     
     const doc = new jsPDF({
@@ -1046,216 +1045,255 @@ const timeBlockToAdd: TimeBlock = {
     })
     
     const pageWidth = doc.internal.pageSize.getWidth()
-    const margin = 15
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const margin = 12
     const contentWidth = pageWidth - (margin * 2)
     let yPos = margin
     
     // Colors
-    const primaryColor: [number, number, number] = [17, 34, 80] // #112250
-    const grayColor: [number, number, number] = [100, 100, 100]
-    const lightGray: [number, number, number] = [200, 200, 200]
+    const navy: [number, number, number] = [17, 34, 80]
+    const darkGray: [number, number, number] = [60, 60, 60]
+    const mediumGray: [number, number, number] = [120, 120, 120]
+    const lightBg: [number, number, number] = [248, 250, 252]
     
-    // Activity type colors for left border
     const activityColors: Record<string, [number, number, number]> = {
-      blue: [59, 130, 246],    // All Hands
-      teal: [20, 184, 166],    // Clinic Sessions
-      amber: [245, 158, 11],   // Client Work Time
-      slate: [100, 116, 139],  // Wrap Up
-      green: [34, 197, 94],
-      purple: [168, 85, 247],
+      blue: [37, 99, 235],
+      teal: [13, 148, 136],
+      amber: [217, 119, 6],
+      slate: [71, 85, 105],
+      green: [22, 163, 74],
+      purple: [147, 51, 234],
     }
     
-    // Header - SEED Logo text
-    doc.setFontSize(24)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...primaryColor)
-    doc.text('SEED', margin, yPos + 8)
-    
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...grayColor)
-    doc.text('Small Business & Entrepreneurship Education Development', margin + 25, yPos + 5)
-    doc.text('Suffolk University', margin + 25, yPos + 10)
-    
-    yPos += 20
-    
-    // Week Header
-    doc.setFontSize(18)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...primaryColor)
-    doc.text(`Week ${selectedSchedule.week_number}`, margin, yPos)
-    
-    // Date range
+    // Format date helper
     const formatDate = (dateStr: string) => {
+      const date = new Date(dateStr + 'T00:00:00')
+      return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+    }
+    const formatShortDate = (dateStr: string) => {
       const date = new Date(dateStr + 'T00:00:00')
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     }
-    doc.setFontSize(11)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...grayColor)
-    doc.text(`${formatDate(selectedSchedule.week_start)} - ${formatDate(selectedSchedule.week_end)}`, margin, yPos + 6)
     
-    // Session focus badge (if exists)
+    // ===== HEADER SECTION =====
+    // Navy header bar
+    doc.setFillColor(...navy)
+    doc.rect(0, 0, pageWidth, 28, 'F')
+    
+    // SEED Title
+    doc.setFontSize(28)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(255, 255, 255)
+    doc.text('SEED', margin, 18)
+    
+    // Program name
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.text('Small Business & Entrepreneurship Education Development', margin + 32, 14)
+    doc.setFontSize(9)
+    doc.text('Suffolk University', margin + 32, 20)
+    
+    // Week number on right
+    doc.setFontSize(24)
+    doc.setFont('helvetica', 'bold')
+    doc.text(`WEEK ${selectedSchedule.week_number}`, pageWidth - margin - 35, 18)
+    
+    yPos = 38
+    
+    // ===== DATE & TOPIC ROW =====
+    doc.setFillColor(...lightBg)
+    doc.rect(margin, yPos, contentWidth, 14, 'F')
+    
+    doc.setFontSize(13)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...navy)
+    doc.text(`${formatShortDate(selectedSchedule.week_start)} - ${formatShortDate(selectedSchedule.week_end)}`, margin + 4, yPos + 9)
+    
+    // Topic badge
     if (selectedSchedule.session_focus) {
-      doc.setFontSize(9)
-      doc.setFillColor(213, 204, 171) // #D5CCAB
-      const focusWidth = doc.getTextWidth(selectedSchedule.session_focus) + 6
-      doc.roundedRect(pageWidth - margin - focusWidth - 5, yPos - 5, focusWidth + 4, 7, 2, 2, 'F')
-      doc.setTextColor(80, 81, 67) // #505143
-      doc.text(selectedSchedule.session_focus, pageWidth - margin - focusWidth - 3, yPos)
+      doc.setFillColor(213, 204, 171)
+      const focusText = selectedSchedule.session_focus
+      doc.setFontSize(10)
+      const focusWidth = doc.getTextWidth(focusText) + 8
+      doc.roundedRect(pageWidth - margin - focusWidth - 4, yPos + 3, focusWidth, 8, 2, 2, 'F')
+      doc.setTextColor(70, 70, 50)
+      doc.setFont('helvetica', 'bold')
+      doc.text(focusText, pageWidth - margin - focusWidth, yPos + 9)
     }
     
-    yPos += 15
+    yPos = 58
     
-    // Divider line
-    doc.setDrawColor(...lightGray)
-    doc.setLineWidth(0.5)
-    doc.line(margin, yPos, pageWidth - margin, yPos)
+    // ===== AGENDA TITLE =====
+    doc.setFontSize(14)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...navy)
+    doc.text('CLASS AGENDA', margin, yPos)
+    
+    const activities = selectedSchedule.activities || []
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...mediumGray)
+    doc.text(`${activities.length} Activities`, pageWidth - margin - 25, yPos)
+    
     yPos += 8
     
-    // COURSE AGENDA header
-    doc.setFontSize(11)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...primaryColor)
-    doc.text('COURSE AGENDA', margin, yPos)
+    // Divider
+    doc.setDrawColor(200, 200, 200)
+    doc.setLineWidth(0.3)
+    doc.line(margin, yPos, pageWidth - margin, yPos)
+    yPos += 6
     
-    // Activity count
-    const activityCount = selectedSchedule.activities?.length || 0
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...grayColor)
-    doc.text(`${activityCount} activities`, pageWidth - margin - 25, yPos)
+    // ===== ACTIVITIES =====
+    const timeColWidth = 28
+    const activityStartX = margin + timeColWidth
     
-    yPos += 10
-    
-    // Activities
-    const activities = selectedSchedule.activities || []
-    
-    for (const block of activities) {
-      // Check if we need a new page
-      if (yPos > 250) {
+    for (let i = 0; i < activities.length; i++) {
+      const block = activities[i]
+      const sessionCount = block.sessions?.length || 0
+      const hasNotes = block.sessions?.some((s: { notes?: string }) => s.notes)
+      const baseHeight = 18
+      const sessionHeight = hasNotes ? 14 : 10
+      const blockHeight = baseHeight + (sessionCount * sessionHeight)
+      
+      // Check page break
+      if (yPos + blockHeight > pageHeight - 25) {
         doc.addPage()
-        yPos = margin
+        yPos = margin + 10
       }
       
-      const blockHeight = 10 + (block.sessions.length * 6) + 5
+      // Left color bar
+      const barColor = activityColors[block.color] || activityColors.slate
+      doc.setFillColor(...barColor)
+      doc.roundedRect(margin, yPos, 4, blockHeight - 2, 1, 1, 'F')
       
-      // Activity card background
-      doc.setFillColor(250, 250, 250)
-      doc.roundedRect(margin, yPos, contentWidth, blockHeight, 2, 2, 'F')
-      
-      // Left color border
-      const borderColor = activityColors[block.color] || activityColors.slate
-      doc.setFillColor(...borderColor)
-      doc.rect(margin, yPos, 3, blockHeight, 'F')
-      
-      // Time and title
-      doc.setFontSize(12)
+      // Time column
+      doc.setFontSize(16)
       doc.setFont('helvetica', 'bold')
-      doc.setTextColor(0, 0, 0)
-      doc.text(block.time, margin + 6, yPos + 6)
+      doc.setTextColor(...darkGray)
+      doc.text(block.time, margin + 8, yPos + 8)
       
-      doc.setFont('helvetica', 'bold')
-      doc.text(block.activity, margin + 30, yPos + 6)
-      
-      // Duration and session count
       doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
-      doc.setTextColor(...grayColor)
-      doc.text(`${block.duration} min`, margin + 6, yPos + 11)
-      doc.text(`${block.sessions.length} session(s)`, margin + 25, yPos + 11)
+      doc.setTextColor(...mediumGray)
+      doc.text(`${block.duration} min`, margin + 8, yPos + 14)
       
-      // Sessions
-      let sessionY = yPos + 16
-      for (const session of block.sessions) {
-        doc.setFontSize(9)
+      // Activity name
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...darkGray)
+      doc.text(block.activity, activityStartX + 8, yPos + 8)
+      
+      // Session count
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...mediumGray)
+      doc.text(`${sessionCount} session${sessionCount !== 1 ? 's' : ''}`, activityStartX + 8, yPos + 14)
+      
+      // Sessions list
+      let sessionY = yPos + 20
+      const sessions = block.sessions || []
+      
+      for (const session of sessions) {
+        // Team/Clinic name
+        doc.setFontSize(11)
         doc.setFont('helvetica', 'normal')
-        doc.setTextColor(0, 0, 0)
+        doc.setTextColor(...darkGray)
+        doc.text(`${session.team}`, activityStartX + 12, sessionY)
         
-        // Team name
-        doc.text(session.team, margin + 8, sessionY)
-        
-        // Director initials badge
+        // Director initials
         if (session.directorInitials) {
-          const initialsX = margin + 8 + doc.getTextWidth(session.team) + 3
+          const teamWidth = doc.getTextWidth(session.team)
           doc.setFillColor(229, 231, 235)
-          doc.roundedRect(initialsX, sessionY - 3, 10, 4, 1, 1, 'F')
-          doc.setFontSize(7)
-          doc.text(session.directorInitials, initialsX + 1.5, sessionY)
+          doc.roundedRect(activityStartX + 14 + teamWidth, sessionY - 3.5, 12, 5, 1, 1, 'F')
+          doc.setFontSize(8)
+          doc.setFont('helvetica', 'bold')
+          doc.setTextColor(80, 80, 80)
+          doc.text(session.directorInitials, activityStartX + 16 + teamWidth, sessionY)
         }
         
-        // Room
+        // Room info on right
         if (session.room || session.roomNumber) {
-          doc.setFontSize(8)
-          doc.setTextColor(...grayColor)
-          const roomText = `${session.room} ${session.roomNumber}`.trim()
-          doc.text(roomText, pageWidth - margin - 20, sessionY)
+          doc.setFontSize(10)
+          doc.setFont('helvetica', 'normal')
+          doc.setTextColor(...mediumGray)
+          const roomText = `${session.room || ''} ${session.roomNumber || ''}`.trim()
+          doc.text(roomText, pageWidth - margin - doc.getTextWidth(roomText), sessionY)
         }
         
-        // Notes (italicized)
+        // Notes
         if (session.notes) {
-          doc.setFontSize(8)
+          doc.setFontSize(9)
           doc.setFont('helvetica', 'italic')
           doc.setTextColor(100, 100, 100)
-          doc.text(session.notes, margin + 10, sessionY + 4)
+          doc.text(session.notes, activityStartX + 16, sessionY + 5)
+          sessionY += 14
+        } else {
+          sessionY += 10
         }
-        
-        sessionY += session.notes ? 9 : 5
       }
       
-      yPos += blockHeight + 5
+      yPos += blockHeight + 4
+      
+      // Light separator between activities
+      if (i < activities.length - 1) {
+        doc.setDrawColor(230, 230, 230)
+        doc.setLineWidth(0.2)
+        doc.line(margin + 8, yPos - 2, pageWidth - margin, yPos - 2)
+      }
     }
     
-    // Assignments section (if any)
-    if (selectedSchedule.assignments && selectedSchedule.assignments.length > 0) {
-      yPos += 5
+    // ===== ASSIGNMENTS SECTION =====
+    const assignments = selectedSchedule.assignments || []
+    if (assignments.length > 0) {
+      yPos += 8
       
-      if (yPos > 240) {
+      if (yPos > pageHeight - 50) {
         doc.addPage()
-        yPos = margin
+        yPos = margin + 10
       }
       
-      doc.setFontSize(11)
+      doc.setFontSize(14)
       doc.setFont('helvetica', 'bold')
-      doc.setTextColor(...primaryColor)
+      doc.setTextColor(...navy)
       doc.text('ASSIGNMENTS', margin, yPos)
       yPos += 8
       
-      for (const assignment of selectedSchedule.assignments) {
-        doc.setFontSize(10)
+      for (const assignment of assignments) {
+        doc.setFillColor(...lightBg)
+        doc.roundedRect(margin, yPos, contentWidth, 16, 2, 2, 'F')
+        
+        doc.setFontSize(11)
         doc.setFont('helvetica', 'bold')
-        doc.setTextColor(0, 0, 0)
-        doc.text(`• ${assignment.title}`, margin + 3, yPos)
+        doc.setTextColor(...darkGray)
+        doc.text(assignment.title, margin + 4, yPos + 6)
         
         if (assignment.description) {
           doc.setFontSize(9)
           doc.setFont('helvetica', 'normal')
-          doc.setTextColor(...grayColor)
-          doc.text(assignment.description, margin + 8, yPos + 5)
-          yPos += 5
+          doc.setTextColor(...mediumGray)
+          doc.text(assignment.description, margin + 4, yPos + 12)
         }
         
         if (assignment.dueDate) {
-          doc.setFontSize(8)
-          doc.setTextColor(200, 50, 50)
-          doc.text(`Due: ${assignment.dueDate}`, margin + 8, yPos + 5)
-          yPos += 5
+          doc.setFontSize(9)
+          doc.setFont('helvetica', 'bold')
+          doc.setTextColor(185, 28, 28)
+          doc.text(`Due: ${assignment.dueDate}`, pageWidth - margin - 35, yPos + 6)
         }
         
-        yPos += 8
+        yPos += 20
       }
     }
     
-    // Footer
-    const footerY = doc.internal.pageSize.getHeight() - 10
+    // ===== FOOTER =====
     doc.setFontSize(8)
     doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...grayColor)
-    doc.text(`Generated on ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`, margin, footerY)
-    doc.text('SEED Program - Suffolk University', pageWidth - margin - 45, footerY)
+    doc.setTextColor(...mediumGray)
+    doc.text(formatDate(selectedSchedule.week_start), margin, pageHeight - 8)
+    doc.text('SEED Program - Suffolk University', pageWidth - margin - 42, pageHeight - 8)
     
-    // Save the PDF
-    const fileName = `SEED_Week${selectedSchedule.week_number}_Agenda_${selectedSchedule.week_start}.pdf`
+    // Save
+    const fileName = `SEED_Week${selectedSchedule.week_number}_Agenda.pdf`
     doc.save(fileName)
   }
 
