@@ -27,6 +27,8 @@ import {
   MapPin,
   Save,
   Download,
+  Send,
+  CheckCircle,
 } from "lucide-react"
 
 interface Activity {
@@ -2018,6 +2020,38 @@ const timeBlockToAdd: TimeBlock = {
                       <p className="text-xs text-gray-400 italic">No recordings added for this week.</p>
                     )}
                   </div>
+                  
+                  {/* Publish to Students Button */}
+                  {!isStudentView && (
+                    <div className="px-4 py-4 flex justify-center">
+                      <Button
+                        onClick={() => handlePublishAgenda(selectedSchedule)}
+                        disabled={publishing}
+                        className={`gap-2 px-6 ${
+                          publishSuccess === selectedSchedule.week_number
+                            ? 'bg-green-600 hover:bg-green-700'
+                            : 'bg-[#112250] hover:bg-[#1a3470]'
+                        } text-white`}
+                      >
+                        {publishing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Publishing...
+                          </>
+                        ) : publishSuccess === selectedSchedule.week_number ? (
+                          <>
+                            <CheckCircle className="h-4 w-4" />
+                            Published!
+                          </>
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4" />
+                            Publish to Students
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
