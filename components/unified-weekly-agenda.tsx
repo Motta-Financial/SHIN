@@ -26,6 +26,7 @@ import {
   Loader2,
   MapPin,
   Save,
+  Download,
 } from "lucide-react"
 
 interface Activity {
@@ -1031,6 +1032,233 @@ const timeBlockToAdd: TimeBlock = {
     await updateSchedule(schedule.id, { recording_links: updatedRecordings })
   }
 
+  // PDF Download function for agenda
+  const downloadAgendaPDF = async () => {
+    if (!selectedSchedule) return
+    
+    // Dynamically import jspdf
+    const { default: jsPDF } = await import('jspdf')
+    
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'letter'
+    })
+    
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const margin = 15
+    const contentWidth = pageWidth - (margin * 2)
+    let yPos = margin
+    
+    // Colors
+    const primaryColor: [number, number, number] = [17, 34, 80] // #112250
+    const grayColor: [number, number, number] = [100, 100, 100]
+    const lightGray: [number, number, number] = [200, 200, 200]
+    
+    // Activity type colors for left border
+    const activityColors: Record<string, [number, number, number]> = {
+      blue: [59, 130, 246],    // All Hands
+      teal: [20, 184, 166],    // Clinic Sessions
+      amber: [245, 158, 11],   // Client Work Time
+      slate: [100, 116, 139],  // Wrap Up
+      green: [34, 197, 94],
+      purple: [168, 85, 247],
+    }
+    
+    // Header - SEED Logo text
+    doc.setFontSize(24)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...primaryColor)
+    doc.text('SEED', margin, yPos + 8)
+    
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...grayColor)
+    doc.text('Small Business & Entrepreneurship Education Development', margin + 25, yPos + 5)
+    doc.text('Suffolk University', margin + 25, yPos + 10)
+    
+    yPos += 20
+    
+    // Week Header
+    doc.setFontSize(18)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...primaryColor)
+    doc.text(`Week ${selectedSchedule.week_number}`, margin, yPos)
+    
+    // Date range
+    const formatDate = (dateStr: string) => {
+      const date = new Date(dateStr + 'T00:00:00')
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    }
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...grayColor)
+    doc.text(`${formatDate(selectedSchedule.week_start)} - ${formatDate(selectedSchedule.week_end)}`, margin, yPos + 6)
+    
+    // Session focus badge (if exists)
+    if (selectedSchedule.session_focus) {
+      doc.setFontSize(9)
+      doc.setFillColor(213, 204, 171) // #D5CCAB
+      const focusWidth = doc.getTextWidth(selectedSchedule.session_focus) + 6
+      doc.roundedRect(pageWidth - margin - focusWidth - 5, yPos - 5, focusWidth + 4, 7, 2, 2, 'F')
+      doc.setTextColor(80, 81, 67) // #505143
+      doc.text(selectedSchedule.session_focus, pageWidth - margin - focusWidth - 3, yPos)
+    }
+    
+    yPos += 15
+    
+    // Divider line
+    doc.setDrawColor(...lightGray)
+    doc.setLineWidth(0.5)
+    doc.line(margin, yPos, pageWidth - margin, yPos)
+    yPos += 8
+    
+    // COURSE AGENDA header
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...primaryColor)
+    doc.text('COURSE AGENDA', margin, yPos)
+    
+    // Activity count
+    const activityCount = selectedSchedule.activities?.length || 0
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...grayColor)
+    doc.text(`${activityCount} activities`, pageWidth - margin - 25, yPos)
+    
+    yPos += 10
+    
+    // Activities
+    const activities = selectedSchedule.activities || []
+    
+    for (const block of activities) {
+      // Check if we need a new page
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = margin
+      }
+      
+      const blockHeight = 10 + (block.sessions.length * 6) + 5
+      
+      // Activity card background
+      doc.setFillColor(250, 250, 250)
+      doc.roundedRect(margin, yPos, contentWidth, blockHeight, 2, 2, 'F')
+      
+      // Left color border
+      const borderColor = activityColors[block.color] || activityColors.slate
+      doc.setFillColor(...borderColor)
+      doc.rect(margin, yPos, 3, blockHeight, 'F')
+      
+      // Time and title
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(0, 0, 0)
+      doc.text(block.time, margin + 6, yPos + 6)
+      
+      doc.setFont('helvetica', 'bold')
+      doc.text(block.activity, margin + 30, yPos + 6)
+      
+      // Duration and session count
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...grayColor)
+      doc.text(`${block.duration} min`, margin + 6, yPos + 11)
+      doc.text(`${block.sessions.length} session(s)`, margin + 25, yPos + 11)
+      
+      // Sessions
+      let sessionY = yPos + 16
+      for (const session of block.sessions) {
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(0, 0, 0)
+        
+        // Team name
+        doc.text(session.team, margin + 8, sessionY)
+        
+        // Director initials badge
+        if (session.directorInitials) {
+          const initialsX = margin + 8 + doc.getTextWidth(session.team) + 3
+          doc.setFillColor(229, 231, 235)
+          doc.roundedRect(initialsX, sessionY - 3, 10, 4, 1, 1, 'F')
+          doc.setFontSize(7)
+          doc.text(session.directorInitials, initialsX + 1.5, sessionY)
+        }
+        
+        // Room
+        if (session.room || session.roomNumber) {
+          doc.setFontSize(8)
+          doc.setTextColor(...grayColor)
+          const roomText = `${session.room} ${session.roomNumber}`.trim()
+          doc.text(roomText, pageWidth - margin - 20, sessionY)
+        }
+        
+        // Notes (italicized)
+        if (session.notes) {
+          doc.setFontSize(8)
+          doc.setFont('helvetica', 'italic')
+          doc.setTextColor(100, 100, 100)
+          doc.text(session.notes, margin + 10, sessionY + 4)
+        }
+        
+        sessionY += session.notes ? 9 : 5
+      }
+      
+      yPos += blockHeight + 5
+    }
+    
+    // Assignments section (if any)
+    if (selectedSchedule.assignments && selectedSchedule.assignments.length > 0) {
+      yPos += 5
+      
+      if (yPos > 240) {
+        doc.addPage()
+        yPos = margin
+      }
+      
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...primaryColor)
+      doc.text('ASSIGNMENTS', margin, yPos)
+      yPos += 8
+      
+      for (const assignment of selectedSchedule.assignments) {
+        doc.setFontSize(10)
+        doc.setFont('helvetica', 'bold')
+        doc.setTextColor(0, 0, 0)
+        doc.text(`• ${assignment.title}`, margin + 3, yPos)
+        
+        if (assignment.description) {
+          doc.setFontSize(9)
+          doc.setFont('helvetica', 'normal')
+          doc.setTextColor(...grayColor)
+          doc.text(assignment.description, margin + 8, yPos + 5)
+          yPos += 5
+        }
+        
+        if (assignment.dueDate) {
+          doc.setFontSize(8)
+          doc.setTextColor(200, 50, 50)
+          doc.text(`Due: ${assignment.dueDate}`, margin + 8, yPos + 5)
+          yPos += 5
+        }
+        
+        yPos += 8
+      }
+    }
+    
+    // Footer
+    const footerY = doc.internal.pageSize.getHeight() - 10
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...grayColor)
+    doc.text(`Generated on ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`, margin, footerY)
+    doc.text('SEED Program - Suffolk University', pageWidth - margin - 45, footerY)
+    
+    // Save the PDF
+    const fileName = `SEED_Week${selectedSchedule.week_number}_Agenda_${selectedSchedule.week_start}.pdf`
+    doc.save(fileName)
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between px-1">
@@ -1039,13 +1267,24 @@ const timeBlockToAdd: TimeBlock = {
           Unified Course & Weekly Agenda - {semester}
         </h2>
         {!isStudentView && (
-          <Dialog open={showAddWeekDialog} onOpenChange={setShowAddWeekDialog}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="gap-1" style={{ backgroundColor: "#112250" }}>
-                <Plus className="h-4 w-4" />
-                Add Week
-              </Button>
-            </DialogTrigger>
+          <div className="flex gap-2">
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="gap-1 bg-transparent"
+              onClick={downloadAgendaPDF}
+              disabled={!selectedSchedule}
+            >
+              <Download className="h-4 w-4" />
+              Download Agenda
+            </Button>
+            <Dialog open={showAddWeekDialog} onOpenChange={setShowAddWeekDialog}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="gap-1" style={{ backgroundColor: "#112250" }}>
+                  <Plus className="h-4 w-4" />
+                  Add Week
+                </Button>
+              </DialogTrigger>
             {/* Add Week Dialog Content - unchanged */}
             <DialogContent>
               <DialogHeader>
@@ -1113,7 +1352,8 @@ const timeBlockToAdd: TimeBlock = {
                 <Button onClick={addWeek}>Add Week</Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+          </div>
         )}
       </div>
 
