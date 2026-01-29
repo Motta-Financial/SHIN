@@ -908,11 +908,12 @@ const timeBlockToAdd: TimeBlock = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           schedule_date: schedule.week_start || new Date().toISOString().split("T")[0],
-          director_name: "Nick Vadala", // Placeholder, consider fetching dynamically
-          zoom_link: schedule.zoom_link || "https://zoom.us/j/123456789",
-          schedule_data: schedule.activities, // Use 'activities' for TimeBlocks
+          director_name: "SEED Director",
+          zoom_link: schedule.zoom_link || "",
+          schedule_data: schedule.activities,
           notes: schedule.notes,
-          published_by: "director@example.com", // Placeholder, consider fetching dynamically
+          published_by: "director",
+          semester_id: schedule.semester_id,
         }),
       })
 
@@ -973,10 +974,11 @@ const timeBlockToAdd: TimeBlock = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           schedule_date: currentSchedule.week_start || new Date().toISOString().split("T")[0],
-          director_name: "Nick Vadala", // Placeholder, consider fetching dynamically
-          zoom_link: currentSchedule.zoom_link || "https://zoom.us/j/123456789",
-          schedule_data: currentSchedule.activities, // Use 'activities' for TimeBlocks
+          director_name: "SEED Director",
+          zoom_link: currentSchedule.zoom_link || "",
+          schedule_data: currentSchedule.activities,
           notes: currentSchedule.notes,
+          semester_id: currentSchedule.semester_id,
           published_by: "director@example.com", // Placeholder, consider fetching dynamically
         }),
       })
