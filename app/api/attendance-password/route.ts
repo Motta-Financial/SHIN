@@ -1,5 +1,18 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/utils/supabase/server"
+import { createClient as createServiceClient } from "@supabase/supabase-js"
+
+// Service role client for admin operations (bypasses RLS after authorization check)
+function getServiceClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.supabase_SUPABASE_SERVICE_ROLE_KEY
+  
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Missing Supabase credentials for service client")
+  }
+  
+  return createServiceClient(supabaseUrl, serviceRoleKey)
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -52,12 +65,49 @@ export async function POST(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser()
 
+    if (!user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+    }
+
+    // Check if user is a director or admin
+    const userEmail = user.email
+    console.log("[v0] Attendance password - user email:", userEmail)
+
+    // Check if user is in directors_current
+    const { data: director } = await supabase
+      .from("directors_current")
+      .select("id, email")
+      .eq("email", userEmail)
+      .single()
+
+    // Check if user is an admin
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", user.id)
+      .single()
+
+    const isDirector = !!director
+    const isAdmin = profile?.is_admin === true
+
+    console.log("[v0] Attendance password - isDirector:", isDirector, "isAdmin:", isAdmin)
+
+    if (!isDirector && !isAdmin) {
+      return NextResponse.json(
+        { error: "Only directors and admins can set attendance passwords" },
+        { status: 403 },
+      )
+    }
+
+    // Use service role client for write operation (already authorized above)
+    const serviceClient = getServiceClient()
+
     // Generate default dates if not provided (assuming Spring 2026 starts Jan 13, 2026)
     const defaultWeekStart = weekStart || new Date(2026, 0, 13 + (weekNumber - 1) * 7).toISOString().split("T")[0]
     const defaultWeekEnd = weekEnd || new Date(2026, 0, 19 + (weekNumber - 1) * 7).toISOString().split("T")[0]
 
     // Upsert the password (update if exists, insert if not)
-    const { data, error } = await supabase
+    const { data, error } = await serviceClient
       .from("attendance_passwords")
       .upsert(
         {
@@ -100,7 +150,44 @@ export async function DELETE(request: NextRequest) {
 
     const supabase = await createClient()
 
-    const { error } = await supabase.from("attendance_passwords").delete().eq("id", id)
+    // Verify user is authenticated
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+    }
+
+    // Check if user is a director or admin
+    const userEmail = user.email
+
+    const { data: director } = await supabase
+      .from("directors_current")
+      .select("id, email")
+      .eq("email", userEmail)
+      .single()
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", user.id)
+      .single()
+
+    const isDirector = !!director
+    const isAdmin = profile?.is_admin === true
+
+    if (!isDirector && !isAdmin) {
+      return NextResponse.json(
+        { error: "Only directors and admins can delete attendance passwords" },
+        { status: 403 },
+      )
+    }
+
+    // Use service role client for delete operation
+    const serviceClient = getServiceClient()
+
+    const { error } = await serviceClient.from("attendance_passwords").delete().eq("id", id)
 
     if (error) {
       console.error("[v0] Error deleting attendance password:", error)
