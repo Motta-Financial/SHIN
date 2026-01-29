@@ -1050,251 +1050,241 @@ const timeBlockToAdd: TimeBlock = {
     
     const pageWidth = doc.internal.pageSize.getWidth()
     const pageHeight = doc.internal.pageSize.getHeight()
-    const margin = 12
+    const margin = 15
     const contentWidth = pageWidth - (margin * 2)
-    let yPos = margin
+    let yPos = 0
     
     // Colors
     const navy: [number, number, number] = [17, 34, 80]
-    const darkGray: [number, number, number] = [60, 60, 60]
-    const mediumGray: [number, number, number] = [120, 120, 120]
-    const lightBg: [number, number, number] = [248, 250, 252]
+    const white: [number, number, number] = [255, 255, 255]
+    const black: [number, number, number] = [30, 30, 30]
+    const gray: [number, number, number] = [100, 100, 100]
+    const lightGray: [number, number, number] = [245, 245, 245]
+    const borderGray: [number, number, number] = [220, 220, 220]
     
     const activityColors: Record<string, [number, number, number]> = {
-      blue: [37, 99, 235],
-      teal: [13, 148, 136],
-      amber: [217, 119, 6],
-      slate: [71, 85, 105],
-      green: [22, 163, 74],
-      purple: [147, 51, 234],
+      blue: [59, 130, 246],
+      teal: [20, 184, 166],
+      amber: [245, 158, 11],
+      slate: [100, 116, 139],
+      green: [34, 197, 94],
+      purple: [168, 85, 247],
     }
     
     // Format date helper
-    const formatDate = (dateStr: string) => {
-      const date = new Date(dateStr + 'T00:00:00')
-      return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-    }
     const formatShortDate = (dateStr: string) => {
       const date = new Date(dateStr + 'T00:00:00')
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
     }
     
-    // ===== HEADER SECTION =====
-    // Navy header bar
+    // ===== HEADER BAR =====
     doc.setFillColor(...navy)
-    doc.rect(0, 0, pageWidth, 28, 'F')
+    doc.rect(0, 0, pageWidth, 22, 'F')
     
-    // SEED Title
-    doc.setFontSize(28)
+    // Suffolk University SEED
+    doc.setFontSize(18)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(255, 255, 255)
-    doc.text('SEED', margin, 18)
+    doc.setTextColor(...white)
+    doc.text('Suffolk University', margin, 14)
+    doc.setFontSize(18)
+    doc.text('SEED', margin + doc.getTextWidth('Suffolk University') + 4, 14)
     
-    // Program name
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
-    doc.text('Small Business & Entrepreneurship Education Development', margin + 32, 14)
-    doc.setFontSize(9)
-    doc.text('Suffolk University', margin + 32, 20)
-    
-    // Week number on right
-    doc.setFontSize(24)
-    doc.setFont('helvetica', 'bold')
-    doc.text(`WEEK ${selectedSchedule.week_number}`, pageWidth - margin - 35, 18)
-    
-    yPos = 38
-    
-    // ===== DATE & TOPIC ROW =====
-    doc.setFillColor(...lightBg)
-    doc.rect(margin, yPos, contentWidth, 14, 'F')
-    
-    doc.setFontSize(13)
+    // Week badge on right
+    doc.setFillColor(...white)
+    doc.roundedRect(pageWidth - margin - 32, 6, 32, 10, 2, 2, 'F')
+    doc.setFontSize(11)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(...navy)
-    doc.text(`${formatShortDate(selectedSchedule.week_start)} - ${formatShortDate(selectedSchedule.week_end)}`, margin + 4, yPos + 9)
+    doc.text(`Week ${selectedSchedule.week_number}`, pageWidth - margin - 30, 13)
     
-    // Topic badge
-    if (selectedSchedule.session_focus) {
-      doc.setFillColor(213, 204, 171)
-      const focusText = selectedSchedule.session_focus
-      doc.setFontSize(10)
-      const focusWidth = doc.getTextWidth(focusText) + 8
-      doc.roundedRect(pageWidth - margin - focusWidth - 4, yPos + 3, focusWidth, 8, 2, 2, 'F')
-      doc.setTextColor(70, 70, 50)
-      doc.setFont('helvetica', 'bold')
-      doc.text(focusText, pageWidth - margin - focusWidth, yPos + 9)
-    }
+    yPos = 30
     
-    yPos = 58
-    
-    // ===== AGENDA TITLE =====
+    // ===== DATE ROW =====
     doc.setFontSize(14)
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...navy)
-    doc.text('CLASS AGENDA', margin, yPos)
+    doc.setTextColor(...black)
+    doc.text(`${formatShortDate(selectedSchedule.week_start)} - ${formatShortDate(selectedSchedule.week_end)}`, margin, yPos)
     
-    const activities = selectedSchedule.activities || []
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...mediumGray)
-    doc.text(`${activities.length} Activities`, pageWidth - margin - 25, yPos)
+    // Topic badge (if exists)
+    if (selectedSchedule.session_focus) {
+      doc.setFillColor(243, 232, 196)
+      const focusText = selectedSchedule.session_focus
+      doc.setFontSize(10)
+      const focusWidth = doc.getTextWidth(focusText) + 10
+      doc.roundedRect(pageWidth - margin - focusWidth, yPos - 5, focusWidth, 7, 2, 2, 'F')
+      doc.setTextColor(120, 100, 40)
+      doc.setFont('helvetica', 'bold')
+      doc.text(focusText, pageWidth - margin - focusWidth + 5, yPos)
+    }
+    
+    yPos += 10
+    
+    // Divider line
+    doc.setDrawColor(...borderGray)
+    doc.setLineWidth(0.5)
+    doc.line(margin, yPos, pageWidth - margin, yPos)
     
     yPos += 8
     
-    // Divider
-    doc.setDrawColor(200, 200, 200)
-    doc.setLineWidth(0.3)
-    doc.line(margin, yPos, pageWidth - margin, yPos)
-    yPos += 6
-    
     // ===== ACTIVITIES =====
-    const timeColWidth = 28
-    const activityStartX = margin + timeColWidth
+    const activities = selectedSchedule.activities || []
     
     for (let i = 0; i < activities.length; i++) {
       const block = activities[i]
-      const sessionCount = block.sessions?.length || 0
-      const hasNotes = block.sessions?.some((s: { notes?: string }) => s.notes)
-      const baseHeight = 18
-      const sessionHeight = hasNotes ? 14 : 10
-      const blockHeight = baseHeight + (sessionCount * sessionHeight)
+      const sessions = block.sessions || []
+      const sessionCount = sessions.length
+      
+      // Calculate block height
+      let blockContentHeight = 16 // Header height
+      for (const session of sessions) {
+        blockContentHeight += session.notes ? 16 : 10
+      }
+      const blockHeight = Math.max(blockContentHeight, 30)
       
       // Check page break
-      if (yPos + blockHeight > pageHeight - 25) {
+      if (yPos + blockHeight > pageHeight - 20) {
         doc.addPage()
-        yPos = margin + 10
+        yPos = 15
       }
       
-      // Left color bar
+      // Activity card with border
+      doc.setFillColor(...white)
+      doc.setDrawColor(...borderGray)
+      doc.setLineWidth(0.3)
+      doc.roundedRect(margin, yPos, contentWidth, blockHeight, 3, 3, 'FD')
+      
+      // Left color accent bar
       const barColor = activityColors[block.color] || activityColors.slate
       doc.setFillColor(...barColor)
-      doc.roundedRect(margin, yPos, 4, blockHeight - 2, 1, 1, 'F')
+      doc.roundedRect(margin, yPos, 5, blockHeight, 3, 0, 'F')
+      doc.rect(margin + 2, yPos, 3, blockHeight, 'F')
       
-      // Time column
-      doc.setFontSize(16)
+      // Time - large and bold
+      doc.setFontSize(15)
       doc.setFont('helvetica', 'bold')
-      doc.setTextColor(...darkGray)
-      doc.text(block.time, margin + 8, yPos + 8)
+      doc.setTextColor(...black)
+      doc.text(block.time, margin + 10, yPos + 8)
       
+      // Duration below time
       doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
-      doc.setTextColor(...mediumGray)
-      doc.text(`${block.duration} min`, margin + 8, yPos + 14)
+      doc.setTextColor(...gray)
+      doc.text(`${block.duration} min`, margin + 10, yPos + 14)
       
       // Activity name
       doc.setFontSize(14)
       doc.setFont('helvetica', 'bold')
-      doc.setTextColor(...darkGray)
-      doc.text(block.activity, activityStartX + 8, yPos + 8)
+      doc.setTextColor(...black)
+      doc.text(block.activity, margin + 42, yPos + 8)
       
       // Session count
       doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
-      doc.setTextColor(...mediumGray)
-      doc.text(`${sessionCount} session${sessionCount !== 1 ? 's' : ''}`, activityStartX + 8, yPos + 14)
+      doc.setTextColor(...gray)
+      doc.text(`${sessionCount} session${sessionCount !== 1 ? 's' : ''}`, margin + 42, yPos + 14)
       
-      // Sessions list
-      let sessionY = yPos + 20
-      const sessions = block.sessions || []
+      // Sessions
+      let sessionY = yPos + 22
       
       for (const session of sessions) {
-        // Team/Clinic name
+        // Bullet point
+        doc.setFillColor(...barColor)
+        doc.circle(margin + 46, sessionY - 1.5, 1.2, 'F')
+        
+        // Team name
         doc.setFontSize(11)
         doc.setFont('helvetica', 'normal')
-        doc.setTextColor(...darkGray)
-        doc.text(`${session.team}`, activityStartX + 12, sessionY)
+        doc.setTextColor(...black)
+        doc.text(session.team, margin + 50, sessionY)
         
-        // Director initials
+        // Director initials badge
         if (session.directorInitials) {
           const teamWidth = doc.getTextWidth(session.team)
-          doc.setFillColor(229, 231, 235)
-          doc.roundedRect(activityStartX + 14 + teamWidth, sessionY - 3.5, 12, 5, 1, 1, 'F')
-          doc.setFontSize(8)
+          doc.setFillColor(...lightGray)
+          doc.roundedRect(margin + 52 + teamWidth, sessionY - 3.5, 11, 5, 1.5, 1.5, 'F')
+          doc.setFontSize(7)
           doc.setFont('helvetica', 'bold')
-          doc.setTextColor(80, 80, 80)
-          doc.text(session.directorInitials, activityStartX + 16 + teamWidth, sessionY)
+          doc.setTextColor(...gray)
+          doc.text(session.directorInitials, margin + 54 + teamWidth, sessionY)
         }
         
-        // Room info on right
+        // Room on right
         if (session.room || session.roomNumber) {
           doc.setFontSize(10)
           doc.setFont('helvetica', 'normal')
-          doc.setTextColor(...mediumGray)
+          doc.setTextColor(...gray)
           const roomText = `${session.room || ''} ${session.roomNumber || ''}`.trim()
-          doc.text(roomText, pageWidth - margin - doc.getTextWidth(roomText), sessionY)
+          doc.text(roomText, pageWidth - margin - 5 - doc.getTextWidth(roomText), sessionY)
         }
         
         // Notes
         if (session.notes) {
           doc.setFontSize(9)
           doc.setFont('helvetica', 'italic')
-          doc.setTextColor(100, 100, 100)
-          doc.text(session.notes, activityStartX + 16, sessionY + 5)
-          sessionY += 14
+          doc.setTextColor(130, 130, 130)
+          doc.text(session.notes, margin + 50, sessionY + 5)
+          sessionY += 16
         } else {
           sessionY += 10
         }
       }
       
-      yPos += blockHeight + 4
-      
-      // Light separator between activities
-      if (i < activities.length - 1) {
-        doc.setDrawColor(230, 230, 230)
-        doc.setLineWidth(0.2)
-        doc.line(margin + 8, yPos - 2, pageWidth - margin, yPos - 2)
-      }
+      yPos += blockHeight + 5
     }
     
     // ===== ASSIGNMENTS SECTION =====
     const assignments = selectedSchedule.assignments || []
     if (assignments.length > 0) {
-      yPos += 8
+      yPos += 5
       
-      if (yPos > pageHeight - 50) {
+      if (yPos > pageHeight - 45) {
         doc.addPage()
-        yPos = margin + 10
+        yPos = 15
       }
       
-      doc.setFontSize(14)
+      doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(...navy)
       doc.text('ASSIGNMENTS', margin, yPos)
-      yPos += 8
+      yPos += 6
       
       for (const assignment of assignments) {
-        doc.setFillColor(...lightBg)
-        doc.roundedRect(margin, yPos, contentWidth, 16, 2, 2, 'F')
+        const assignmentHeight = assignment.description ? 18 : 12
+        
+        doc.setFillColor(...lightGray)
+        doc.setDrawColor(...borderGray)
+        doc.roundedRect(margin, yPos, contentWidth, assignmentHeight, 2, 2, 'FD')
         
         doc.setFontSize(11)
         doc.setFont('helvetica', 'bold')
-        doc.setTextColor(...darkGray)
-        doc.text(assignment.title, margin + 4, yPos + 6)
+        doc.setTextColor(...black)
+        doc.text(assignment.title, margin + 5, yPos + 7)
         
         if (assignment.description) {
           doc.setFontSize(9)
           doc.setFont('helvetica', 'normal')
-          doc.setTextColor(...mediumGray)
-          doc.text(assignment.description, margin + 4, yPos + 12)
+          doc.setTextColor(...gray)
+          doc.text(assignment.description, margin + 5, yPos + 14)
         }
         
         if (assignment.dueDate) {
           doc.setFontSize(9)
           doc.setFont('helvetica', 'bold')
-          doc.setTextColor(185, 28, 28)
-          doc.text(`Due: ${assignment.dueDate}`, pageWidth - margin - 35, yPos + 6)
+          doc.setTextColor(180, 50, 50)
+          const dueText = `Due: ${assignment.dueDate}`
+          doc.text(dueText, pageWidth - margin - 5 - doc.getTextWidth(dueText), yPos + 7)
         }
         
-        yPos += 20
+        yPos += assignmentHeight + 4
       }
     }
     
     // ===== FOOTER =====
     doc.setFontSize(8)
     doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...mediumGray)
-    doc.text(formatDate(selectedSchedule.week_start), margin, pageHeight - 8)
-    doc.text('SEED Program - Suffolk University', pageWidth - margin - 42, pageHeight - 8)
+    doc.setTextColor(...gray)
+    doc.text('Suffolk University SEED Program', margin, pageHeight - 8)
+    doc.text(`Week ${selectedSchedule.week_number} Agenda`, pageWidth - margin - doc.getTextWidth(`Week ${selectedSchedule.week_number} Agenda`), pageHeight - 8)
     
     // Save
     const fileName = `SEED_Week${selectedSchedule.week_number}_Agenda.pdf`
