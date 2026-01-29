@@ -65,11 +65,12 @@ export async function POST(request: NextRequest) {
     // Use service role client for all operations
     const serviceClient = getServiceClient()
 
-    // Check if user is in directors_current (by email passed from client)
+    // Check if user is in directors table (any semester - all directors can set passwords)
     const { data: director } = await serviceClient
-      .from("directors_current")
+      .from("directors")
       .select("id, email, full_name")
       .eq("email", userEmail)
+      .limit(1)
       .single()
 
     // Check if user is an admin (by email in profiles)
