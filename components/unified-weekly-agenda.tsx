@@ -1130,155 +1130,127 @@ const timeBlockToAdd: TimeBlock = {
     
     // ===== ACTIVITIES =====
     const activities = selectedSchedule.activities || []
+    const assignments = selectedSchedule.assignments || []
+    
+    // Calculate available space and distribute evenly
+    const footerSpace = 12
+    const assignmentSpace = assignments.length > 0 ? 30 : 0
+    const availableHeight = pageHeight - yPos - footerSpace - assignmentSpace
+    const totalActivities = activities.length
+    const cardGap = 4
+    const totalGaps = (totalActivities - 1) * cardGap
+    const cardHeight = Math.floor((availableHeight - totalGaps) / totalActivities)
     
     for (let i = 0; i < activities.length; i++) {
       const block = activities[i]
       const sessions = block.sessions || []
       const sessionCount = sessions.length
       
-      // Calculate block height - increased for better spacing
-      let blockContentHeight = 20 // Header height
-      for (const session of sessions) {
-        blockContentHeight += session.notes ? 18 : 12
-      }
-      const blockHeight = Math.max(blockContentHeight, 35)
-      
-      // Check page break
-      if (yPos + blockHeight > pageHeight - 20) {
-        doc.addPage()
-        yPos = 15
-      }
-      
       // Activity card with border
       doc.setFillColor(...white)
       doc.setDrawColor(...borderGray)
       doc.setLineWidth(0.3)
-      doc.roundedRect(margin, yPos, contentWidth, blockHeight, 3, 3, 'FD')
+      doc.roundedRect(margin, yPos, contentWidth, cardHeight, 2, 2, 'FD')
       
       // Left color accent bar
       const barColor = activityColors[block.color] || activityColors.slate
       doc.setFillColor(...barColor)
-      doc.roundedRect(margin, yPos, 5, blockHeight, 3, 0, 'F')
-      doc.rect(margin + 2, yPos, 3, blockHeight, 'F')
+      doc.roundedRect(margin, yPos, 4, cardHeight, 2, 0, 'F')
+      doc.rect(margin + 2, yPos, 2, cardHeight, 'F')
       
-      // Time - large and bold
-      doc.setFontSize(15)
+      // Time - bold
+      doc.setFontSize(13)
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(...black)
-      doc.text(block.time, margin + 10, yPos + 8)
+      doc.text(block.time, margin + 8, yPos + 6)
       
       // Duration below time
-      doc.setFontSize(9)
+      doc.setFontSize(8)
       doc.setFont('helvetica', 'normal')
       doc.setTextColor(...gray)
-      doc.text(`${block.duration} min`, margin + 10, yPos + 14)
+      doc.text(`${block.duration} min`, margin + 8, yPos + 11)
       
       // Activity name
-      doc.setFontSize(14)
+      doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(...black)
-      doc.text(block.activity, margin + 42, yPos + 8)
+      doc.text(block.activity, margin + 38, yPos + 6)
       
       // Session count
-      doc.setFontSize(9)
+      doc.setFontSize(8)
       doc.setFont('helvetica', 'normal')
       doc.setTextColor(...gray)
-      doc.text(`${sessionCount} session${sessionCount !== 1 ? 's' : ''}`, margin + 42, yPos + 14)
+      doc.text(`${sessionCount} session${sessionCount !== 1 ? 's' : ''}`, margin + 38, yPos + 11)
       
-      // Sessions
-      let sessionY = yPos + 24
+      // Sessions - calculate spacing based on available height in card
+      const sessionAreaStart = yPos + 15
+      const sessionAreaHeight = cardHeight - 17
+      const sessionSpacing = Math.min(sessionAreaHeight / Math.max(sessions.length, 1), 10)
+      let sessionY = sessionAreaStart
       
       for (const session of sessions) {
         // Bullet point
         doc.setFillColor(...barColor)
-        doc.circle(margin + 46, sessionY - 1.5, 1.2, 'F')
+        doc.circle(margin + 42, sessionY, 1, 'F')
         
         // Team name
-        doc.setFontSize(11)
+        doc.setFontSize(9)
         doc.setFont('helvetica', 'normal')
         doc.setTextColor(...black)
-        doc.text(session.team, margin + 50, sessionY)
+        doc.text(session.team, margin + 46, sessionY + 1)
         
         // Director initials badge
         if (session.directorInitials) {
           const teamWidth = doc.getTextWidth(session.team)
           doc.setFillColor(...lightGray)
-          doc.roundedRect(margin + 52 + teamWidth, sessionY - 3.5, 11, 5, 1.5, 1.5, 'F')
-          doc.setFontSize(7)
+          doc.roundedRect(margin + 48 + teamWidth, sessionY - 2, 9, 4, 1, 1, 'F')
+          doc.setFontSize(6)
           doc.setFont('helvetica', 'bold')
           doc.setTextColor(...gray)
-          doc.text(session.directorInitials, margin + 54 + teamWidth, sessionY)
+          doc.text(session.directorInitials, margin + 49.5 + teamWidth, sessionY + 1)
         }
         
         // Room on right
         if (session.room || session.roomNumber) {
-          doc.setFontSize(10)
+          doc.setFontSize(8)
           doc.setFont('helvetica', 'normal')
           doc.setTextColor(...gray)
           const roomText = `${session.room || ''} ${session.roomNumber || ''}`.trim()
-          doc.text(roomText, pageWidth - margin - 5 - doc.getTextWidth(roomText), sessionY)
+          doc.text(roomText, pageWidth - margin - 4 - doc.getTextWidth(roomText), sessionY + 1)
         }
         
-        // Notes
+        // Notes on same line if space allows
         if (session.notes) {
-          doc.setFontSize(9)
+          doc.setFontSize(7)
           doc.setFont('helvetica', 'italic')
-          doc.setTextColor(130, 130, 130)
-          doc.text(session.notes, margin + 50, sessionY + 5)
-          sessionY += 18
-        } else {
-          sessionY += 12
+          doc.setTextColor(140, 140, 140)
+          const noteX = margin + 46 + doc.getTextWidth(session.team) + (session.directorInitials ? 14 : 4)
+          doc.text(`- ${session.notes}`, noteX, sessionY + 1)
         }
+        
+        sessionY += sessionSpacing
       }
       
-      yPos += blockHeight + 8
+      yPos += cardHeight + cardGap
     }
     
-    // ===== ASSIGNMENTS SECTION =====
-    const assignments = selectedSchedule.assignments || []
+// ===== ASSIGNMENTS SECTION =====
     if (assignments.length > 0) {
-      yPos += 5
-      
-      if (yPos > pageHeight - 45) {
-        doc.addPage()
-        yPos = 15
-      }
-      
-      doc.setFontSize(12)
+      doc.setFontSize(10)
       doc.setFont('helvetica', 'bold')
       doc.setTextColor(...navy)
-      doc.text('ASSIGNMENTS', margin, yPos)
-      yPos += 6
+      doc.text('ASSIGNMENTS', margin, yPos + 4)
       
+      let assignX = margin + 32
       for (const assignment of assignments) {
-        const assignmentHeight = assignment.description ? 18 : 12
-        
-        doc.setFillColor(...lightGray)
-        doc.setDrawColor(...borderGray)
-        doc.roundedRect(margin, yPos, contentWidth, assignmentHeight, 2, 2, 'FD')
-        
-        doc.setFontSize(11)
-        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'normal')
         doc.setTextColor(...black)
-        doc.text(assignment.title, margin + 5, yPos + 7)
-        
-        if (assignment.description) {
-          doc.setFontSize(9)
-          doc.setFont('helvetica', 'normal')
-          doc.setTextColor(...gray)
-          doc.text(assignment.description, margin + 5, yPos + 14)
-        }
-        
-        if (assignment.dueDate) {
-          doc.setFontSize(9)
-          doc.setFont('helvetica', 'bold')
-          doc.setTextColor(180, 50, 50)
-          const dueText = `Due: ${assignment.dueDate}`
-          doc.text(dueText, pageWidth - margin - 5 - doc.getTextWidth(dueText), yPos + 7)
-        }
-        
-        yPos += assignmentHeight + 4
+        const assignText = assignment.title + (assignment.dueDate ? ` (Due: ${assignment.dueDate})` : '')
+        doc.text(`• ${assignText}`, assignX, yPos + 4)
+        assignX += doc.getTextWidth(`• ${assignText}`) + 8
       }
+      yPos += 10
     }
     
     // ===== FOOTER =====
