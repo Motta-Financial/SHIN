@@ -1079,45 +1079,47 @@ const timeBlockToAdd: TimeBlock = {
     
     // ===== HEADER BAR =====
     doc.setFillColor(...navy)
-    doc.rect(0, 0, pageWidth, 22, 'F')
+    doc.rect(0, 0, pageWidth, 24, 'F')
     
     // Suffolk University SEED
-    doc.setFontSize(18)
+    doc.setFontSize(20)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(...white)
-    doc.text('Suffolk University', margin, 14)
-    doc.setFontSize(18)
-    doc.text('SEED', margin + doc.getTextWidth('Suffolk University') + 4, 14)
+    doc.text('Suffolk University SEED', margin, 15)
     
-    // Week badge on right
+    // Week badge on right - centered in badge
+    const weekText = `Week ${selectedSchedule.week_number}`
+    doc.setFontSize(12)
+    const weekTextWidth = doc.getTextWidth(weekText)
+    const badgeWidth = weekTextWidth + 14
+    const badgeX = pageWidth - margin - badgeWidth
     doc.setFillColor(...white)
-    doc.roundedRect(pageWidth - margin - 32, 6, 32, 10, 2, 2, 'F')
-    doc.setFontSize(11)
+    doc.roundedRect(badgeX, 7, badgeWidth, 11, 3, 3, 'F')
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(...navy)
-    doc.text(`Week ${selectedSchedule.week_number}`, pageWidth - margin - 30, 13)
+    doc.text(weekText, badgeX + 7, 14.5)
     
-    yPos = 30
+    yPos = 32
     
     // ===== DATE ROW =====
-    doc.setFontSize(14)
+    doc.setFontSize(15)
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(...black)
-    doc.text(`${formatShortDate(selectedSchedule.week_start)} - ${formatShortDate(selectedSchedule.week_end)}`, margin, yPos)
+    doc.text(`${formatShortDate(selectedSchedule.week_start)} - ${formatShortDate(selectedSchedule.week_end)}`, margin, yPos + 6)
     
-    // Topic badge (if exists)
+    // Topic badge (if exists) - bigger and nicer
     if (selectedSchedule.session_focus) {
-      doc.setFillColor(243, 232, 196)
+      doc.setFillColor(213, 196, 140)
       const focusText = selectedSchedule.session_focus
-      doc.setFontSize(10)
-      const focusWidth = doc.getTextWidth(focusText) + 10
-      doc.roundedRect(pageWidth - margin - focusWidth, yPos - 5, focusWidth, 7, 2, 2, 'F')
-      doc.setTextColor(120, 100, 40)
+      doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
-      doc.text(focusText, pageWidth - margin - focusWidth + 5, yPos)
+      const focusWidth = doc.getTextWidth(focusText) + 14
+      doc.roundedRect(pageWidth - margin - focusWidth, yPos, focusWidth, 10, 3, 3, 'F')
+      doc.setTextColor(80, 65, 20)
+      doc.text(focusText, pageWidth - margin - focusWidth + 7, yPos + 7)
     }
     
-    yPos += 10
+    yPos += 14
     
     // Divider line
     doc.setDrawColor(...borderGray)
@@ -1134,12 +1136,12 @@ const timeBlockToAdd: TimeBlock = {
       const sessions = block.sessions || []
       const sessionCount = sessions.length
       
-      // Calculate block height
-      let blockContentHeight = 16 // Header height
+      // Calculate block height - increased for better spacing
+      let blockContentHeight = 20 // Header height
       for (const session of sessions) {
-        blockContentHeight += session.notes ? 16 : 10
+        blockContentHeight += session.notes ? 18 : 12
       }
-      const blockHeight = Math.max(blockContentHeight, 30)
+      const blockHeight = Math.max(blockContentHeight, 35)
       
       // Check page break
       if (yPos + blockHeight > pageHeight - 20) {
@@ -1184,7 +1186,7 @@ const timeBlockToAdd: TimeBlock = {
       doc.text(`${sessionCount} session${sessionCount !== 1 ? 's' : ''}`, margin + 42, yPos + 14)
       
       // Sessions
-      let sessionY = yPos + 22
+      let sessionY = yPos + 24
       
       for (const session of sessions) {
         // Bullet point
@@ -1223,13 +1225,13 @@ const timeBlockToAdd: TimeBlock = {
           doc.setFont('helvetica', 'italic')
           doc.setTextColor(130, 130, 130)
           doc.text(session.notes, margin + 50, sessionY + 5)
-          sessionY += 16
+          sessionY += 18
         } else {
-          sessionY += 10
+          sessionY += 12
         }
       }
       
-      yPos += blockHeight + 5
+      yPos += blockHeight + 8
     }
     
     // ===== ASSIGNMENTS SECTION =====
