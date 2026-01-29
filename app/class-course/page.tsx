@@ -48,6 +48,7 @@ import {
 import { UnifiedWeeklyAgenda } from "@/components/unified-weekly-agenda"
 import { useDemoMode } from "@/contexts/demo-mode-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useToast } from "@/hooks/use-toast"
 import { useUserRole } from "@/hooks/use-user-role"
 import { useCurrentSemester } from "@/hooks/use-current-semester"
 import { ClinicAgendaTab } from "@/components/clinic-agenda-tab"
@@ -276,7 +277,8 @@ export default function ClassCoursePage() {
   // Initialize useSearchParams
   const searchParams = useSearchParams()
   const defaultTab = searchParams.get("tab") || "announcements"
-
+  const { toast } = useToast()
+  
   const [copied, setCopied] = useState(false)
   const [editingSession, setEditingSession] = useState<string | null>(null)
   const [directors, setDirectors] = useState<Array<{ id: string; full_name: string; clinic: string }>>([])
@@ -1207,10 +1209,17 @@ body: JSON.stringify({
         setWeekPasswords((prev) => [...prev, data.password])
         setNewPasswordWeek("")
         setNewPassword("")
-        alert("Password set successfully!") // Or use a toast notification
-      } else {
-        const error = await res.json()
-        alert(error.error || "Failed to set password")
+toast({
+          title: "Success",
+          description: "Attendance password set successfully!",
+        })
+  } else {
+  const error = await res.json()
+        toast({
+          title: "Error",
+          description: error.error || "Failed to set password",
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error("Error setting password:", error)
