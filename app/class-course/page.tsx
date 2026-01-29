@@ -2882,13 +2882,10 @@ toast({
                                     return (
                                       <div key={clinicName} className={`border rounded-lg p-4 ${isEditMode ? 'bg-blue-50 border-blue-300' : 'bg-slate-50'}`}>
                                         <div className="flex items-center justify-between mb-3">
-                                          <h4 className="font-semibold text-md flex items-center gap-2">
-                                            <Building2 className="h-4 w-4 text-blue-600" />
-                                            {clinicName}
-                                            <span className="text-sm font-normal text-slate-500">
-                                              ({allPresentRecords.length} present)
-                                            </span>
-                                          </h4>
+<h4 className="font-semibold text-md flex items-center gap-2">
+                                          <Building2 className="h-4 w-4 text-blue-600" />
+                                          {clinicName}
+                                        </h4>
                                           <div className="flex gap-2">
                                             {isEditMode ? (
                                               <>
@@ -2945,7 +2942,7 @@ toast({
                                         <div className="mb-3">
                                           <p className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
                                             <CheckCircle2 className="h-4 w-4 text-green-600" />
-                                            Present Students
+                                            Present Students ({allPresentRecords.length})
                                           </p>
                                           <div className="flex flex-wrap gap-2">
                                             {allPresentRecords.map((record, idx) => {
