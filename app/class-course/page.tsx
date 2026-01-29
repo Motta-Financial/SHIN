@@ -44,6 +44,8 @@ import {
   Key,
   Save,
   XCircle,
+  Pencil,
+  Check,
 } from "lucide-react"
 import { UnifiedWeeklyAgenda } from "@/components/unified-weekly-agenda"
 import { useDemoMode } from "@/contexts/demo-mode-context"
@@ -345,6 +347,7 @@ export default function ClassCoursePage() {
       clinic: string
       notes: string
       submittedAt?: string // Added for attendance submission time
+      is_present: boolean // Present/absent status
     }>
   >([])
   const [loadingAttendance, setLoadingAttendance] = useState(true)
@@ -364,6 +367,12 @@ export default function ClassCoursePage() {
   const [newPasswordWeek, setNewPasswordWeek] = useState<string>("")
   const [newPassword, setNewPassword] = useState<string>("")
   const [savingPassword, setSavingPassword] = useState(false)
+  
+  // Attendance edit mode state - tracks which clinic is being edited and pending changes
+  const [attendanceEditMode, setAttendanceEditMode] = useState<Record<string, boolean>>({})
+  const [pendingAttendanceChanges, setPendingAttendanceChanges] = useState<
+    Record<string, { studentId: string; studentName: string; newStatus: boolean }[]>
+  >({})
 
   const [scheduleData, setScheduleData] = useState<TimeBlock[]>([
     {
@@ -2761,15 +2770,176 @@ toast({
                                   .sort(([a], [b]) => a.localeCompare(b))
                                   .map(([clinicName, clinicRecords]) => {
                                     const clinicAbsentStudents = absentByClinic[clinicName] || []
+                                    const clinicKey = `${weekNum}-${clinicName}`
+                                    const isEditMode = attendanceEditMode[clinicKey] || false
+                                    const pendingChanges = pendingAttendanceChanges[clinicKey] || []
+                                    
+                                    // Calculate effective present/absent lists including pending changes
+                                    const effectivePresentRecords = clinicRecords.filter(r => {
+                                      const change = pendingChanges.find(c => c.studentId === r.studentId)
+                                      return change ? change.newStatus : true
+                                    })
+                                    const movedToAbsent = clinicRecords.filter(r => {
+                                      const change = pendingChanges.find(c => c.studentId === r.studentId)
+                                      return change && !change.newStatus
+                                    })
+                                    const effectiveAbsentStudents = [
+                                      ...clinicAbsentStudents.filter(s => {
+                                        const change = pendingChanges.find(c => c.studentId === s.student_id)
+                                        return change ? !change.newStatus : true
+                                      }),
+                                      ...movedToAbsent.map(r => ({
+                                        student_id: r.studentId,
+                                        student_name: r.studentName,
+                                        student_clinic_name: r.clinic
+                                      }))
+                                    ]
+                                    const movedToPresent = clinicAbsentStudents.filter(s => {
+                                      const change = pendingChanges.find(c => c.studentId === s.student_id)
+                                      return change && change.newStatus
+                                    })
+                                    const allPresentRecords = [
+                                      ...effectivePresentRecords,
+                                      ...movedToPresent.map(s => ({
+                                        studentId: s.student_id,
+                                        studentName: s.student_name,
+                                        clinic: s.student_clinic_name,
+                                        id: '',
+                                        studentEmail: '',
+                                        classDate: '',
+                                        weekNumber: weekNum,
+                                        weekEnding: '',
+                                        notes: '',
+                                        is_present: true
+                                      }))
+                                    ]
+                                    
+                                    const toggleStudentStatus = (studentId: string, studentName: string, currentlyPresent: boolean) => {
+                                      if (!isEditMode) return
+                                      
+                                      setPendingAttendanceChanges(prev => {
+                                        const current = prev[clinicKey] || []
+                                        const existingIndex = current.findIndex(c => c.studentId === studentId)
+                                        
+                                        if (existingIndex >= 0) {
+                                          // Toggle back - remove the pending change
+                                          const newChanges = [...current]
+                                          newChanges.splice(existingIndex, 1)
+                                          return { ...prev, [clinicKey]: newChanges }
+                                        } else {
+                                          // Add new pending change
+                                          return {
+                                            ...prev,
+                                            [clinicKey]: [...current, { studentId, studentName, newStatus: !currentlyPresent }]
+                                          }
+                                        }
+                                      })
+                                    }
+                                    
+                                    const handleConfirm = async () => {
+                                      // If there are pending changes, save them to the database
+                                      if (pendingChanges.length > 0) {
+                                        for (const change of pendingChanges) {
+                                          // Find the attendance record for this student
+                                          const record = weekAttendance.find(r => r.studentId === change.studentId)
+                                          if (record) {
+                                            try {
+                                              const res = await fetch('/api/attendance/update-status', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                  attendanceId: record.id,
+                                                  isPresent: change.newStatus,
+                                                  userEmail: userEmail
+                                                })
+                                              })
+                                              if (res.ok) {
+                                                // Update local state
+                                                setAttendanceRecords(prev => prev.map(r => 
+                                                  r.id === record.id ? { ...r, is_present: change.newStatus } : r
+                                                ))
+                                              }
+                                            } catch (error) {
+                                              console.error('Failed to update attendance:', error)
+                                            }
+                                          }
+                                        }
+                                        toast({
+                                          title: "Attendance Updated",
+                                          description: `Updated ${pendingChanges.length} student(s) attendance status.`,
+                                        })
+                                      } else {
+                                        toast({
+                                          title: "Confirmed",
+                                          description: "Attendance records confirmed as correct.",
+                                        })
+                                      }
+                                      // Clear edit mode and pending changes
+                                      setAttendanceEditMode(prev => ({ ...prev, [clinicKey]: false }))
+                                      setPendingAttendanceChanges(prev => ({ ...prev, [clinicKey]: [] }))
+                                    }
+                                    
                                     return (
-                                      <div key={clinicName} className="border rounded-lg p-4 bg-slate-50">
-                                        <h4 className="font-semibold text-md mb-3 flex items-center gap-2">
-                                          <Building2 className="h-4 w-4 text-blue-600" />
-                                          {clinicName}
-                                          <span className="text-sm font-normal text-slate-500">
-                                            ({clinicRecords.length} present)
-                                          </span>
-                                        </h4>
+                                      <div key={clinicName} className={`border rounded-lg p-4 ${isEditMode ? 'bg-blue-50 border-blue-300' : 'bg-slate-50'}`}>
+                                        <div className="flex items-center justify-between mb-3">
+                                          <h4 className="font-semibold text-md flex items-center gap-2">
+                                            <Building2 className="h-4 w-4 text-blue-600" />
+                                            {clinicName}
+                                            <span className="text-sm font-normal text-slate-500">
+                                              ({allPresentRecords.length} present)
+                                            </span>
+                                          </h4>
+                                          <div className="flex gap-2">
+                                            {isEditMode ? (
+                                              <>
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline"
+                                                  className="bg-transparent text-slate-600 border-slate-300 hover:bg-slate-100"
+                                                  onClick={() => {
+                                                    setAttendanceEditMode(prev => ({ ...prev, [clinicKey]: false }))
+                                                    setPendingAttendanceChanges(prev => ({ ...prev, [clinicKey]: [] }))
+                                                  }}
+                                                >
+                                                  Cancel
+                                                </Button>
+                                                <Button
+                                                  size="sm"
+                                                  className="bg-green-600 hover:bg-green-700 text-white"
+                                                  onClick={handleConfirm}
+                                                >
+                                                  <Check className="h-4 w-4 mr-1" />
+                                                  Confirm
+                                                </Button>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Button
+                                                  size="sm"
+                                                  className="bg-green-600 hover:bg-green-700 text-white"
+                                                  onClick={handleConfirm}
+                                                >
+                                                  <Check className="h-4 w-4 mr-1" />
+                                                  Confirm
+                                                </Button>
+                                                <Button
+                                                  size="sm"
+                                                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                                                  onClick={() => setAttendanceEditMode(prev => ({ ...prev, [clinicKey]: true }))}
+                                                >
+                                                  <Pencil className="h-4 w-4 mr-1" />
+                                                  Edit
+                                                </Button>
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+                                        
+                                        {isEditMode && (
+                                          <div className="mb-3 p-2 bg-blue-100 rounded text-sm text-blue-800">
+                                            Click on a student name to move them between Present and Absent. Click Confirm when done.
+                                          </div>
+                                        )}
 
                                         {/* Present Students - Concise Badge View */}
                                         <div className="mb-3">
@@ -2778,48 +2948,55 @@ toast({
                                             Present Students
                                           </p>
                                           <div className="flex flex-wrap gap-2">
-                                            {clinicRecords.map((record, idx) => (
-                                              <Badge
-                                                key={idx}
-                                                variant="outline"
-                                                className="bg-white hover:bg-green-50 border-green-200 text-green-700 cursor-pointer transition-colors"
-                                                onClick={() => {
-                                                  // Navigate to student profile if exists
-                                                  if (record.studentId) {
-                                                    window.open(`/student-profile?id=${record.studentId}`, "_blank")
-                                                  }
-                                                }}
-                                              >
-                                                <CheckCircle2 className="h-3 w-3 mr-1" />
-                                                {record.studentName}
-                                              </Badge>
-                                            ))}
+                                            {allPresentRecords.map((record, idx) => {
+                                              const isPendingChange = pendingChanges.some(c => c.studentId === record.studentId)
+                                              return (
+                                                <Badge
+                                                  key={idx}
+                                                  variant="outline"
+                                                  className={`${
+                                                    isPendingChange 
+                                                      ? 'bg-yellow-100 border-yellow-400 text-yellow-800' 
+                                                      : 'bg-white border-green-200 text-green-700'
+                                                  } ${isEditMode ? 'cursor-pointer hover:bg-green-100' : ''} transition-colors`}
+                                                  onClick={() => toggleStudentStatus(record.studentId, record.studentName, true)}
+                                                >
+                                                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                                                  {record.studentName}
+                                                  {isPendingChange && <span className="ml-1 text-xs">(moved)</span>}
+                                                </Badge>
+                                              )
+                                            })}
                                           </div>
                                         </div>
 
                                         {/* Absent Students */}
-                                        {clinicAbsentStudents.length > 0 && (
+                                        {(effectiveAbsentStudents.length > 0 || isEditMode) && (
                                           <div className="pt-3 border-t border-slate-200">
                                             <p className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
                                               <XCircle className="h-4 w-4 text-red-600" />
-                                              Absent Students ({clinicAbsentStudents.length})
+                                              Absent Students ({effectiveAbsentStudents.length})
                                             </p>
                                             <div className="flex flex-wrap gap-2">
-                                              {clinicAbsentStudents.map((student, idx) => (
-                                                <Badge
-                                                  key={idx}
-                                                  variant="outline"
-                                                  className="bg-red-50 border-red-200 text-red-700 cursor-pointer hover:bg-red-100 transition-colors"
-                                                  onClick={() => {
-                                                    if (student.student_id) {
-                                                      window.open(`/student-profile?id=${student.student_id}`, "_blank")
-                                                    }
-                                                  }}
-                                                >
-                                                  <XCircle className="h-3 w-3 mr-1" />
-                                                  {student.student_name}
-                                                </Badge>
-                                              ))}
+                                              {effectiveAbsentStudents.map((student, idx) => {
+                                                const isPendingChange = pendingChanges.some(c => c.studentId === student.student_id)
+                                                return (
+                                                  <Badge
+                                                    key={idx}
+                                                    variant="outline"
+                                                    className={`${
+                                                      isPendingChange 
+                                                        ? 'bg-yellow-100 border-yellow-400 text-yellow-800' 
+                                                        : 'bg-red-50 border-red-200 text-red-700'
+                                                    } ${isEditMode ? 'cursor-pointer hover:bg-red-100' : ''} transition-colors`}
+                                                    onClick={() => toggleStudentStatus(student.student_id, student.student_name, false)}
+                                                  >
+                                                    <XCircle className="h-3 w-3 mr-1" />
+                                                    {student.student_name}
+                                                    {isPendingChange && <span className="ml-1 text-xs">(moved)</span>}
+                                                  </Badge>
+                                                )
+                                              })}
                                             </div>
                                           </div>
                                         )}
