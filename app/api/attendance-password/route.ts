@@ -73,22 +73,11 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .single()
 
-    // Check if user is an admin (by email in profiles)
-    const { data: adminProfile } = await serviceClient
-      .from("profiles")
-      .select("id, is_admin, full_name")
-      .eq("is_admin", true)
-      .limit(100)
-
-    // Find if current email matches any admin
-    const { data: authUser } = await serviceClient.auth.admin.getUserByEmail(userEmail)
-    const isAdmin = authUser?.user ? adminProfile?.some(p => p.id === authUser.user.id) : false
-
     const isDirector = !!director
     
-    if (!isDirector && !isAdmin) {
+    if (!isDirector) {
       return NextResponse.json(
-        { error: "Only directors and admins can set attendance passwords" },
+        { error: "Only directors can set attendance passwords" },
         { status: 403 },
       )
     }
@@ -107,7 +96,7 @@ export async function POST(request: NextRequest) {
           password,
           week_start: defaultWeekStart,
           week_end: defaultWeekEnd,
-          created_by: authUser?.user?.id || null,
+          created_by: null,
           created_by_name: createdByName || director?.full_name || userEmail,
           updated_at: new Date().toISOString(),
         },
