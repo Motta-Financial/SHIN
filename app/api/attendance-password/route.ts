@@ -51,16 +51,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { weekNumber, semesterId, password, weekStart, weekEnd, createdByName, userEmail } = body
 
-    console.log("[v0] Attendance password POST received:", {
-      weekNumber,
-      semesterId,
-      password: password ? "***" : "MISSING",
-      userEmail: userEmail || "MISSING",
-      createdByName,
-    })
-
     if (!weekNumber || !semesterId || !password) {
-      console.log("[v0] Missing required fields")
       return NextResponse.json(
         { error: "Missing required fields: weekNumber, semesterId, and password are required" },
         { status: 400 },
@@ -68,7 +59,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (!userEmail) {
-      console.log("[v0] Missing userEmail")
       return NextResponse.json({ error: "User email is required for authorization" }, { status: 400 })
     }
 
@@ -82,34 +72,21 @@ export async function POST(request: NextRequest) {
       .ilike("email", userEmail)
       .limit(1)
     
-    console.log("[v0] Director lookup result:", { directors, directorError, userEmail })
-    
     const director = directors?.[0]
-
     const isDirector = !!director
     
     if (!isDirector) {
-      console.log("[v0] User is not a director, denying access")
       return NextResponse.json(
         { error: "Only directors can set attendance passwords" },
         { status: 403 },
       )
     }
-    
-    console.log("[v0] Director authorized:", director?.full_name)
 
     // Generate default dates if not provided (assuming Spring 2026 starts Jan 13, 2026)
     const defaultWeekStart = weekStart || new Date(2026, 0, 13 + (weekNumber - 1) * 7).toISOString().split("T")[0]
     const defaultWeekEnd = weekEnd || new Date(2026, 0, 19 + (weekNumber - 1) * 7).toISOString().split("T")[0]
 
     // Upsert the password (update if exists, insert if not)
-    console.log("[v0] Attempting upsert with:", {
-      week_number: weekNumber,
-      semester_id: semesterId,
-      week_start: defaultWeekStart,
-      week_end: defaultWeekEnd,
-    })
-    
     const { data, error } = await serviceClient
       .from("attendance_passwords")
       .upsert(
@@ -131,14 +108,13 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error("[v0] Error creating/updating attendance password:", error)
+      console.error("Error creating/updating attendance password:", error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    console.log("[v0] Password saved successfully for week:", weekNumber)
     return NextResponse.json({ password: data, success: true })
   } catch (error: any) {
-    console.error("[v0] Unexpected error in attendance-password POST:", error.message)
+    console.error("Unexpected error in attendance-password POST:", error.message)
     return NextResponse.json({ error: error.message || "Failed to create password" }, { status: 500 })
   }
 }

@@ -367,6 +367,9 @@ export default function ClassCoursePage() {
   const [newPasswordWeek, setNewPasswordWeek] = useState<string>("")
   const [newPassword, setNewPassword] = useState<string>("")
   const [savingPassword, setSavingPassword] = useState(false)
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
+  const [editingPasswordWeek, setEditingPasswordWeek] = useState<number | null>(null)
+  const [editPasswordValue, setEditPasswordValue] = useState("")
   
   // Attendance edit mode state - tracks which clinic is being edited and pending changes
   const [attendanceEditMode, setAttendanceEditMode] = useState<Record<string, boolean>>({})
@@ -1199,14 +1202,6 @@ setLoadingAttendance(true)
 
     setSavingPassword(true)
     
-    console.log("[v0] Sending password request with:", {
-      weekNumber,
-      semesterId,
-      password: newPassword,
-      userEmail,
-      userName,
-    })
-    
     try {
       const res = await fetch("/api/attendance-password", {
         method: "POST",
@@ -1224,11 +1219,18 @@ body: JSON.stringify({
 
       if (res.ok) {
         const data = await res.json()
-        console.log("[v0] Password save response:", data)
-        setWeekPasswords((prev) => [...prev, data.password])
+        // Update password list - check if updating existing or adding new
+        setWeekPasswords((prev) => {
+          const existingIndex = prev.findIndex((p) => p.week_number === weekNumber)
+          if (existingIndex >= 0) {
+            const updated = [...prev]
+            updated[existingIndex] = data.password
+            return updated
+          }
+          return [...prev, data.password]
+        })
         setNewPasswordWeek("")
         setNewPassword("")
-        alert("Password saved successfully for Week " + weekNumber + "!")
 toast({
           title: "Success",
           description: "Attendance password set successfully!",
@@ -1244,6 +1246,65 @@ toast({
     } catch (error) {
       console.error("Error setting password:", error)
       alert("Failed to set password. Please try again.")
+    } finally {
+      setSavingPassword(false)
+    }
+  }
+
+  // Handle updating an existing password
+  const handleUpdatePassword = async (weekNumber: number, newPasswordValue: string) => {
+    if (!newPasswordValue.trim()) {
+      alert("Password cannot be empty")
+      return
+    }
+
+    const weekInfo = semesterSchedule.find((w: any) => w.week_number === weekNumber)
+
+    setSavingPassword(true)
+    try {
+      const res = await fetch("/api/attendance-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          weekNumber: weekNumber,
+          semesterId: semesterId,
+          password: newPasswordValue,
+          weekStart: weekInfo?.week_start || null,
+          weekEnd: weekInfo?.week_end || null,
+          userEmail: userEmail,
+          createdByName: userName,
+        }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        // Update the password in the list
+        setWeekPasswords((prev) => {
+          const existing = prev.findIndex((p) => p.week_number === weekNumber)
+          if (existing >= 0) {
+            const updated = [...prev]
+            updated[existing] = data.password
+            return updated
+          }
+          return [...prev, data.password]
+        })
+        setEditingPasswordWeek(null)
+        setEditPasswordValue("")
+        toast({
+          title: "Success",
+          description: `Password for Week ${weekNumber} updated successfully!`,
+        })
+      } else {
+        const error = await res.json()
+        toast({
+          title: "Error",
+          description: error.error || "Failed to update password",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error updating password:", error)
+      alert("Failed to update password. Please try again.")
     } finally {
       setSavingPassword(false)
     }
@@ -2479,6 +2540,193 @@ toast({
                             Students need this password to submit their weekly attendance
                           </p>
                         </div>
+                        <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="gap-2 bg-transparent">
+                              <Key className="h-4 w-4" />
+                              Manage All Passwords
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+                            <DialogHeader>
+                              <DialogTitle className="flex items-center gap-2 text-xl">
+                                <Key className="h-5 w-5 text-blue-600" />
+                                Attendance Password Management
+                              </DialogTitle>
+                              <p className="text-sm text-slate-600">
+                                View and manage attendance passwords for all weeks in {semesterName}
+                              </p>
+                            </DialogHeader>
+                            <div className="flex-1 overflow-y-auto pr-2">
+                              <div className="space-y-2">
+                                {/* Header */}
+                                <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-slate-100 rounded-lg text-sm font-medium text-slate-700">
+                                  <div className="col-span-2">Week</div>
+                                  <div className="col-span-3">Date Range</div>
+                                  <div className="col-span-3">Password</div>
+                                  <div className="col-span-2">Status</div>
+                                  <div className="col-span-2">Actions</div>
+                                </div>
+                                
+                                {/* Week rows */}
+                                {(() => {
+                                  const uniqueWeeks = semesterSchedule.length > 0
+                                    ? Array.from(new Map(semesterSchedule.map((w: any) => [w.week_number, w])).values())
+                                        .sort((a: any, b: any) => a.week_number - b.week_number)
+                                    : Array.from({ length: 17 }, (_, i) => ({
+                                        week_number: i + 1,
+                                        week_start: null,
+                                        week_end: null,
+                                      }))
+                                  
+                                  const today = new Date()
+                                  today.setHours(0, 0, 0, 0)
+                                  
+                                  return uniqueWeeks.map((week: any) => {
+                                    const password = weekPasswords.find((p) => p.week_number === week.week_number)
+                                    const isCurrentWeek = week.week_start && week.week_end && 
+                                      today >= new Date(week.week_start) && today <= new Date(week.week_end)
+                                    const isPastWeek = week.week_end && today > new Date(week.week_end)
+                                    const isEditing = editingPasswordWeek === week.week_number
+                                    
+                                    return (
+                                      <div 
+                                        key={week.week_number}
+                                        className={`grid grid-cols-12 gap-2 px-3 py-3 rounded-lg border transition-colors ${
+                                          isCurrentWeek 
+                                            ? "bg-blue-50 border-blue-200" 
+                                            : isPastWeek 
+                                              ? "bg-slate-50 border-slate-200" 
+                                              : "bg-white border-slate-200 hover:bg-slate-50"
+                                        }`}
+                                      >
+                                        <div className="col-span-2 flex items-center gap-2">
+                                          <span className={`font-semibold ${isCurrentWeek ? "text-blue-700" : "text-slate-900"}`}>
+                                            Week {week.week_number}
+                                          </span>
+                                          {isCurrentWeek && (
+                                            <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
+                                              Current
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <div className="col-span-3 flex items-center text-sm text-slate-600">
+                                          {week.week_start && week.week_end ? (
+                                            <>
+                                              {new Date(week.week_start).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                              {" - "}
+                                              {new Date(week.week_end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                            </>
+                                          ) : (
+                                            <span className="text-slate-400">Not scheduled</span>
+                                          )}
+                                        </div>
+                                        <div className="col-span-3 flex items-center">
+                                          {isEditing ? (
+                                            <Input
+                                              value={editPasswordValue}
+                                              onChange={(e) => setEditPasswordValue(e.target.value)}
+                                              className="h-8 text-sm"
+                                              placeholder="Enter new password"
+                                              autoFocus
+                                            />
+                                          ) : password ? (
+                                            <code className="bg-slate-100 px-2 py-1 rounded text-sm font-mono">
+                                              {password.password}
+                                            </code>
+                                          ) : (
+                                            <span className="text-slate-400 text-sm">Not set</span>
+                                          )}
+                                        </div>
+                                        <div className="col-span-2 flex items-center">
+                                          {password ? (
+                                            <Badge variant="secondary" className="bg-green-100 text-green-700">
+                                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                                              Set
+                                            </Badge>
+                                          ) : (
+                                            <Badge variant="secondary" className="bg-amber-100 text-amber-700">
+                                              <AlertTriangle className="h-3 w-3 mr-1" />
+                                              Missing
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <div className="col-span-2 flex items-center gap-1">
+                                          {isEditing ? (
+                                            <>
+                                              <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-7 w-7 p-0"
+                                                onClick={() => handleUpdatePassword(week.week_number, editPasswordValue)}
+                                                disabled={savingPassword}
+                                              >
+                                                {savingPassword ? (
+                                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                  <Check className="h-4 w-4 text-green-600" />
+                                                )}
+                                              </Button>
+                                              <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-7 w-7 p-0"
+                                                onClick={() => {
+                                                  setEditingPasswordWeek(null)
+                                                  setEditPasswordValue("")
+                                                }}
+                                              >
+                                                <XCircle className="h-4 w-4 text-slate-500" />
+                                              </Button>
+                                            </>
+                                          ) : (
+                                            <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              className="h-7 px-2 text-xs"
+                                              onClick={() => {
+                                                setEditingPasswordWeek(week.week_number)
+                                                setEditPasswordValue(password?.password || "")
+                                              }}
+                                            >
+                                              <Pencil className="h-3 w-3 mr-1" />
+                                              {password ? "Edit" : "Set"}
+                                            </Button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )
+                                  })
+                                })()}
+                              </div>
+                            </div>
+                            
+                            {/* Summary footer */}
+                            <div className="border-t pt-4 mt-4">
+                              <div className="flex items-center justify-between text-sm">
+                                <div className="flex items-center gap-4">
+                                  <span className="text-slate-600">
+                                    <strong className="text-green-600">{weekPasswords.length}</strong> passwords set
+                                  </span>
+                                  <span className="text-slate-600">
+                                    <strong className="text-amber-600">
+                                      {(semesterSchedule.length > 0 
+                                        ? new Set(semesterSchedule.map((w: any) => w.week_number)).size 
+                                        : 17) - weekPasswords.length}
+                                    </strong> missing
+                                  </span>
+                                </div>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => setPasswordDialogOpen(false)}
+                                >
+                                  Close
+                                </Button>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
                       </div>
 
                       {weekPasswords.length > 0 ? (
