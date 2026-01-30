@@ -76,28 +76,40 @@ export async function POST(request: NextRequest) {
     const serviceClient = getServiceClient()
 
     // Check if user is in directors table (case-insensitive email match)
-    const { data: directors } = await serviceClient
+    const { data: directors, error: directorError } = await serviceClient
       .from("directors")
       .select("id, email, full_name")
       .ilike("email", userEmail)
       .limit(1)
+    
+    console.log("[v0] Director lookup result:", { directors, directorError, userEmail })
     
     const director = directors?.[0]
 
     const isDirector = !!director
     
     if (!isDirector) {
+      console.log("[v0] User is not a director, denying access")
       return NextResponse.json(
         { error: "Only directors can set attendance passwords" },
         { status: 403 },
       )
     }
+    
+    console.log("[v0] Director authorized:", director?.full_name)
 
     // Generate default dates if not provided (assuming Spring 2026 starts Jan 13, 2026)
     const defaultWeekStart = weekStart || new Date(2026, 0, 13 + (weekNumber - 1) * 7).toISOString().split("T")[0]
     const defaultWeekEnd = weekEnd || new Date(2026, 0, 19 + (weekNumber - 1) * 7).toISOString().split("T")[0]
 
     // Upsert the password (update if exists, insert if not)
+    console.log("[v0] Attempting upsert with:", {
+      week_number: weekNumber,
+      semester_id: semesterId,
+      week_start: defaultWeekStart,
+      week_end: defaultWeekEnd,
+    })
+    
     const { data, error } = await serviceClient
       .from("attendance_passwords")
       .upsert(
@@ -123,6 +135,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    console.log("[v0] Password saved successfully for week:", weekNumber)
     return NextResponse.json({ password: data, success: true })
   } catch (error: any) {
     console.error("[v0] Unexpected error in attendance-password POST:", error.message)
