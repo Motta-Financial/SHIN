@@ -46,6 +46,8 @@ import {
   XCircle,
   Pencil,
   Check,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react"
 import { UnifiedWeeklyAgenda } from "@/components/unified-weekly-agenda"
 import { useDemoMode } from "@/contexts/demo-mode-context"
@@ -2771,100 +2773,124 @@ toast({
                             // Get week info for display
                             const displayWeekInfo = semesterSchedule.find((w: any) => w.week_number === displayWeekNum)
 
+                            // Get min and max week numbers
+                            const minWeek = uniqueWeeks.length > 0 ? Math.min(...uniqueWeeks.map((w: any) => w.week_number)) : 1
+                            const maxWeek = uniqueWeeks.length > 0 ? Math.max(...uniqueWeeks.map((w: any) => w.week_number)) : 17
+                            
+                            const handlePrevWeek = () => {
+                              if (displayWeekNum > minWeek) {
+                                setSelectedPasswordWeek(displayWeekNum - 1)
+                              }
+                            }
+                            
+                            const handleNextWeek = () => {
+                              if (displayWeekNum < maxWeek) {
+                                setSelectedPasswordWeek(displayWeekNum + 1)
+                              }
+                            }
+
                             return (
-                              <div className="space-y-3">
-                                {/* Week Toggle Selector */}
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-sm font-medium text-slate-700">View Week:</span>
-                                  <div className="flex items-center gap-1 flex-wrap">
-                                    {uniqueWeeks.map((week: any) => {
-                                      const hasPassword = weekPasswords.some((wp) => wp.week_number === week.week_number)
-                                      const isSelected = displayWeekNum === week.week_number
-                                      const isCurrent = week.week_number === currentWeekNum
-                                      
-                                      return (
-                                        <Button
-                                          key={week.week_number}
-                                          variant={isSelected ? "default" : "outline"}
-                                          size="sm"
-                                          className={`h-8 min-w-[40px] px-2 text-xs ${
-                                            isSelected 
-                                              ? "bg-blue-600 text-white" 
-                                              : hasPassword 
-                                                ? "bg-green-50 border-green-300 text-green-700 hover:bg-green-100" 
-                                                : "bg-transparent border-slate-300 text-slate-500 hover:bg-slate-50"
-                                          } ${isCurrent && !isSelected ? "ring-2 ring-blue-400 ring-offset-1" : ""}`}
-                                          onClick={() => setSelectedPasswordWeek(week.week_number)}
-                                        >
-                                          {week.week_number}
-                                        </Button>
-                                      )
-                                    })}
-                                  </div>
-                                  {selectedPasswordWeek !== null && selectedPasswordWeek !== currentWeekNum && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-8 text-xs text-blue-600 hover:text-blue-700"
-                                      onClick={() => setSelectedPasswordWeek(null)}
-                                    >
-                                      Back to Current
-                                    </Button>
-                                  )}
-                                </div>
-                                
-                                {/* Password Display */}
-                                {displayWeekPassword ? (
-                                  <div className={`bg-white rounded-lg p-4 border-2 shadow-sm ${
-                                    isCurrentWeek ? "border-green-300" : "border-blue-300"
-                                  }`}>
-                                    <div className="flex items-center justify-between">
+                              <div className={`bg-white rounded-lg border-2 shadow-sm ${
+                                isCurrentWeek ? "border-green-300" : "border-slate-200"
+                              }`}>
+                                {/* Card with arrow navigation */}
+                                <div className="flex items-stretch">
+                                  {/* Left Arrow */}
+                                  <button
+                                    onClick={handlePrevWeek}
+                                    disabled={displayWeekNum <= minWeek}
+                                    className={`flex items-center justify-center px-3 border-r transition-colors ${
+                                      displayWeekNum <= minWeek 
+                                        ? "text-slate-300 cursor-not-allowed" 
+                                        : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                                    }`}
+                                  >
+                                    <ChevronLeft className="h-5 w-5" />
+                                  </button>
+                                  
+                                  {/* Content */}
+                                  <div className="flex-1 p-4">
+                                    {/* Header */}
+                                    <div className="flex items-center justify-between mb-2">
+                                      <div className="flex items-center gap-2">
+                                        <h4 className="text-base font-semibold text-slate-900">
+                                          Week {displayWeekNum} Password
+                                        </h4>
+                                        {isCurrentWeek && (
+                                          <Badge variant="secondary" className="bg-green-100 text-green-700 text-xs">
+                                            Current
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <span className="text-xs text-slate-500">
+                                        {displayWeekNum} of {maxWeek}
+                                      </span>
+                                    </div>
+                                    
+                                    {/* Password or No Password state */}
+                                    {displayWeekPassword ? (
                                       <div className="flex items-center gap-3">
-                                        <div className={`p-3 rounded-full ${
+                                        <div className={`p-2 rounded-full ${
                                           isCurrentWeek ? "bg-green-100" : "bg-blue-100"
                                         }`}>
-                                          <CheckCircle2 className={`h-6 w-6 ${
+                                          <CheckCircle2 className={`h-5 w-5 ${
                                             isCurrentWeek ? "text-green-600" : "text-blue-600"
                                           }`} />
                                         </div>
                                         <div>
-                                          <div className="flex items-center gap-2">
-                                            <p className="text-sm font-medium text-slate-700">
-                                              Week {displayWeekNum} Password
-                                            </p>
-                                            {isCurrentWeek && (
-                                              <Badge variant="secondary" className="bg-green-100 text-green-700 text-xs">
-                                                Current Week
-                                              </Badge>
-                                            )}
-                                          </div>
-                                          <p className="text-2xl font-bold text-slate-900 tracking-wider mt-1">
+                                          <p className="text-xl font-bold text-slate-900 tracking-wider font-mono">
                                             {displayWeekPassword.password}
                                           </p>
-                                          <p className="text-xs text-slate-500 mt-1">
+                                          <p className="text-xs text-slate-500">
                                             {displayWeekInfo?.week_start && displayWeekInfo?.week_end && (
-                                              <span>
+                                              <>
                                                 {new Date(displayWeekInfo.week_start).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                                                 {" - "}
                                                 {new Date(displayWeekInfo.week_end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                                                 {" • "}
-                                              </span>
+                                              </>
                                             )}
-                                            Set on {new Date(displayWeekPassword.created_at).toLocaleDateString()}
+                                            Set {new Date(displayWeekPassword.created_at).toLocaleDateString()}
                                           </p>
                                         </div>
                                       </div>
-                                    </div>
+                                    ) : (
+                                      <div className="flex items-center gap-3">
+                                        <div className="p-2 rounded-full bg-amber-100">
+                                          <AlertTriangle className="h-5 w-5 text-amber-600" />
+                                        </div>
+                                        <div>
+                                          <p className="text-sm font-medium text-amber-700">
+                                            No password set
+                                          </p>
+                                          <p className="text-xs text-slate-500">
+                                            {displayWeekInfo?.week_start && displayWeekInfo?.week_end && (
+                                              <>
+                                                {new Date(displayWeekInfo.week_start).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                                {" - "}
+                                                {new Date(displayWeekInfo.week_end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                              </>
+                                            )}
+                                            {isCurrentWeek && " • Students cannot submit attendance"}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
-                                ) : (
-                                  <Alert className="border-amber-300 bg-amber-50">
-                                    <AlertTriangle className="h-4 w-4 text-amber-600" />
-                                    <AlertDescription className="text-amber-800">
-                                      <strong>No Password Set:</strong> Week {displayWeekNum} does not have a password yet.
-                                      {isCurrentWeek && " Students cannot submit attendance for this week."}
-                                    </AlertDescription>
-                                  </Alert>
-                                )}
+                                  
+                                  {/* Right Arrow */}
+                                  <button
+                                    onClick={handleNextWeek}
+                                    disabled={displayWeekNum >= maxWeek}
+                                    className={`flex items-center justify-center px-3 border-l transition-colors ${
+                                      displayWeekNum >= maxWeek 
+                                        ? "text-slate-300 cursor-not-allowed" 
+                                        : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                                    }`}
+                                  >
+                                    <ChevronRight className="h-5 w-5" />
+                                  </button>
+                                </div>
                               </div>
                             )
                           })()}
