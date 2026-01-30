@@ -154,6 +154,17 @@ export async function POST(request: Request) {
       studentData = data
     }
 
+    // Get current semester ID if not provided
+    let semesterId = body.semesterId
+    if (!semesterId) {
+      semesterId = await getCurrentSemesterId()
+    }
+    
+    if (!semesterId) {
+      console.log("[v0] Error: No semester_id available for debrief creation")
+      return NextResponse.json({ error: "No active semester found" }, { status: 400 })
+    }
+
     const insertData: Record<string, any> = {
       student_id: body.studentId || studentData?.student_id,
       student_email: studentData?.student_email || body.studentEmail,
@@ -163,7 +174,7 @@ export async function POST(request: Request) {
       work_summary: body.workSummary,
       questions: body.questions,
       week_ending: body.weekEnding || new Date().toISOString().split("T")[0],
-      semester_id: body.semesterId || null,
+      semester_id: semesterId,
       status: "submitted",
     }
 
