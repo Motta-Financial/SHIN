@@ -373,6 +373,7 @@ export default function ClassCoursePage() {
   const [editingPasswordWeek, setEditingPasswordWeek] = useState<number | null>(null)
   const [editPasswordValue, setEditPasswordValue] = useState("")
   const [selectedPasswordWeek, setSelectedPasswordWeek] = useState<number | null>(null)
+  const [recentlySetWeek, setRecentlySetWeek] = useState<number | null>(null)
   
   // Attendance edit mode state - tracks which clinic is being edited and pending changes
   const [attendanceEditMode, setAttendanceEditMode] = useState<Record<string, boolean>>({})
@@ -1160,15 +1161,11 @@ setLoadingAttendance(true)
     fetchWeekPasswords()
   }, [])
 
-  // Handle setting a new password
+// Handle setting a new password
   const handleSetPassword = async () => {
-    const weekNumber = Number.parseInt(newPasswordWeek, 10)
-
-    console.log("[v0] Setting password - newPasswordWeek:", newPasswordWeek)
-    console.log("[v0] Setting password - weekNumber:", weekNumber)
-    console.log("[v0] Setting password - semesterSchedule length:", semesterSchedule.length)
-
-    if (!newPasswordWeek || !newPassword.trim()) {
+  const weekNumber = Number.parseInt(newPasswordWeek, 10)
+  
+  if (!newPasswordWeek || !newPassword.trim()) {
       alert("Please enter both week number and password")
       return
     }
@@ -1234,9 +1231,14 @@ body: JSON.stringify({
         })
         setNewPasswordWeek("")
         setNewPassword("")
+        // Navigate to the newly set week to show the user
+        setSelectedPasswordWeek(weekNumber)
+        setRecentlySetWeek(weekNumber)
+        // Clear the "just set" indicator after 10 seconds
+        setTimeout(() => setRecentlySetWeek(null), 10000)
 toast({
           title: "Success",
-          description: "Attendance password set successfully!",
+          description: `Password for Week ${weekNumber} set successfully!`,
         })
   } else {
   const error = await res.json()
@@ -2816,11 +2818,19 @@ toast({
                                         <h4 className="text-base font-semibold text-slate-900">
                                           Week {displayWeekNum} Password
                                         </h4>
-                                        {isCurrentWeek && (
+                                        {isCurrentWeek ? (
                                           <Badge variant="secondary" className="bg-green-100 text-green-700 text-xs">
                                             Current
                                           </Badge>
-                                        )}
+                                        ) : recentlySetWeek === displayWeekNum ? (
+                                          <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs animate-pulse">
+                                            Just Set
+                                          </Badge>
+                                        ) : displayWeekNum > currentWeekNum ? (
+                                          <Badge variant="secondary" className="bg-slate-100 text-slate-600 text-xs">
+                                            Upcoming
+                                          </Badge>
+                                        ) : null}
                                       </div>
                                       <span className="text-xs text-slate-500">
                                         {displayWeekNum} of {maxWeek}
@@ -2899,7 +2909,7 @@ toast({
                           <details className="group">
                             <summary className="cursor-pointer text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-2">
                               <Plus className="h-4 w-4" />
-                              Set Password for Another Week
+                              Set Password for Next Week
                             </summary>
                             <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
                               <div className="flex gap-2">
