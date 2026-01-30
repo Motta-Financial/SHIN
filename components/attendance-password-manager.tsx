@@ -40,11 +40,13 @@ interface WeekSchedule {
 
 interface AttendancePasswordManagerProps {
   currentDirectorName: string
+  currentUserEmail: string
   onMissingPasswordsDetected?: (count: number) => void
 }
 
 export function AttendancePasswordManager({
   currentDirectorName,
+  currentUserEmail,
   onMissingPasswordsDetected,
 }: AttendancePasswordManagerProps) {
   const [passwords, setPasswords] = useState<AttendancePassword[]>([])
@@ -95,6 +97,7 @@ export function AttendancePasswordManager({
           weekStart: selectedWeek.week_start,
           weekEnd: selectedWeek.week_end,
           createdByName: currentDirectorName,
+          userEmail: currentUserEmail,
         }),
       })
 
