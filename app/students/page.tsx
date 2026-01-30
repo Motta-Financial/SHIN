@@ -924,9 +924,13 @@ export default function StudentPortal() {
         const debriefsData = await safeJsonParse(debriefsRes, { debriefs: [] }) // Use safeJsonParse
         setDebriefs(debriefsData.debriefs || [])
         setQuestionText("")
+        alert("Your question has been sent to your director!")
+      } else {
+        alert("Failed to send question. Please try again.")
       }
     } catch (error) {
       console.error("Error submitting question:", error)
+      alert("An error occurred. Please try again.")
     } finally {
       setSubmitting(false)
     }
@@ -977,9 +981,13 @@ export default function StudentPortal() {
         setMeetingSubject("")
         setMeetingMessage("")
         setPreferredDates(["", "", ""])
+        alert("Meeting request sent successfully! Your director will respond soon.")
+      } else {
+        alert("Failed to send meeting request. Please try again.")
       }
     } catch (error) {
       console.error("Error submitting meeting request:", error)
+      alert("An error occurred. Please try again.")
     } finally {
       setSubmittingMeeting(false)
     }

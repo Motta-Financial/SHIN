@@ -95,6 +95,20 @@ async function getAvailableWeeks(): Promise<{ weeks: string[]; schedule: WeekSch
   }
 }
 
+function formatRelativeTime(date: Date): string {
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return "just now"
+  if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? "s" : ""} ago`
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`
+  if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`
+  return date.toLocaleDateString()
+}
+
 async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string): Promise<QuickStats> {
   try {
     const fetchWithRetry = async (url: string, retries = 3): Promise<Response> => {
@@ -629,12 +643,37 @@ export default function DirectorDashboard() {
           debriefsSubmitted: quickStats.debriefsSubmitted || 0,
         }
 
-        // Placeholder for notifications - fetch real data if available
-        const placeholderNotifications = [
-          { type: "debrief", title: "Student A submitted a debrief", time: "2h ago" },
-          { type: "session", title: "Client Meeting: Project X", time: "yesterday" },
-          { type: "alert", title: "Low attendance detected for Week 10", time: "2 days ago" },
-        ]
+        // Fetch real notifications from the database
+        let realNotifications: Array<{ type: string; title: string; time: string }> = []
+        try {
+          const notifResponse = await fetch("/api/notifications")
+          if (notifResponse.ok) {
+            const notifData = await notifResponse.json()
+            realNotifications = (notifData.notifications || []).map((n: any) => ({
+              type: n.type || "notification",
+              title: n.title || n.message || "New notification",
+              time: n.created_at ? formatRelativeTime(new Date(n.created_at)) : "recently",
+            }))
+          }
+        } catch (notifError) {
+          console.error("Error fetching notifications:", notifError)
+        }
+        
+        // Also fetch meeting requests as notifications
+        try {
+          const meetingResponse = await fetch("/api/meeting-requests?status=pending")
+          if (meetingResponse.ok) {
+            const meetingData = await meetingResponse.json()
+            const meetingNotifications = (meetingData.requests || []).map((m: any) => ({
+              type: "meeting_request",
+              title: `Meeting Request: ${m.subject || "No subject"} from ${m.studentName || "Student"}`,
+              time: m.createdAt ? formatRelativeTime(new Date(m.createdAt)) : "recently",
+            }))
+            realNotifications = [...meetingNotifications, ...realNotifications]
+          }
+        } catch (meetingError) {
+          console.error("Error fetching meeting requests:", meetingError)
+        }
 
         setOverviewData({
           urgentItems,
@@ -646,7 +685,7 @@ export default function DirectorDashboard() {
           recentClientActivity: recentActivity,
           studentQuestions: [], // Placeholder, needs dedicated fetch
           weeklyProgress,
-          notifications: placeholderNotifications, // Assign placeholder notifications
+          notifications: realNotifications.length > 0 ? realNotifications : [{ type: "info", title: "No new notifications", time: "now" }],
         })
 } catch (error) {
   console.error("Error fetching overview data:", error)
@@ -1160,8 +1199,14 @@ export default function DirectorDashboard() {
                               {notification.type === "session" && (
                                 <Calendar className="h-3.5 w-3.5" style={{ color: "#878568" }} />
                               )}
-                              {notification.type === "alert" && <AlertCircle className="h-3.5 w-3.5 text-red-500" />}
-                              {!["debrief", "session", "alert"].includes(notification.type) && (
+{notification.type === "alert" && <AlertCircle className="h-3.5 w-3.5 text-red-500" />}
+                                        {notification.type === "meeting_request" && (
+                                          <Users className="h-3.5 w-3.5" style={{ color: "#2563eb" }} />
+                                        )}
+                                        {notification.type === "question" && (
+                                          <MessageSquare className="h-3.5 w-3.5" style={{ color: "#059669" }} />
+                                        )}
+                                        {!["debrief", "session", "alert", "meeting_request", "question"].includes(notification.type) && (
                                 <Bell className="h-3.5 w-3.5" style={{ color: "#505143" }} />
                               )}
                             </div>
