@@ -1224,9 +1224,11 @@ body: JSON.stringify({
 
       if (res.ok) {
         const data = await res.json()
+        console.log("[v0] Password save response:", data)
         setWeekPasswords((prev) => [...prev, data.password])
         setNewPasswordWeek("")
         setNewPassword("")
+        alert("Password saved successfully for Week " + weekNumber + "!")
 toast({
           title: "Success",
           description: "Attendance password set successfully!",
