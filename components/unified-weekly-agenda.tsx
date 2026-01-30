@@ -523,24 +523,52 @@ function UnifiedWeeklyAgenda({
   const fetchSchedules = async () => {
     setLoading(true)
     try {
+      // First, always fetch the semester schedule structure for week info
       const response = await fetch(`/api/semester-schedule?semester=${encodeURIComponent(semester)}`)
       const data = await response.json()
+      
       if (data.schedules && data.schedules.length > 0) {
-        // Initialize activities with default time blocks if not present
-        const schedulesWithActivities = data.schedules.map((s: WeekSchedule) => ({
-          ...s,
-          // Ensure 'activities' array exists, using defaultTimeBlocks if empty
-          activities:
-            s.activities && s.activities.length > 0 ? s.activities : JSON.parse(JSON.stringify(defaultTimeBlocks)),
-          // schedule_data: s.schedule_data || [], // Ensure schedule_data is initialized
-          zoom_link: s.zoom_link || "https://zoom.us/j/123456789",
-          room_assignment: s.room_assignment || "Main Classroom", // Default room assignment
-        }))
-        setSchedules(schedulesWithActivities)
-        // Removed the line setting openWeeks as it's no longer needed
-      } else {
+        // For student view, fetch published agendas and merge with schedule structure
+        if (isStudentView) {
+          const publishedRes = await fetch(`/api/published-agendas?semester_id=${semesterId}`)
+          const publishedData = await publishedRes.json()
+          const publishedAgendas = publishedData.agendas || []
+          
+          // Merge published agenda activities into schedules
+          const schedulesWithPublished = data.schedules.map((s: WeekSchedule) => {
+            // Find matching published agenda by date range
+            const publishedAgenda = publishedAgendas.find((pa: any) => {
+              const publishDate = new Date(pa.schedule_date)
+              const weekStart = new Date(s.week_start)
+              const weekEnd = new Date(s.week_end)
+              return publishDate >= weekStart && publishDate <= weekEnd
+            })
+            
+            return {
+              ...s,
+              // Use published activities if available, otherwise show "Not yet published"
+              activities: publishedAgenda?.schedule_data || [],
+              zoom_link: publishedAgenda?.zoom_link || s.zoom_link || "",
+              notes: publishedAgenda?.notes || s.notes || "",
+              _isPublished: !!publishedAgenda,
+              _publishedAt: publishedAgenda?.published_at,
+            }
+          })
+          setSchedules(schedulesWithPublished)
+        } else {
+          // Director view - show editable schedule from semester_schedule
+          const schedulesWithActivities = data.schedules.map((s: WeekSchedule) => ({
+            ...s,
+            activities:
+              s.activities && s.activities.length > 0 ? s.activities : JSON.parse(JSON.stringify(defaultTimeBlocks)),
+            zoom_link: s.zoom_link || "https://zoom.us/j/123456789",
+            room_assignment: s.room_assignment || "Main Classroom",
+          }))
+          setSchedules(schedulesWithActivities)
+        }
+      } else if (!isStudentView) {
+        // Only create default weeks for director view
         const defaultWeeks = generateDefaultWeeks(semester)
-        // Create all weeks in database
         for (const week of defaultWeeks) {
           try {
             await fetch("/api/semester-schedule", {
@@ -552,19 +580,16 @@ function UnifiedWeeklyAgenda({
             console.error("Error creating week:", e)
           }
         }
-        // Refetch to get the created weeks with IDs
         const refetchResponse = await fetch(`/api/semester-schedule?semester=${encodeURIComponent(semester)}`)
         const refetchData = await refetchResponse.json()
         if (refetchData.schedules) {
           const schedulesWithActivities = refetchData.schedules.map((s: WeekSchedule) => ({
             ...s,
             activities: s.activities || JSON.parse(JSON.stringify(defaultTimeBlocks)),
-            // schedule_data: s.schedule_data || [],
             zoom_link: s.zoom_link || "https://zoom.us/j/123456789",
             room_assignment: s.room_assignment || "Main Classroom",
           }))
           setSchedules(schedulesWithActivities)
-          // Removed the line setting openWeeks as it's no longer needed
         }
       }
     } catch (error) {
@@ -1963,12 +1988,19 @@ const timeBlockToAdd: TimeBlock = {
                           </div>
                         ))}
                       </div>
-                    ) : (
-                      <div className="text-center py-4 text-gray-500 text-xs border rounded-md border-dashed">
-                        No activities scheduled.
-                        {!isStudentView && " Click 'Add Activity' to add one."}
-                      </div>
-                    )}
+) : (
+  <div className="text-center py-8 text-gray-500 border rounded-md border-dashed">
+  {isStudentView ? (
+    <>
+      <Calendar className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+      <p className="text-sm font-medium text-gray-600">Agenda Not Yet Published</p>
+      <p className="text-xs text-gray-400 mt-1">The agenda for this week will be available once published by a director.</p>
+    </>
+  ) : (
+    <p className="text-xs">No activities scheduled. Click &apos;Add Activity&apos; to add one.</p>
+  )}
+  </div>
+  )}
                   </div>
 
                   <div className="px-4 py-3 border-t">

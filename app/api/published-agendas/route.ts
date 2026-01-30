@@ -34,8 +34,9 @@ export async function GET(request: Request) {
       query = query.gte("schedule_date", weekStart).lte("schedule_date", weekEnd)
     }
 
-    // Default to current agenda if no filters
-    if (!weekStart && !weekEnd) {
+    // If semester_id is provided without date filters, return all agendas for that semester
+    // Otherwise, default to current agenda if no filters at all
+    if (!weekStart && !weekEnd && !semesterId) {
       query = query.eq("is_current", true).limit(1)
     }
 
@@ -44,7 +45,7 @@ export async function GET(request: Request) {
     if (error && error.code !== "PGRST116") throw error
 
     // Return single or array based on query type
-    if (!weekStart && !weekEnd) {
+    if (!weekStart && !weekEnd && !semesterId) {
       return NextResponse.json({ success: true, agenda: data?.[0] || null })
     }
 
