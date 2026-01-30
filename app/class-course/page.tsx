@@ -375,11 +375,12 @@ export default function ClassCoursePage() {
   const [selectedPasswordWeek, setSelectedPasswordWeek] = useState<number | null>(null)
   const [recentlySetWeek, setRecentlySetWeek] = useState<number | null>(null)
   
-  // Attendance edit mode state - tracks which clinic is being edited and pending changes
+// Attendance edit mode state - tracks which clinic is being edited and pending changes
   const [attendanceEditMode, setAttendanceEditMode] = useState<Record<string, boolean>>({})
   const [pendingAttendanceChanges, setPendingAttendanceChanges] = useState<
-    Record<string, { studentId: string; studentName: string; newStatus: boolean }[]>
+  Record<string, { studentId: string; studentName: string; newStatus: boolean }[]>
   >({})
+  const [confirmedAttendance, setConfirmedAttendance] = useState<Record<string, boolean>>({})
 
   const [scheduleData, setScheduleData] = useState<TimeBlock[]>([
     {
@@ -3137,6 +3138,7 @@ toast({
                                     const clinicKey = `${weekNum}-${clinicName}`
                                     const isEditMode = attendanceEditMode[clinicKey] || false
                                     const pendingChanges = pendingAttendanceChanges[clinicKey] || []
+                                    const isConfirmed = confirmedAttendance[clinicKey] || false
                                     
                                     // Calculate effective present/absent lists including pending changes
                                     const effectivePresentRecords = clinicRecords.filter(r => {
@@ -3238,9 +3240,10 @@ toast({
                                           description: "Attendance records confirmed as correct.",
                                         })
                                       }
-                                      // Clear edit mode and pending changes
+                                      // Clear edit mode and pending changes, mark as confirmed
                                       setAttendanceEditMode(prev => ({ ...prev, [clinicKey]: false }))
                                       setPendingAttendanceChanges(prev => ({ ...prev, [clinicKey]: [] }))
+                                      setConfirmedAttendance(prev => ({ ...prev, [clinicKey]: true }))
                                     }
                                     
                                     return (
@@ -3251,7 +3254,12 @@ toast({
                                           {clinicName}
                                         </h4>
                                           <div className="flex gap-2">
-                                            {isEditMode ? (
+                                            {isConfirmed ? (
+                                              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-100 text-green-700 rounded-md text-sm font-medium">
+                                                <CheckCircle2 className="h-4 w-4" />
+                                                Confirmed
+                                              </div>
+                                            ) : isEditMode ? (
                                               <>
                                                 <Button
                                                   size="sm"
