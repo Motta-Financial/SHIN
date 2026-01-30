@@ -16,11 +16,12 @@ function getServiceClient() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { attendanceId, isPresent, userEmail } = body
+    const { attendanceId, isPresent, userEmail, studentId, classDate, semesterId } = body
 
-    if (!attendanceId || isPresent === undefined || !userEmail) {
+    // Support both old attendanceId format and new composite key format
+    if (isPresent === undefined || !userEmail) {
       return NextResponse.json(
-        { error: "Missing required fields: attendanceId, isPresent, and userEmail are required" },
+        { error: "Missing required fields: isPresent and userEmail are required" },
         { status: 400 },
       )
     }
@@ -44,13 +45,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update the attendance record
-    const { data, error } = await serviceClient
+    // Update the attendance record using composite key (student_id + class_date + semester_id)
+    // The attendance table doesn't have an 'id' column
+    let query = serviceClient
       .from("attendance")
       .update({ is_present: isPresent })
-      .eq("id", attendanceId)
-      .select()
-      .single()
+    
+    if (studentId && classDate) {
+      // Use composite key approach
+      query = query.eq("student_id", studentId).eq("class_date", classDate)
+      if (semesterId) {
+        query = query.eq("semester_id", semesterId)
+      }
+    } else if (attendanceId) {
+      // Try parsing the attendanceId if it contains student_id and date info
+      // Format might be: "studentId-date" e.g., "uuid-2026-01-12"
+      const parts = attendanceId.split("-")
+      if (parts.length >= 4) {
+        // Likely format: uuid (5 parts) + date (3 parts) = studentId-YYYY-MM-DD
+        const dateStr = parts.slice(-3).join("-") // Last 3 parts are the date
+        const studentIdStr = parts.slice(0, -3).join("-") // Everything before is the student ID
+        query = query.eq("student_id", studentIdStr).eq("class_date", dateStr)
+      } else {
+        return NextResponse.json(
+          { error: "Invalid attendance identifier format" },
+          { status: 400 },
+        )
+      }
+    } else {
+      return NextResponse.json(
+        { error: "Either attendanceId or (studentId + classDate) are required" },
+        { status: 400 },
+      )
+    }
+
+    const { data, error } = await query.select().single()
 
     if (error) {
       console.error("[v0] Error updating attendance status:", error)
