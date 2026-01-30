@@ -370,6 +370,7 @@ export default function ClassCoursePage() {
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
   const [editingPasswordWeek, setEditingPasswordWeek] = useState<number | null>(null)
   const [editPasswordValue, setEditPasswordValue] = useState("")
+  const [selectedPasswordWeek, setSelectedPasswordWeek] = useState<number | null>(null)
   
   // Attendance edit mode state - tracks which clinic is being edited and pending changes
   const [attendanceEditMode, setAttendanceEditMode] = useState<Record<string, boolean>>({})
@@ -2731,13 +2732,13 @@ toast({
 
                       {weekPasswords.length > 0 ? (
                         <div className="space-y-3">
-                          {/* Current Week Password Display */}
+                          {/* Week Password Display with Toggle */}
                           {(() => {
                             const today = new Date()
                             today.setHours(0, 0, 0, 0)
 
                             // Find the week that contains today's date
-                            const currentWeekRecord = semesterSchedule.find((week) => {
+                            const currentWeekRecord = semesterSchedule.find((week: any) => {
                               const weekStart = new Date(week.week_start)
                               const weekEnd = new Date(week.week_end)
                               weekStart.setHours(0, 0, 0, 0)
@@ -2751,52 +2752,120 @@ toast({
 
                             // Use Week 1 if before semester or use the actual current week
                             const currentWeekNum = currentWeekRecord ? currentWeekRecord.week_number : 1
-                            const currentWeekPassword = weekPasswords.find((wp) => wp.week_number === currentWeekNum)
+                            
+                            // Use selected week or default to current week
+                            const displayWeekNum = selectedPasswordWeek ?? currentWeekNum
+                            const displayWeekPassword = weekPasswords.find((wp) => wp.week_number === displayWeekNum)
+                            const isCurrentWeek = displayWeekNum === currentWeekNum
+                            
+                            // Get all unique weeks for the toggle
+                            const uniqueWeeks = semesterSchedule.length > 0
+                              ? Array.from(new Map(semesterSchedule.map((w: any) => [w.week_number, w])).values())
+                                  .sort((a: any, b: any) => a.week_number - b.week_number)
+                              : Array.from({ length: 17 }, (_, i) => ({
+                                  week_number: i + 1,
+                                  week_start: null,
+                                  week_end: null,
+                                }))
+                            
+                            // Get week info for display
+                            const displayWeekInfo = semesterSchedule.find((w: any) => w.week_number === displayWeekNum)
 
-                            return currentWeekPassword ? (
-                              <div className="bg-white rounded-lg p-4 border-2 border-green-300 shadow-sm">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <div className="bg-green-100 p-3 rounded-full">
-                                      <CheckCircle2 className="h-6 w-6 text-green-600" />
-                                    </div>
-                                    <div>
-                                      <p className="text-sm font-medium text-slate-700">
-                                        {isBeforeSemester
-                                          ? "Week 1 Password (Starts Tomorrow)"
-                                          : "Current Week Password"}
-                                      </p>
-                                      <p className="text-2xl font-bold text-slate-900 tracking-wider mt-1">
-                                        {currentWeekPassword.password}
-                                      </p>
-                                      <p className="text-xs text-slate-500 mt-1">
-                                        Week {currentWeekPassword.week_number}
-                                        {firstWeek && isBeforeSemester && (
-                                          <span className="ml-1">
-                                            • Starts {new Date(firstWeek.week_start).toLocaleDateString()}
-                                          </span>
-                                        )}
-                                        {!isBeforeSemester && (
-                                          <span className="ml-1">
-                                            • Set on {new Date(currentWeekPassword.created_at).toLocaleDateString()}
-                                          </span>
-                                        )}
-                                      </p>
+                            return (
+                              <div className="space-y-3">
+                                {/* Week Toggle Selector */}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm font-medium text-slate-700">View Week:</span>
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    {uniqueWeeks.map((week: any) => {
+                                      const hasPassword = weekPasswords.some((wp) => wp.week_number === week.week_number)
+                                      const isSelected = displayWeekNum === week.week_number
+                                      const isCurrent = week.week_number === currentWeekNum
+                                      
+                                      return (
+                                        <Button
+                                          key={week.week_number}
+                                          variant={isSelected ? "default" : "outline"}
+                                          size="sm"
+                                          className={`h-8 min-w-[40px] px-2 text-xs ${
+                                            isSelected 
+                                              ? "bg-blue-600 text-white" 
+                                              : hasPassword 
+                                                ? "bg-green-50 border-green-300 text-green-700 hover:bg-green-100" 
+                                                : "bg-transparent border-slate-300 text-slate-500 hover:bg-slate-50"
+                                          } ${isCurrent && !isSelected ? "ring-2 ring-blue-400 ring-offset-1" : ""}`}
+                                          onClick={() => setSelectedPasswordWeek(week.week_number)}
+                                        >
+                                          {week.week_number}
+                                        </Button>
+                                      )
+                                    })}
+                                  </div>
+                                  {selectedPasswordWeek !== null && selectedPasswordWeek !== currentWeekNum && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 text-xs text-blue-600 hover:text-blue-700"
+                                      onClick={() => setSelectedPasswordWeek(null)}
+                                    >
+                                      Back to Current
+                                    </Button>
+                                  )}
+                                </div>
+                                
+                                {/* Password Display */}
+                                {displayWeekPassword ? (
+                                  <div className={`bg-white rounded-lg p-4 border-2 shadow-sm ${
+                                    isCurrentWeek ? "border-green-300" : "border-blue-300"
+                                  }`}>
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-3">
+                                        <div className={`p-3 rounded-full ${
+                                          isCurrentWeek ? "bg-green-100" : "bg-blue-100"
+                                        }`}>
+                                          <CheckCircle2 className={`h-6 w-6 ${
+                                            isCurrentWeek ? "text-green-600" : "text-blue-600"
+                                          }`} />
+                                        </div>
+                                        <div>
+                                          <div className="flex items-center gap-2">
+                                            <p className="text-sm font-medium text-slate-700">
+                                              Week {displayWeekNum} Password
+                                            </p>
+                                            {isCurrentWeek && (
+                                              <Badge variant="secondary" className="bg-green-100 text-green-700 text-xs">
+                                                Current Week
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <p className="text-2xl font-bold text-slate-900 tracking-wider mt-1">
+                                            {displayWeekPassword.password}
+                                          </p>
+                                          <p className="text-xs text-slate-500 mt-1">
+                                            {displayWeekInfo?.week_start && displayWeekInfo?.week_end && (
+                                              <span>
+                                                {new Date(displayWeekInfo.week_start).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                                {" - "}
+                                                {new Date(displayWeekInfo.week_end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                                {" • "}
+                                              </span>
+                                            )}
+                                            Set on {new Date(displayWeekPassword.created_at).toLocaleDateString()}
+                                          </p>
+                                        </div>
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
+                                ) : (
+                                  <Alert className="border-amber-300 bg-amber-50">
+                                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                                    <AlertDescription className="text-amber-800">
+                                      <strong>No Password Set:</strong> Week {displayWeekNum} does not have a password yet.
+                                      {isCurrentWeek && " Students cannot submit attendance for this week."}
+                                    </AlertDescription>
+                                  </Alert>
+                                )}
                               </div>
-                            ) : (
-                              <Alert className="border-amber-300 bg-amber-50">
-                                <AlertTriangle className="h-4 w-4 text-amber-600" />
-                                <AlertDescription className="text-amber-800">
-                                  <strong>Action Required:</strong> No password set for{" "}
-                                  {isBeforeSemester
-                                    ? "Week 1 (starting tomorrow)"
-                                    : `the current week (${currentWeekNum})`}
-                                  . Students cannot submit attendance.
-                                </AlertDescription>
-                              </Alert>
                             )
                           })()}
 
