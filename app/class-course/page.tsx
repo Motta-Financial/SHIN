@@ -1198,6 +1198,15 @@ setLoadingAttendance(true)
     }
 
     setSavingPassword(true)
+    
+    console.log("[v0] Sending password request with:", {
+      weekNumber,
+      semesterId,
+      password: newPassword,
+      userEmail,
+      userName,
+    })
+    
     try {
       const res = await fetch("/api/attendance-password", {
         method: "POST",

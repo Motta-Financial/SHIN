@@ -51,7 +51,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { weekNumber, semesterId, password, weekStart, weekEnd, createdByName, userEmail } = body
 
+    console.log("[v0] Attendance password POST received:", {
+      weekNumber,
+      semesterId,
+      password: password ? "***" : "MISSING",
+      userEmail: userEmail || "MISSING",
+      createdByName,
+    })
+
     if (!weekNumber || !semesterId || !password) {
+      console.log("[v0] Missing required fields")
       return NextResponse.json(
         { error: "Missing required fields: weekNumber, semesterId, and password are required" },
         { status: 400 },
@@ -59,6 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!userEmail) {
+      console.log("[v0] Missing userEmail")
       return NextResponse.json({ error: "User email is required for authorization" }, { status: 400 })
     }
 
