@@ -29,7 +29,58 @@ import {
   Download,
   Send,
   CheckCircle,
+  AlertTriangle,
+  ArrowDown,
+  ChevronDown,
+  ChevronUp,
+  GripVertical,
 } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+
+// Time utility functions for smart agenda management
+const parseTime = (timeStr: string): number => {
+  // Parse time like "5:00 PM" or "17:00" into minutes from midnight
+  const cleanTime = timeStr.trim().toUpperCase()
+  const isPM = cleanTime.includes("PM")
+  const isAM = cleanTime.includes("AM")
+  const timeOnly = cleanTime.replace(/\s*(AM|PM)\s*/i, "")
+  const [hoursStr, minutesStr] = timeOnly.split(":")
+  let hours = Number.parseInt(hoursStr, 10)
+  const minutes = Number.parseInt(minutesStr || "0", 10)
+  
+  if (isPM && hours !== 12) hours += 12
+  if (isAM && hours === 12) hours = 0
+  
+  return hours * 60 + minutes
+}
+
+const formatTime = (totalMinutes: number): string => {
+  // Format minutes from midnight back to "5:00 PM" format
+  let hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  const isPM = hours >= 12
+  
+  if (hours > 12) hours -= 12
+  if (hours === 0) hours = 12
+  
+  return `${hours}:${minutes.toString().padStart(2, "0")} ${isPM ? "PM" : "AM"}`
+}
+
+const getEndTime = (startTime: string, duration: number): string => {
+  const startMinutes = parseTime(startTime)
+  return formatTime(startMinutes + duration)
+}
+
+const checkTimeOverlap = (block1Start: string, block1Duration: number, block2Start: string): boolean => {
+  const start1 = parseTime(block1Start)
+  const end1 = start1 + block1Duration
+  const start2 = parseTime(block2Start)
+  return start2 < end1
+}
+
+const sortBlocksByTime = (blocks: TimeBlock[]): TimeBlock[] => {
+  return [...blocks].sort((a, b) => parseTime(a.time) - parseTime(b.time))
+}
 
 interface Activity {
   id: string
@@ -354,11 +405,141 @@ function UnifiedWeeklyAgenda({
     weekNumber: number
     timeBlockId: string
     timeBlock: TimeBlock
+    originalTime?: string
+    originalDuration?: number
   } | null>(null)
   const [showEditTimeBlockDialog, setShowEditTimeBlockDialog] = useState(false)
+  
+  // Smart agenda state
+  const [showCascadeConfirm, setShowCascadeConfirm] = useState(false)
+  const [cascadeChanges, setCascadeChanges] = useState<{
+    weekNumber: number
+    editedBlockId: string
+    timeDiff: number
+    affectedBlocks: TimeBlock[]
+  } | null>(null)
 
   // Directors data - assuming it's fetched elsewhere or hardcoded if static
   const directors = [] // Placeholder: In a real app, fetch this data.
+  
+  // Calculate time conflicts for current editing state
+  const getTimeConflicts = (activities: TimeBlock[], editingBlockId: string, newTime: string, newDuration: number): { hasConflict: boolean; conflictWith: string[] } => {
+    const conflicts: string[] = []
+    const editStart = parseTime(newTime)
+    const editEnd = editStart + newDuration
+    
+    for (const block of activities) {
+      if (block.id === editingBlockId) continue
+      const blockStart = parseTime(block.time)
+      const blockEnd = blockStart + block.duration
+      
+      // Check for overlap
+      if (editStart < blockEnd && editEnd > blockStart) {
+        conflicts.push(block.activity)
+      }
+    }
+    
+    return { hasConflict: conflicts.length > 0, conflictWith: conflicts }
+  }
+  
+  // Calculate which blocks would be affected by a cascade
+  const getBlocksToShift = (activities: TimeBlock[], editedBlockId: string, newEndTime: number): TimeBlock[] => {
+    const sortedBlocks = sortBlocksByTime(activities)
+    const editedIndex = sortedBlocks.findIndex(b => b.id === editedBlockId)
+    if (editedIndex === -1) return []
+    
+    return sortedBlocks.slice(editedIndex + 1).filter(block => {
+      const blockStart = parseTime(block.time)
+      return blockStart < newEndTime
+    })
+  }
+  
+  // Apply cascade shift to all affected blocks
+  const applyCascadeShift = async (weekNumber: number, editedBlockId: string, timeDiff: number) => {
+    const schedule = schedules.find(s => s.week_number === weekNumber)
+    if (!schedule) return
+    
+    const sortedBlocks = sortBlocksByTime(schedule.activities || [])
+    const editedIndex = sortedBlocks.findIndex(b => b.id === editedBlockId)
+    
+    const updatedActivities = sortedBlocks.map((block, index) => {
+      if (index <= editedIndex) return block
+      // Shift all blocks after the edited one
+      const newStartMinutes = parseTime(block.time) + timeDiff
+      return { ...block, time: formatTime(newStartMinutes) }
+    })
+    
+    await updateSchedule(schedule.id, { activities: updatedActivities })
+    setShowCascadeConfirm(false)
+    setCascadeChanges(null)
+  }
+  
+  // Quick duration adjustment with optional cascade
+  const quickAdjustDuration = async (weekNumber: number, blockId: string, durationChange: number, shouldCascade: boolean = false) => {
+    const schedule = schedules.find(s => s.week_number === weekNumber)
+    if (!schedule) return
+    
+    const sortedBlocks = sortBlocksByTime(schedule.activities || [])
+    const blockIndex = sortedBlocks.findIndex(b => b.id === blockId)
+    if (blockIndex === -1) return
+    
+    const block = sortedBlocks[blockIndex]
+    const newDuration = Math.max(5, block.duration + durationChange)
+    
+    let updatedActivities: TimeBlock[]
+    
+    if (shouldCascade && durationChange > 0) {
+      // Cascade: shift all following blocks
+      updatedActivities = sortedBlocks.map((b, idx) => {
+        if (idx === blockIndex) {
+          return { ...b, duration: newDuration }
+        }
+        if (idx > blockIndex) {
+          const newStartMinutes = parseTime(b.time) + durationChange
+          return { ...b, time: formatTime(newStartMinutes) }
+        }
+        return b
+      })
+    } else {
+      // No cascade: just update duration
+      updatedActivities = sortedBlocks.map(b => 
+        b.id === blockId ? { ...b, duration: newDuration } : b
+      )
+    }
+    
+    await updateSchedule(schedule.id, { activities: updatedActivities })
+  }
+  
+  // Move activity up or down in order
+  const moveActivity = async (weekNumber: number, blockId: string, direction: "up" | "down") => {
+    const schedule = schedules.find(s => s.week_number === weekNumber)
+    if (!schedule) return
+    
+    const sortedBlocks = sortBlocksByTime(schedule.activities || [])
+    const blockIndex = sortedBlocks.findIndex(b => b.id === blockId)
+    if (blockIndex === -1) return
+    
+    const swapIndex = direction === "up" ? blockIndex - 1 : blockIndex + 1
+    if (swapIndex < 0 || swapIndex >= sortedBlocks.length) return
+    
+    // Swap times between the two blocks
+    const currentBlock = sortedBlocks[blockIndex]
+    const swapBlock = sortedBlocks[swapIndex]
+    
+    const updatedActivities = sortedBlocks.map((b, idx) => {
+      if (idx === blockIndex) {
+        return { ...b, time: swapBlock.time }
+      }
+      if (idx === swapIndex) {
+        return { ...b, time: currentBlock.time }
+      }
+      return b
+    })
+    
+    // Re-sort after swap
+    const resorted = sortBlocksByTime(updatedActivities)
+    await updateSchedule(schedule.id, { activities: resorted })
+  }
 
   useEffect(() => {
     fetchSchedules()
@@ -1691,9 +1872,13 @@ const timeBlockToAdd: TimeBlock = {
                             <div className="flex-1 px-3 py-2">
                               <div className="flex items-start justify-between">
                                 <div className="flex items-center gap-3">
-                                  <div className="text-center min-w-[50px]">
+                                  <div className="text-center min-w-[70px]">
                                     <div className="font-medium text-sm">{timeBlock.time}</div>
-                                    <div className="text-[10px] text-gray-500">{timeBlock.duration} min</div>
+                                    <div className="text-[10px] text-gray-400 flex items-center justify-center gap-0.5">
+                                      <span>{timeBlock.duration}m</span>
+                                      <span className="mx-0.5">·</span>
+                                      <span className="text-gray-500">{getEndTime(timeBlock.time, timeBlock.duration)}</span>
+                                    </div>
                                   </div>
                                   <div>
                                     <div className="font-medium text-sm">{timeBlock.activity}</div>
@@ -1705,7 +1890,80 @@ const timeBlockToAdd: TimeBlock = {
                                   </div>
                                 </div>
                                 {!isStudentView && (
-                                  <div className="flex items-center gap-1">
+                                  <div className="flex items-center gap-0.5">
+                                    {/* Quick duration adjust buttons */}
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
+                                            onClick={() => quickAdjustDuration(selectedSchedule.week_number, timeBlock.id, -5)}
+                                          >
+                                            <span className="text-[10px] font-medium">-5</span>
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">
+                                          <p className="text-xs">Reduce by 5 min</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
+                                            onClick={() => quickAdjustDuration(selectedSchedule.week_number, timeBlock.id, 5)}
+                                          >
+                                            <span className="text-[10px] font-medium">+5</span>
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">
+                                          <p className="text-xs">Extend by 5 min</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                    <div className="w-px h-4 bg-gray-200 mx-1" />
+                                    {/* Move up/down buttons */}
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
+                                            onClick={() => moveActivity(selectedSchedule.week_number, timeBlock.id, "up")}
+                                          >
+                                            <ChevronUp className="h-3 w-3" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">
+                                          <p className="text-xs">Move earlier</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
+                                            onClick={() => moveActivity(selectedSchedule.week_number, timeBlock.id, "down")}
+                                          >
+                                            <ChevronDown className="h-3 w-3" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top">
+                                          <p className="text-xs">Move later</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                    <div className="w-px h-4 bg-gray-200 mx-1" />
+                                    {/* Edit and delete buttons */}
                                     <Button
                                       size="sm"
                                       variant="ghost"
@@ -1715,6 +1973,8 @@ const timeBlockToAdd: TimeBlock = {
                                           weekNumber: selectedSchedule.week_number,
                                           timeBlockId: timeBlock.id,
                                           timeBlock: { ...timeBlock },
+                                          originalTime: timeBlock.time,
+                                          originalDuration: timeBlock.duration,
                                         })
                                         setShowEditTimeBlockDialog(true)
                                       }}
@@ -2173,19 +2433,95 @@ const timeBlockToAdd: TimeBlock = {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showEditTimeBlockDialog} onOpenChange={setShowEditTimeBlockDialog}>
+      <Dialog open={showEditTimeBlockDialog} onOpenChange={(open) => {
+          setShowEditTimeBlockDialog(open)
+          if (!open) {
+            setEditingTimeBlock(null)
+          }
+        }}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Activity</DialogTitle>
           </DialogHeader>
-          {editingTimeBlock && (
+          {editingTimeBlock && (() => {
+            const schedule = schedules.find(s => s.week_number === editingTimeBlock.weekNumber)
+            const activities = schedule?.activities || []
+            const conflicts = getTimeConflicts(
+              activities,
+              editingTimeBlock.timeBlockId,
+              editingTimeBlock.timeBlock.time,
+              editingTimeBlock.timeBlock.duration
+            )
+            const endTime = getEndTime(editingTimeBlock.timeBlock.time, editingTimeBlock.timeBlock.duration)
+            const originalEndMinutes = editingTimeBlock.originalTime && editingTimeBlock.originalDuration
+              ? parseTime(editingTimeBlock.originalTime) + editingTimeBlock.originalDuration
+              : null
+            const newEndMinutes = parseTime(editingTimeBlock.timeBlock.time) + editingTimeBlock.timeBlock.duration
+            const timeDiff = originalEndMinutes ? newEndMinutes - originalEndMinutes : 0
+            const blocksToShift = timeDiff > 0 ? getBlocksToShift(activities, editingTimeBlock.timeBlockId, newEndMinutes) : []
+            
+            return (
             <div className="space-y-4 mt-4">
+              {/* Time Conflict Warning */}
+              {conflicts.hasConflict && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-red-800">Time Conflict Detected</p>
+                    <p className="text-xs text-red-600 mt-0.5">
+                      This activity overlaps with: {conflicts.conflictWith.join(", ")}
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Cascade Suggestion */}
+              {blocksToShift.length > 0 && !conflicts.hasConflict && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <ArrowDown className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-amber-800">Shift Following Activities?</p>
+                      <p className="text-xs text-amber-600 mt-0.5">
+                        This change extends into the next activity. Would you like to shift {blocksToShift.length} activity(ies) forward by {timeDiff} minutes?
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {blocksToShift.map(block => (
+                          <Badge key={block.id} variant="outline" className="text-xs bg-white">
+                            {block.activity} ({block.time})
+                          </Badge>
+                        ))}
+                      </div>
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs bg-transparent"
+                          onClick={() => {
+                            setCascadeChanges({
+                              weekNumber: editingTimeBlock.weekNumber,
+                              editedBlockId: editingTimeBlock.timeBlockId,
+                              timeDiff,
+                              affectedBlocks: blocksToShift
+                            })
+                            setShowCascadeConfirm(true)
+                          }}
+                        >
+                          <ArrowDown className="h-3 w-3 mr-1" />
+                          Shift All Below
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Activity Header Settings */}
               <div className="p-3 bg-gray-50 rounded-lg border">
                 <h4 className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-3">Activity Settings</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label className="text-xs">Time</Label>
+                    <Label className="text-xs">Start Time</Label>
                     <Input
                       value={editingTimeBlock.timeBlock.time}
                       onChange={(e) =>
@@ -2200,19 +2536,34 @@ const timeBlockToAdd: TimeBlock = {
                   </div>
                   <div>
                     <Label className="text-xs">Duration (min)</Label>
-                    <Input
-                      type="number"
-                      value={editingTimeBlock.timeBlock.duration}
-                      onChange={(e) =>
-                        setEditingTimeBlock({
-                          ...editingTimeBlock,
-                          timeBlock: { ...editingTimeBlock.timeBlock, duration: Number.parseInt(e.target.value) || 0 },
-                        })
-                      }
-                      min={5}
-                      max={180}
-                      className="h-8 text-sm"
-                    />
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        value={editingTimeBlock.timeBlock.duration}
+                        onChange={(e) =>
+                          setEditingTimeBlock({
+                            ...editingTimeBlock,
+                            timeBlock: { ...editingTimeBlock.timeBlock, duration: Number.parseInt(e.target.value) || 0 },
+                          })
+                        }
+                        min={5}
+                        max={180}
+                        className="h-8 text-sm flex-1"
+                      />
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="secondary" className="h-8 px-2 text-xs whitespace-nowrap">
+                              <Clock className="h-3 w-3 mr-1" />
+                              Ends {endTime}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Activity ends at {endTime}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </div>
                   <div>
                     <Label className="text-xs">Activity Name</Label>
@@ -2461,7 +2812,7 @@ const timeBlockToAdd: TimeBlock = {
                 </div>
               </div>
             </div>
-          )}
+          )})()}
           <DialogFooter>
             <Button
               variant="outline"
@@ -2493,6 +2844,77 @@ const timeBlockToAdd: TimeBlock = {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Cascade Confirmation Dialog */}
+      <Dialog open={showCascadeConfirm} onOpenChange={setShowCascadeConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowDown className="h-5 w-5 text-amber-600" />
+              Shift Following Activities
+            </DialogTitle>
+          </DialogHeader>
+          {cascadeChanges && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                This will shift the following {cascadeChanges.affectedBlocks.length} activity(ies) forward by {cascadeChanges.timeDiff} minutes:
+              </p>
+              <div className="bg-gray-50 rounded-lg p-3 space-y-2 max-h-[200px] overflow-y-auto">
+                {cascadeChanges.affectedBlocks.map(block => {
+                  const newTime = formatTime(parseTime(block.time) + cascadeChanges.timeDiff)
+                  return (
+                    <div key={block.id} className="flex items-center justify-between text-sm">
+                      <span className="font-medium">{block.activity}</span>
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <span className="line-through">{block.time}</span>
+                        <ChevronRight className="h-3 w-3" />
+                        <span className="text-green-600 font-medium">{newTime}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowCascadeConfirm(false)
+                    setCascadeChanges(null)
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={async () => {
+                    if (cascadeChanges && editingTimeBlock) {
+                      // First save the current edit
+                      await updateTimeBlock(editingTimeBlock.weekNumber, editingTimeBlock.timeBlockId, editingTimeBlock.timeBlock)
+                      // Then apply cascade
+                      await applyCascadeShift(cascadeChanges.weekNumber, cascadeChanges.editedBlockId, cascadeChanges.timeDiff)
+                      setShowEditTimeBlockDialog(false)
+                      setEditingTimeBlock(null)
+                    }
+                  }}
+                  disabled={saving}
+                  className="bg-amber-600 hover:bg-amber-700"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Shifting...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowDown className="h-4 w-4 mr-2" />
+                      Shift All
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
