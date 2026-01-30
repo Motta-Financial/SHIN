@@ -1659,16 +1659,18 @@ const timeBlockToAdd: TimeBlock = {
                                     />
                                   </div>
                                   <div>
-                                    <Label>Duration (min)</Label>
-                                    <Input
-                                      type="number"
-                                      value={newTimeBlock.duration}
-                                      onChange={(e) =>
-                                        setNewTimeBlock({
-                                          ...newTimeBlock,
-                                          duration: Number.parseInt(e.target.value),
-                                        })
-                                      }
+<Label>Duration (min)</Label>
+  <Input
+  type="text"
+  inputMode="numeric"
+  value={newTimeBlock.duration === 0 ? "" : newTimeBlock.duration}
+  onChange={(e) => {
+  const val = e.target.value.replace(/\D/g, "")
+  setNewTimeBlock({
+  ...newTimeBlock,
+  duration: val === "" ? 0 : Number.parseInt(val, 10),
+  })
+  }}
                                       min={5}
                                       max={180}
                                     />
@@ -2259,16 +2261,18 @@ const timeBlockToAdd: TimeBlock = {
                   />
                 </div>
                 <div>
-                  <Label>Duration (minutes)</Label>
-                  <Input
-                    type="number"
-                    value={editingScheduleItem.item.minutes}
-                    onChange={(e) =>
-                      setEditingScheduleItem({
-                        ...editingScheduleItem,
-                        item: { ...editingScheduleItem.item, minutes: Number.parseInt(e.target.value) || 0 },
-                      })
-                    }
+<Label>Duration (minutes)</Label>
+  <Input
+  type="text"
+  inputMode="numeric"
+  value={editingScheduleItem.item.minutes === 0 ? "" : editingScheduleItem.item.minutes}
+  onChange={(e) => {
+  const val = e.target.value.replace(/\D/g, "")
+  setEditingScheduleItem({
+  ...editingScheduleItem,
+  item: { ...editingScheduleItem.item, minutes: val === "" ? 0 : Number.parseInt(val, 10) },
+  })
+  }}
                     min={5}
                     max={180}
                   />
@@ -2452,17 +2456,19 @@ const timeBlockToAdd: TimeBlock = {
                     />
                   </div>
                   <div>
-                    <Label className="text-xs">Duration (min)</Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        value={editingTimeBlock.timeBlock.duration}
-                        onChange={(e) =>
-                          setEditingTimeBlock({
-                            ...editingTimeBlock,
-                            timeBlock: { ...editingTimeBlock.timeBlock, duration: Number.parseInt(e.target.value) || 0 },
-                          })
-                        }
+<Label className="text-xs">Duration (min)</Label>
+  <div className="flex items-center gap-2">
+  <Input
+  type="text"
+  inputMode="numeric"
+  value={editingTimeBlock.timeBlock.duration === 0 ? "" : editingTimeBlock.timeBlock.duration}
+  onChange={(e) => {
+  const val = e.target.value.replace(/\D/g, "")
+  setEditingTimeBlock({
+  ...editingTimeBlock,
+  timeBlock: { ...editingTimeBlock.timeBlock, duration: val === "" ? 0 : Number.parseInt(val, 10) },
+  })
+  }}
                         min={5}
                         max={180}
                         className="h-8 text-sm flex-1"
