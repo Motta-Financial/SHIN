@@ -31,9 +31,6 @@ import {
   CheckCircle,
   AlertTriangle,
   ArrowDown,
-  ChevronDown,
-  ChevronUp,
-  GripVertical,
 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -442,6 +439,36 @@ function UnifiedWeeklyAgenda({
     return { hasConflict: conflicts.length > 0, conflictWith: conflicts }
   }
   
+  // Detect all time conflicts in the schedule (for banner warning)
+  const detectAllTimeConflicts = (activities: TimeBlock[]): { activity1: string; activity2: string; time1: string; time2: string }[] => {
+    if (!activities || activities.length < 2) return []
+    
+    const conflicts: { activity1: string; activity2: string; time1: string; time2: string }[] = []
+    const sortedBlocks = sortBlocksByTime(activities)
+    
+    for (let i = 0; i < sortedBlocks.length - 1; i++) {
+      const current = sortedBlocks[i]
+      const currentEnd = parseTime(current.time) + current.duration
+      
+      for (let j = i + 1; j < sortedBlocks.length; j++) {
+        const next = sortedBlocks[j]
+        const nextStart = parseTime(next.time)
+        
+        // If current activity ends after next starts, there's an overlap
+        if (currentEnd > nextStart) {
+          conflicts.push({
+            activity1: current.activity,
+            activity2: next.activity,
+            time1: `${current.time} - ${getEndTime(current.time, current.duration)}`,
+            time2: `${next.time} - ${getEndTime(next.time, next.duration)}`,
+          })
+        }
+      }
+    }
+    
+    return conflicts
+  }
+  
   // Calculate which blocks would be affected by a cascade
   const getBlocksToShift = (activities: TimeBlock[], editedBlockId: string, newEndTime: number): TimeBlock[] => {
     const sortedBlocks = sortBlocksByTime(activities)
@@ -474,73 +501,6 @@ function UnifiedWeeklyAgenda({
     setCascadeChanges(null)
   }
   
-  // Quick duration adjustment with optional cascade
-  const quickAdjustDuration = async (weekNumber: number, blockId: string, durationChange: number, shouldCascade: boolean = false) => {
-    const schedule = schedules.find(s => s.week_number === weekNumber)
-    if (!schedule) return
-    
-    const sortedBlocks = sortBlocksByTime(schedule.activities || [])
-    const blockIndex = sortedBlocks.findIndex(b => b.id === blockId)
-    if (blockIndex === -1) return
-    
-    const block = sortedBlocks[blockIndex]
-    const newDuration = Math.max(5, block.duration + durationChange)
-    
-    let updatedActivities: TimeBlock[]
-    
-    if (shouldCascade && durationChange > 0) {
-      // Cascade: shift all following blocks
-      updatedActivities = sortedBlocks.map((b, idx) => {
-        if (idx === blockIndex) {
-          return { ...b, duration: newDuration }
-        }
-        if (idx > blockIndex) {
-          const newStartMinutes = parseTime(b.time) + durationChange
-          return { ...b, time: formatTime(newStartMinutes) }
-        }
-        return b
-      })
-    } else {
-      // No cascade: just update duration
-      updatedActivities = sortedBlocks.map(b => 
-        b.id === blockId ? { ...b, duration: newDuration } : b
-      )
-    }
-    
-    await updateSchedule(schedule.id, { activities: updatedActivities })
-  }
-  
-  // Move activity up or down in order
-  const moveActivity = async (weekNumber: number, blockId: string, direction: "up" | "down") => {
-    const schedule = schedules.find(s => s.week_number === weekNumber)
-    if (!schedule) return
-    
-    const sortedBlocks = sortBlocksByTime(schedule.activities || [])
-    const blockIndex = sortedBlocks.findIndex(b => b.id === blockId)
-    if (blockIndex === -1) return
-    
-    const swapIndex = direction === "up" ? blockIndex - 1 : blockIndex + 1
-    if (swapIndex < 0 || swapIndex >= sortedBlocks.length) return
-    
-    // Swap times between the two blocks
-    const currentBlock = sortedBlocks[blockIndex]
-    const swapBlock = sortedBlocks[swapIndex]
-    
-    const updatedActivities = sortedBlocks.map((b, idx) => {
-      if (idx === blockIndex) {
-        return { ...b, time: swapBlock.time }
-      }
-      if (idx === swapIndex) {
-        return { ...b, time: currentBlock.time }
-      }
-      return b
-    })
-    
-    // Re-sort after swap
-    const resorted = sortBlocksByTime(updatedActivities)
-    await updateSchedule(schedule.id, { activities: resorted })
-  }
-
   useEffect(() => {
     fetchSchedules()
     // fetchDirectors() // Removed unused fetch
@@ -1847,9 +1807,39 @@ const timeBlockToAdd: TimeBlock = {
                       </div>
                     </div>
 
-                    {selectedSchedule.activities && selectedSchedule.activities.length > 0 ? (
-                      <div className="space-y-2">
-                        {selectedSchedule.activities.map((timeBlock) => (
+{selectedSchedule.activities && selectedSchedule.activities.length > 0 ? (
+  <div className="space-y-2">
+  {/* Time Conflict Warning Banner */}
+  {(() => {
+    const conflicts = detectAllTimeConflicts(selectedSchedule.activities)
+    if (conflicts.length === 0) return null
+    
+    return (
+      <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-3">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-red-800">Time Conflict Detected</p>
+            <p className="text-xs text-red-600 mt-1">
+              The following activities have overlapping times:
+            </p>
+            <ul className="mt-2 space-y-1">
+              {conflicts.map((conflict, idx) => (
+                <li key={idx} className="text-xs text-red-700 flex items-center gap-1">
+                  <span className="font-medium">{conflict.activity1}</span>
+                  <span className="text-red-400">({conflict.time1})</span>
+                  <span className="text-red-500 mx-1">overlaps with</span>
+                  <span className="font-medium">{conflict.activity2}</span>
+                  <span className="text-red-400">({conflict.time2})</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    )
+  })()}
+  {selectedSchedule.activities.map((timeBlock) => (
                           <div key={timeBlock.id} className="flex border rounded-md overflow-hidden bg-white">
                             {/* Left accent bar based on activity type */}
                             <div
@@ -1890,80 +1880,7 @@ const timeBlockToAdd: TimeBlock = {
                                   </div>
                                 </div>
                                 {!isStudentView && (
-                                  <div className="flex items-center gap-0.5">
-                                    {/* Quick duration adjust buttons */}
-                                    <TooltipProvider>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
-                                            onClick={() => quickAdjustDuration(selectedSchedule.week_number, timeBlock.id, -5)}
-                                          >
-                                            <span className="text-[10px] font-medium">-5</span>
-                                          </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top">
-                                          <p className="text-xs">Reduce by 5 min</p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
-                                    <TooltipProvider>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
-                                            onClick={() => quickAdjustDuration(selectedSchedule.week_number, timeBlock.id, 5)}
-                                          >
-                                            <span className="text-[10px] font-medium">+5</span>
-                                          </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top">
-                                          <p className="text-xs">Extend by 5 min</p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
-                                    <div className="w-px h-4 bg-gray-200 mx-1" />
-                                    {/* Move up/down buttons */}
-                                    <TooltipProvider>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
-                                            onClick={() => moveActivity(selectedSchedule.week_number, timeBlock.id, "up")}
-                                          >
-                                            <ChevronUp className="h-3 w-3" />
-                                          </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top">
-                                          <p className="text-xs">Move earlier</p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
-                                    <TooltipProvider>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-6 w-6 p-0 text-gray-400 hover:text-gray-600"
-                                            onClick={() => moveActivity(selectedSchedule.week_number, timeBlock.id, "down")}
-                                          >
-                                            <ChevronDown className="h-3 w-3" />
-                                          </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top">
-                                          <p className="text-xs">Move later</p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
-                                    <div className="w-px h-4 bg-gray-200 mx-1" />
-                                    {/* Edit and delete buttons */}
+                                  <div className="flex items-center gap-1">
                                     <Button
                                       size="sm"
                                       variant="ghost"
