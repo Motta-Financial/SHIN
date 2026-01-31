@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { getCachedData, setCachedData } from "@/lib/api-cache"
 
 function getSupabaseClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -21,40 +20,37 @@ export async function GET(request: NextRequest) {
     const studentId = isValidUUID(studentIdParam) ? studentIdParam : null
     const clinicId = isValidUUID(clinicIdParam) ? clinicIdParam : null
 
-    const cacheKey = `student-notifications:${studentId || "all"}:${clinicId || "all"}`
-    const cached = getCachedData(cacheKey)
-    if (cached) {
-      console.log("[v0] Student-notifications API - Returning cached response")
-      return NextResponse.json(cached)
-    }
+    // Don't cache student notifications to ensure fresh data
 
     const supabase = getSupabaseClient()
 
+    // Build the query to fetch notifications for this student
+    // Since notifications table requires student_id (NOT NULL), we fetch:
+    // 1. Student-specific notifications (student_id = studentId)
+    // 2. Clinic-specific notifications (clinic_id = clinicId AND student_id = studentId)
     let query = supabase
       .from("notifications")
       .select("*")
       .eq("target_audience", "students")
       .order("created_at", { ascending: false })
-      .limit(20)
+      .limit(50)
 
-    if (studentId && clinicId) {
-      query = query.or(`student_id.eq.${studentId},student_id.is.null,clinic_id.eq.${clinicId}`)
-    } else if (studentId) {
-      query = query.or(`student_id.eq.${studentId},student_id.is.null`)
-    } else if (clinicId) {
-      query = query.or(`clinic_id.eq.${clinicId},clinic_id.is.null`)
+    // Filter by student_id if provided (required since student_id is NOT NULL in the table)
+    if (studentId) {
+      query = query.eq("student_id", studentId)
+    } else {
+      // If no studentId provided, return empty (can't fetch notifications without knowing the student)
+      return NextResponse.json({ notifications: [] })
     }
 
     const { data, error } = await query
 
     if (error) {
-      console.error("Error fetching student notifications:", error)
+      console.error("[v0] Student-notifications API - Error:", error.message, error.code)
       return NextResponse.json({ notifications: [] })
     }
 
     const response = { notifications: data || [] }
-    setCachedData(cacheKey, response)
-    console.log(`[v0] Student-notifications API - Fetched and cached notifications count: ${data?.length || 0}`)
 
     return NextResponse.json(response)
   } catch (error) {
@@ -67,19 +63,24 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = getSupabaseClient()
     const body = await request.json()
-    const { studentId, clinicId, title, message, type, createdBy, createdById } = body
+    const { studentId, clinicId, title, message, type } = body
+
+    // student_id is required (NOT NULL constraint in the table)
+    if (!studentId) {
+      return NextResponse.json({ error: "studentId is required" }, { status: 400 })
+    }
 
     const { data, error } = await supabase
       .from("notifications")
       .insert({
-        student_id: studentId || null,
+        student_id: studentId,
         clinic_id: clinicId || null,
         title,
         message,
         type: type || "announcement",
         target_audience: "students",
-        created_by: createdBy,
-        created_by_id: createdById,
+        is_read: false,
+        created_at: new Date().toISOString(),
       })
       .select()
       .single()

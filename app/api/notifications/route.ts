@@ -18,8 +18,9 @@ export async function GET(request: NextRequest) {
 
     if (directorId && directorId !== "all" && directorId !== "undefined" && isValidUUID(directorId)) {
       query = query.eq("director_id", directorId)
-    } else if (clinic && clinic !== "all" && clinic !== "undefined") {
-      query = query.ilike("clinic", `%${clinic}%`)
+    } else if (clinic && clinic !== "all" && clinic !== "undefined" && isValidUUID(clinic)) {
+      // If clinic is a UUID, filter by clinic_id
+      query = query.eq("clinic_id", clinic)
     }
 
     const { data: notifications, error } = await query
