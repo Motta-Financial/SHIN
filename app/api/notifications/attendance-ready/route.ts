@@ -21,9 +21,8 @@ export async function POST(request: Request) {
     // Get all active students for this semester
     const { data: students, error: studentsError } = await supabase
       .from("students_current")
-      .select("id, name, email, clinic_id")
+      .select("id, full_name, email, clinic_id")
       .eq("semester_id", semesterId)
-      .eq("is_active", true)
 
     if (studentsError) {
       console.error("Error fetching students:", studentsError)
@@ -40,13 +39,12 @@ export async function POST(request: Request) {
       title: "Attendance Open",
       message: `Attendance for Week ${weekNumber} (${classDate}) is now open. Please submit your attendance during class.`,
       student_id: student.id,
-      student_name: student.name,
+      student_name: student.full_name,
       student_email: student.email,
       clinic_id: student.clinic_id,
       target_audience: "students",
-      related_id: `week-${weekNumber}`,
-      created_by_user_id: createdByEmail,
       is_read: false,
+      created_at: new Date().toISOString(),
     }))
 
     const { error: insertError } = await supabase

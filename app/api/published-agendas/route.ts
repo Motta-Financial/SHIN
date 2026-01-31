@@ -96,7 +96,6 @@ export async function POST(request: Request) {
         clinic_id: null,
         related_id: data.id,
         is_read: false,
-        created_by: body.published_by,
         created_at: new Date().toISOString(),
       })
     } catch (notifError) {

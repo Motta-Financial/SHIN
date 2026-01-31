@@ -134,24 +134,39 @@ export async function POST(request: Request) {
   try {
     const supabase = createServiceClient()
     const body = await request.json()
+    
+    console.log("[v0] Debriefs POST - Received body:", JSON.stringify({
+      studentId: body.studentId,
+      studentEmail: body.studentEmail,
+      clinic: body.clinic,
+      questions: body.questions?.substring(0, 50),
+      questionType: body.questionType,
+    }))
 
     let studentData = null
     if (body.studentId) {
-      const { data } = await supabase
+      const { data, error: mappingError } = await supabase
         .from("v_complete_mapping")
         .select("*")
         .eq("student_id", body.studentId)
         .limit(1)
         .maybeSingle()
       studentData = data
+      if (mappingError) {
+        console.log("[v0] Debriefs POST - Error fetching student mapping:", mappingError.message)
+      }
+      console.log("[v0] Debriefs POST - Found student mapping:", studentData ? "yes" : "no")
     } else if (body.studentEmail) {
-      const { data } = await supabase
+      const { data, error: mappingError } = await supabase
         .from("v_complete_mapping")
         .select("*")
         .eq("student_email", body.studentEmail)
         .limit(1)
         .maybeSingle()
       studentData = data
+      if (mappingError) {
+        console.log("[v0] Debriefs POST - Error fetching student mapping by email:", mappingError.message)
+      }
     }
 
     // Get current semester ID if not provided
@@ -177,13 +192,22 @@ export async function POST(request: Request) {
       semester_id: semesterId,
       status: "submitted",
     }
+    
+    console.log("[v0] Debriefs POST - Insert data:", JSON.stringify({
+      student_id: insertData.student_id,
+      student_email: insertData.student_email,
+      clinic: insertData.clinic,
+      semester_id: insertData.semester_id,
+    }))
 
     const { data, error } = await supabase.from("debriefs").insert(insertData).select().single()
 
     if (error) {
-      console.log("[v0] Error creating debrief:", error.message)
+      console.log("[v0] Error creating debrief:", error.message, "code:", error.code, "details:", error.details)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+    
+    console.log("[v0] Debriefs POST - Successfully created debrief:", data.id)
 
     // Create notifications for directors based on question type
     try {

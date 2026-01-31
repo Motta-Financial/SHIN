@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { getCachedData, setCachedData } from "@/lib/api-cache"
 
 function getSupabaseClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -21,40 +20,51 @@ export async function GET(request: NextRequest) {
     const studentId = isValidUUID(studentIdParam) ? studentIdParam : null
     const clinicId = isValidUUID(clinicIdParam) ? clinicIdParam : null
 
-    const cacheKey = `student-notifications:${studentId || "all"}:${clinicId || "all"}`
-    const cached = getCachedData(cacheKey)
-    if (cached) {
-      console.log("[v0] Student-notifications API - Returning cached response")
-      return NextResponse.json(cached)
-    }
+    // Don't cache student notifications to ensure fresh data
 
     const supabase = getSupabaseClient()
 
+    // Build the query to fetch notifications for:
+    // 1. Broadcast notifications (student_id IS NULL AND clinic_id IS NULL)
+    // 2. Student-specific notifications (student_id = studentId)
+    // 3. Clinic-specific notifications (clinic_id = clinicId)
     let query = supabase
       .from("notifications")
       .select("*")
       .eq("target_audience", "students")
       .order("created_at", { ascending: false })
-      .limit(20)
+      .limit(50)
 
-    if (studentId && clinicId) {
-      query = query.or(`student_id.eq.${studentId},student_id.is.null,clinic_id.eq.${clinicId}`)
-    } else if (studentId) {
-      query = query.or(`student_id.eq.${studentId},student_id.is.null`)
-    } else if (clinicId) {
-      query = query.or(`clinic_id.eq.${clinicId},clinic_id.is.null`)
+    // Build OR filter for different notification types
+    const filters: string[] = []
+    
+    // Always include broadcast notifications (both student_id and clinic_id are null)
+    filters.push("and(student_id.is.null,clinic_id.is.null)")
+    
+    if (studentId) {
+      filters.push(`student_id.eq.${studentId}`)
+    }
+    if (clinicId) {
+      filters.push(`clinic_id.eq.${clinicId}`)
+    }
+    
+    console.log("[v0] Student-notifications API - Filters:", filters.join(","))
+    
+    if (filters.length > 0) {
+      query = query.or(filters.join(","))
     }
 
     const { data, error } = await query
 
     if (error) {
-      console.error("Error fetching student notifications:", error)
+      console.error("[v0] Student-notifications API - Error:", error.message, error.code)
       return NextResponse.json({ notifications: [] })
     }
+    
+    console.log("[v0] Student-notifications API - Query successful, count:", data?.length || 0)
 
     const response = { notifications: data || [] }
-    setCachedData(cacheKey, response)
-    console.log(`[v0] Student-notifications API - Fetched and cached notifications count: ${data?.length || 0}`)
+    console.log(`[v0] Student-notifications API - Fetched notifications count: ${data?.length || 0}`)
 
     return NextResponse.json(response)
   } catch (error) {
@@ -67,7 +77,7 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = getSupabaseClient()
     const body = await request.json()
-    const { studentId, clinicId, title, message, type, createdBy, createdById } = body
+    const { studentId, clinicId, title, message, type, createdByUserId } = body
 
     const { data, error } = await supabase
       .from("notifications")
@@ -78,8 +88,9 @@ export async function POST(request: NextRequest) {
         message,
         type: type || "announcement",
         target_audience: "students",
-        created_by: createdBy,
-        created_by_id: createdById,
+        created_by_user_id: createdByUserId || null,
+        is_read: false,
+        created_at: new Date().toISOString(),
       })
       .select()
       .single()
