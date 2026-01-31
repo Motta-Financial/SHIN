@@ -92,18 +92,15 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
     async function fetchNotifications() {
       setLoading(true)
       try {
-        await new Promise((resolve) => setTimeout(resolve, 1500))
-
-        // Fetch notifications from database with retry logic
-        const notifResponse = await fetchWithRetry(
-          `/api/notifications?${selectedClinic !== "all" ? `directorId=${selectedClinic}` : ""}`,
-        )
+        // Fetch notifications and meeting requests in parallel for better performance
+        const [notifResponse, meetingResponse] = await Promise.all([
+          fetchWithRetry(
+            `/api/notifications?${selectedClinic !== "all" ? `directorId=${selectedClinic}` : ""}`,
+          ),
+          fetchWithRetry("/api/meeting-requests?status=pending"),
+        ])
+        
         const notifData = await notifResponse.json()
-
-        await new Promise((resolve) => setTimeout(resolve, 800))
-
-        // Fetch pending meeting requests with retry logic
-        const meetingResponse = await fetchWithRetry("/api/meeting-requests?status=pending")
         const meetingData = await meetingResponse.json()
 
         // Map meeting requests to notification format

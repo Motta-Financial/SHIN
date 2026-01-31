@@ -41,15 +41,8 @@ async function fetchWithRetry(url: string, retries = 3, delay = 500): Promise<Re
 }
 
 async function fetchSequentially(urls: string[]): Promise<Response[]> {
-  const results: Response[] = []
-  for (const url of urls) {
-    // Add delay between requests to avoid rate limiting
-    if (results.length > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 150))
-    }
-    const res = await fetchWithRetry(url)
-    results.push(res)
-  }
+  // Use Promise.all for parallel fetching - faster than sequential with delays
+  const results = await Promise.all(urls.map((url) => fetchWithRetry(url)))
   return results
 }
 

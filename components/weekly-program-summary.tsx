@@ -50,14 +50,8 @@ async function fetchWithRetry(url: string, retries = 3, delay = 2000): Promise<R
 }
 
 async function fetchSequentially(urls: string[]): Promise<Response[]> {
-  const results: Response[] = []
-  for (const url of urls) {
-    if (results.length > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 500)) // Increased from 150ms to 500ms
-    }
-    const res = await fetchWithRetry(url)
-    results.push(res)
-  }
+  // Use Promise.all for parallel fetching - faster than sequential with delays
+  const results = await Promise.all(urls.map((url) => fetchWithRetry(url)))
   return results
 }
 
@@ -78,8 +72,6 @@ export function WeeklyProgramSummary({
   useEffect(() => {
     const fetchData = async () => {
       try {
-        await new Promise((resolve) => setTimeout(resolve, 2000))
-
         const mappingUrl =
           directorId && directorId !== "all"
             ? `/api/supabase/v-complete-mapping?directorId=${directorId}`
