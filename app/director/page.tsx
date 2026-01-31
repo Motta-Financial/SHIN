@@ -11,6 +11,7 @@ import { ClinicView } from "@/components/clinic-view"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { OnboardingAgreements } from "@/components/onboarding-agreements"
+import { DirectorNotifications } from "@/components/director-notifications"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -1169,62 +1170,10 @@ export default function DirectorDashboard() {
                   </div>
                 </div>
 
-                {/* Right side: Recent Activity - takes remaining space */}
-                <Card className="flex-1 bg-white border border-gray-200 shadow-sm flex flex-col">
-                  <CardContent className="pt-1 pb-2 px-2 flex flex-col flex-1 h-full">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Bell className="h-4 w-4" style={{ color: "#878568" }} />
-                        <p className="text-base text-gray-800 font-bold">Recent Activity</p>
-                      </div>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                        {overviewData.notifications.length} updates
-                      </span>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto space-y-1">
-                      {overviewData.notifications.length > 0 ? (
-                        overviewData.notifications.slice(0, 15).map((notification, index) => (
-                          <div
-                            key={index}
-                            className="flex items-start gap-2 p-2 rounded-lg transition-colors hover:bg-gray-50"
-                          >
-                            <div
-                              className="h-7 w-7 rounded-full flex items-center justify-center flex-shrink-0"
-                              style={{ backgroundColor: notification.type === "alert" ? "#fee2e2" : "#f3f4f6" }}
-                            >
-                              {notification.type === "debrief" && (
-                                <FileText className="h-3.5 w-3.5" style={{ color: "#6A6352" }} />
-                              )}
-                              {notification.type === "session" && (
-                                <Calendar className="h-3.5 w-3.5" style={{ color: "#878568" }} />
-                              )}
-{notification.type === "alert" && <AlertCircle className="h-3.5 w-3.5 text-red-500" />}
-                                        {notification.type === "meeting_request" && (
-                                          <Users className="h-3.5 w-3.5" style={{ color: "#2563eb" }} />
-                                        )}
-                                        {notification.type === "question" && (
-                                          <MessageSquare className="h-3.5 w-3.5" style={{ color: "#059669" }} />
-                                        )}
-                                        {!["debrief", "session", "alert", "meeting_request", "question"].includes(notification.type) && (
-                                <Bell className="h-3.5 w-3.5" style={{ color: "#505143" }} />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm text-gray-800 leading-tight">{notification.title}</p>
-                              <p className="text-xs text-gray-400 mt-0.5">{notification.time}</p>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                          <Bell className="h-6 w-6 mb-1 opacity-50" />
-                          <p className="text-xs">No recent activity</p>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                {/* Right side: Triage - takes remaining space */}
+                <div className="flex-1">
+                  <DirectorNotifications selectedClinic={selectedDirectorId} compact={true} />
+                </div>
               </div>
 
               {/* Two Column Layout: Clinic Health & Quick Actions */}
