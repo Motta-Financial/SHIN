@@ -82,10 +82,22 @@ export async function POST(request: Request) {
 
     if (error) throw error
 
-    // Create notification for all students in the current semester
+    // Create ONE notification for directors about the published agenda
     try {
       const scheduleDate = new Date(body.schedule_date)
       const formattedDate = scheduleDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      
+      // Create a single director notification for the agenda
+      const directorNotification = {
+        type: "announcement",
+        title: "Class Agenda Published",
+        message: `You published the agenda for ${formattedDate}. All students have been notified.`,
+        target_audience: "directors",
+        is_read: false,
+        created_at: new Date().toISOString(),
+      }
+      
+      await supabase.from("notifications").insert(directorNotification)
       
       // Get all active students for this semester
       const { data: students, error: studentsError } = await supabase
@@ -96,7 +108,7 @@ export async function POST(request: Request) {
         console.log("[v0] Error fetching students for notification:", studentsError.message)
       } else if (students && students.length > 0) {
         // Create individual notifications for each student
-        const notifications = students.map(student => ({
+        const studentNotifications = students.map(student => ({
           type: "announcement",
           title: "Class Agenda Published",
           message: `The agenda for ${formattedDate} has been published. Check the Class Course page for details.`,
@@ -109,11 +121,11 @@ export async function POST(request: Request) {
           created_at: new Date().toISOString(),
         }))
         
-        const { error: insertError } = await supabase.from("notifications").insert(notifications)
+        const { error: insertError } = await supabase.from("notifications").insert(studentNotifications)
         if (insertError) {
-          console.log("[v0] Error inserting notifications:", insertError.message)
+          console.log("[v0] Error inserting student notifications:", insertError.message)
         } else {
-          console.log(`[v0] Created ${notifications.length} agenda notifications for students`)
+          console.log(`[v0] Created ${studentNotifications.length} agenda notifications for students + 1 for directors`)
         }
       }
     } catch (notifError) {

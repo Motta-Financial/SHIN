@@ -50,14 +50,8 @@ async function fetchWithRetry(url: string, retries = 3, delay = 2000): Promise<R
 }
 
 async function fetchSequentially(urls: string[]): Promise<Response[]> {
-  const results: Response[] = []
-  for (const url of urls) {
-    if (results.length > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 500)) // Increased from 150ms to 500ms
-    }
-    const res = await fetchWithRetry(url)
-    results.push(res)
-  }
+  // Use Promise.all for parallel fetching - faster than sequential with delays
+  const results = await Promise.all(urls.map((url) => fetchWithRetry(url)))
   return results
 }
 
@@ -78,8 +72,6 @@ export function WeeklyProgramSummary({
   useEffect(() => {
     const fetchData = async () => {
       try {
-        await new Promise((resolve) => setTimeout(resolve, 2000))
-
         const mappingUrl =
           directorId && directorId !== "all"
             ? `/api/supabase/v-complete-mapping?directorId=${directorId}`
@@ -89,39 +81,38 @@ export function WeeklyProgramSummary({
 
         const [debriefResponse, clientsResponse, directorsResponse, mappingResponse] = await fetchSequentially(urls)
 
-        const isJsonResponse = (res: Response) => {
+        // Helper to safely parse JSON response
+        const safeParseJson = async (res: Response, name: string) => {
           const contentType = res.headers.get("content-type")
-          return contentType && contentType.includes("application/json")
+          if (!res.ok) {
+            console.log(`[v0] WeeklyProgramSummary - ${name} failed with status: ${res.status}`)
+            return null
+          }
+          if (!contentType || !contentType.includes("application/json")) {
+            const text = await res.text()
+            console.log(`[v0] WeeklyProgramSummary - ${name} returned non-JSON:`, text.substring(0, 100))
+            return null
+          }
+          try {
+            return await res.json()
+          } catch (e) {
+            console.log(`[v0] WeeklyProgramSummary - ${name} JSON parse error:`, e)
+            return null
+          }
         }
 
-        if (!debriefResponse.ok || !clientsResponse.ok || !directorsResponse.ok || !mappingResponse.ok) {
-          console.log("[v0] WeeklyProgramSummary - One or more API responses failed", {
-            debriefs: debriefResponse.status,
-            clients: clientsResponse.status,
-            directors: directorsResponse.status,
-            mapping: mappingResponse.status,
-          })
+        const debriefData = await safeParseJson(debriefResponse, "debriefs")
+        const clientsData = await safeParseJson(clientsResponse, "clients")
+        const directorsData = await safeParseJson(directorsResponse, "directors")
+        const mappingData = await safeParseJson(mappingResponse, "mapping")
+
+        // If any critical data failed, exit gracefully
+        if (!debriefData || !clientsData || !directorsData || !mappingData) {
+          console.log("[v0] WeeklyProgramSummary - One or more API responses failed to parse")
           setWorkEntries([])
           setGeneratingSummaries(false)
           return
         }
-
-        if (
-          !isJsonResponse(debriefResponse) ||
-          !isJsonResponse(clientsResponse) ||
-          !isJsonResponse(directorsResponse) ||
-          !isJsonResponse(mappingResponse)
-        ) {
-          console.log("[v0] WeeklyProgramSummary - One or more API responses are not JSON")
-          setWorkEntries([])
-          setGeneratingSummaries(false)
-          return
-        }
-
-        const debriefData = await debriefResponse.json()
-        const clientsData = await clientsResponse.json()
-        const directorsData = await directorsResponse.json()
-        const mappingData = await mappingResponse.json()
 
         const mappings = mappingData.data || mappingData.records || mappingData.mappings || []
         const directors = directorsData.directors || []

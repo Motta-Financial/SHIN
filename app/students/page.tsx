@@ -101,15 +101,8 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
 }
 
 async function fetchSequentially(urls: string[]): Promise<Response[]> {
-  const results: Response[] = []
-  for (let i = 0; i < urls.length; i++) {
-    // Wait 1000ms between requests to avoid rate limiting (increased from 500ms)
-    if (i > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-    }
-    const res = await fetchWithRetry(urls[i])
-    results.push(res)
-  }
+  // Use Promise.all for parallel fetching - much faster than sequential with delays
+  const results = await Promise.all(urls.map((url) => fetchWithRetry(url)))
   return results
 }
 
@@ -780,13 +773,10 @@ export default function StudentPortal() {
         // Fetch student notifications (announcements from directors)
         const fetchStudentNotifications = async () => {
           try {
-            // Adding a short delay to allow student data to be set before fetching notifications
-            await new Promise((resolve) => setTimeout(resolve, 500))
             if (!student?.id || !student?.clinicId) {
               console.log("[v0] Student data not fully loaded for notifications, skipping fetch.")
               return
             }
-            await new Promise((resolve) => setTimeout(resolve, 1500)) // Longer delay to avoid rate limiting
             const res = await fetchWithRetry(
               `/api/student-notifications?studentId=${student.id}&clinicId=${student.clinicId}`,
             )
@@ -870,7 +860,6 @@ export default function StudentPortal() {
 
         if (!studentEmail) return
 
-        await new Promise((resolve) => setTimeout(resolve, 2000)) // Longer delay to avoid rate limiting
         const response = await fetchWithRetry(`/api/agreements?userEmail=${encodeURIComponent(studentEmail)}`)
         const data = await safeJsonParse(response, { agreements: [] })
         if (data.agreements) {

@@ -64,7 +64,6 @@ export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRem
   useEffect(() => {
     async function fetchDirectors() {
       try {
-        await new Promise((resolve) => setTimeout(resolve, 1200))
         const res = await fetchWithRetry("/api/directors")
         if (res.ok) {
           const data = await res.json()
@@ -80,7 +79,6 @@ export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRem
   useEffect(() => {
     async function fetchReminders() {
       try {
-        await new Promise((resolve) => setTimeout(resolve, 500))
 
         const docsResponse = await fetchWithRetry("/api/documents")
         const docsData = await docsResponse.json()
@@ -110,50 +108,40 @@ export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRem
               !doc.file_name.toLowerCase().endsWith(".pptx") && !doc.file_name.toLowerCase().endsWith(".ppt"),
           )
 
-          // Process PPTX docs with delays
-          for (const doc of pptxDocs.slice(0, 5)) {
-            // Limit to 5 to avoid too many requests
-            await new Promise((resolve) => setTimeout(resolve, 300))
+          // Process PPTX docs in parallel (limit to 5)
+          const evalPromises = pptxDocs.slice(0, 5).map(async (doc: any) => {
             try {
               const evalsResponse = await fetchWithRetry(`/api/evaluations?documentId=${doc.id}`)
               const evalsData = await evalsResponse.json()
-
               const hasEvaluation = currentDirectorName
                 ? evalsData.evaluations?.some((evaluation: any) => evaluation.director_name === currentDirectorName)
                 : false
-
-              if (!hasEvaluation) {
-                pendingEvals++
-              }
+              return hasEvaluation ? 0 : 1
             } catch (err) {
               console.error("Error fetching evaluations:", err)
+              return 1
             }
-          }
-
-          // Add remaining PPTX docs count without fetching
+          })
+          const evalResults = await Promise.all(evalPromises)
+          pendingEvals = evalResults.reduce((sum, val) => sum + val, 0)
           pendingEvals += Math.max(0, pptxDocs.length - 5)
 
-          // Process other docs with delays
-          for (const doc of otherDocs.slice(0, 5)) {
-            // Limit to 5 to avoid too many requests
-            await new Promise((resolve) => setTimeout(resolve, 300))
+          // Process other docs in parallel (limit to 5)
+          const reviewPromises = otherDocs.slice(0, 5).map(async (doc: any) => {
             try {
               const reviewsResponse = await fetchWithRetry(`/api/documents/reviews?documentId=${doc.id}`)
               const reviewsData = await reviewsResponse.json()
-
               const hasReview = currentDirectorName
                 ? reviewsData.reviews?.some((review: any) => review.director_name === currentDirectorName)
                 : false
-
-              if (!hasReview) {
-                docsNeedingReview++
-              }
+              return hasReview ? 0 : 1
             } catch (err) {
               console.error("Error fetching reviews:", err)
+              return 1
             }
-          }
-
-          // Add remaining docs count without fetching
+          })
+          const reviewResults = await Promise.all(reviewPromises)
+          docsNeedingReview = reviewResults.reduce((sum, val) => sum + val, 0)
           docsNeedingReview += Math.max(0, otherDocs.length - 5)
 
           setPendingEvaluations(pendingEvals)
