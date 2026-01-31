@@ -24,10 +24,10 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseClient()
 
-    // Build the query to fetch notifications for:
-    // 1. Broadcast notifications (student_id IS NULL AND clinic_id IS NULL)
-    // 2. Student-specific notifications (student_id = studentId)
-    // 3. Clinic-specific notifications (clinic_id = clinicId)
+    // Build the query to fetch notifications for this student
+    // Since notifications table requires student_id (NOT NULL), we fetch:
+    // 1. Student-specific notifications (student_id = studentId)
+    // 2. Clinic-specific notifications (clinic_id = clinicId AND student_id = studentId)
     let query = supabase
       .from("notifications")
       .select("*")
@@ -35,23 +35,12 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(50)
 
-    // Build OR filter for different notification types
-    const filters: string[] = []
-    
-    // Always include broadcast notifications (both student_id and clinic_id are null)
-    filters.push("and(student_id.is.null,clinic_id.is.null)")
-    
+    // Filter by student_id if provided (required since student_id is NOT NULL in the table)
     if (studentId) {
-      filters.push(`student_id.eq.${studentId}`)
-    }
-    if (clinicId) {
-      filters.push(`clinic_id.eq.${clinicId}`)
-    }
-    
-    console.log("[v0] Student-notifications API - Filters:", filters.join(","))
-    
-    if (filters.length > 0) {
-      query = query.or(filters.join(","))
+      query = query.eq("student_id", studentId)
+    } else {
+      // If no studentId provided, return empty (can't fetch notifications without knowing the student)
+      return NextResponse.json({ notifications: [] })
     }
 
     const { data, error } = await query
@@ -60,11 +49,8 @@ export async function GET(request: NextRequest) {
       console.error("[v0] Student-notifications API - Error:", error.message, error.code)
       return NextResponse.json({ notifications: [] })
     }
-    
-    console.log("[v0] Student-notifications API - Query successful, count:", data?.length || 0)
 
     const response = { notifications: data || [] }
-    console.log(`[v0] Student-notifications API - Fetched notifications count: ${data?.length || 0}`)
 
     return NextResponse.json(response)
   } catch (error) {
@@ -77,18 +63,22 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = getSupabaseClient()
     const body = await request.json()
-    const { studentId, clinicId, title, message, type, createdByUserId } = body
+    const { studentId, clinicId, title, message, type } = body
+
+    // student_id is required (NOT NULL constraint in the table)
+    if (!studentId) {
+      return NextResponse.json({ error: "studentId is required" }, { status: 400 })
+    }
 
     const { data, error } = await supabase
       .from("notifications")
       .insert({
-        student_id: studentId || null,
+        student_id: studentId,
         clinic_id: clinicId || null,
         title,
         message,
         type: type || "announcement",
         target_audience: "students",
-        created_by_user_id: createdByUserId || null,
         is_read: false,
         created_at: new Date().toISOString(),
       })
