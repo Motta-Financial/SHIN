@@ -1,26 +1,33 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Bell, FileText, HelpCircle, Check, X, Users } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Bell, FileText, HelpCircle, Check, X, Users, Calendar, Inbox, ChevronRight } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
+type NotificationType = "document_upload" | "question" | "meeting_request" | "announcement" | "debrief" | "attendance"
+
 type Notification = {
   id: string
-  type: "document_upload" | "question" | "meeting_request"
+  type: NotificationType
   title: string
   message: string
   related_id?: string
   student_id?: string
+  student_name?: string
   student_email?: string
   clinic?: string
+  clinic_id?: string
   director_id?: string
   is_read: boolean
   created_at: string
 }
+
+type TabCategory = "all" | "documents" | "questions" | "meetings" | "announcements"
 
 interface DirectorNotificationsProps {
   selectedClinic: string
@@ -79,6 +86,7 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
   const [loading, setLoading] = useState(true)
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null)
   const [meetingRequests, setMeetingRequests] = useState<any[]>([])
+  const [activeTab, setActiveTab] = useState<TabCategory>("all")
 
   useEffect(() => {
     async function fetchNotifications() {
@@ -105,6 +113,7 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
           title: `Meeting Request: ${m.subject}`,
           message: m.message || `${m.studentName} has requested a meeting`,
           student_id: m.studentId,
+          student_name: m.studentName,
           student_email: m.studentEmail,
           clinic: m.clinic,
           is_read: false,
@@ -167,7 +176,7 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
     }
   }
 
-  const getIcon = (type: Notification["type"]) => {
+  const getIcon = (type: NotificationType) => {
     switch (type) {
       case "document_upload":
         return <FileText className="h-4 w-4" />
@@ -175,10 +184,29 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
         return <HelpCircle className="h-4 w-4" />
       case "meeting_request":
         return <Users className="h-4 w-4" />
+      case "announcement":
+        return <Calendar className="h-4 w-4" />
+      default:
+        return <Bell className="h-4 w-4" />
     }
   }
 
-  const getTypeColor = (type: Notification["type"]) => {
+  const getTypeColor = (type: NotificationType) => {
+    switch (type) {
+      case "document_upload":
+        return "bg-blue-100 text-blue-700 border-l-4 border-l-blue-500"
+      case "question":
+        return "bg-orange-100 text-orange-700 border-l-4 border-l-orange-500"
+      case "meeting_request":
+        return "bg-purple-100 text-purple-700 border-l-4 border-l-purple-500"
+      case "announcement":
+        return "bg-amber-100 text-amber-700 border-l-4 border-l-amber-500"
+      default:
+        return "bg-gray-100 text-gray-700 border-l-4 border-l-gray-500"
+    }
+  }
+
+  const getIconBg = (type: NotificationType) => {
     switch (type) {
       case "document_upload":
         return "bg-blue-100 text-blue-700"
@@ -186,19 +214,56 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
         return "bg-orange-100 text-orange-700"
       case "meeting_request":
         return "bg-purple-100 text-purple-700"
+      case "announcement":
+        return "bg-amber-100 text-amber-700"
+      default:
+        return "bg-gray-100 text-gray-700"
     }
   }
 
+  const getCategoryLabel = (type: NotificationType) => {
+    switch (type) {
+      case "document_upload":
+        return "Documents"
+      case "question":
+        return "Questions"
+      case "meeting_request":
+        return "Meetings"
+      case "announcement":
+        return "Announcements"
+      default:
+        return "Other"
+    }
+  }
+
+  // Filter notifications by category
+  const filterByCategory = (category: TabCategory) => {
+    if (category === "all") return notifications
+    if (category === "documents") return notifications.filter((n) => n.type === "document_upload")
+    if (category === "questions") return notifications.filter((n) => n.type === "question")
+    if (category === "meetings") return notifications.filter((n) => n.type === "meeting_request")
+    if (category === "announcements") return notifications.filter((n) => n.type === "announcement")
+    return notifications
+  }
+
+  // Count by category
+  const documentCount = notifications.filter((n) => n.type === "document_upload").length
+  const questionCount = notifications.filter((n) => n.type === "question").length
+  const meetingCount = notifications.filter((n) => n.type === "meeting_request").length
+  const announcementCount = notifications.filter((n) => n.type === "announcement").length
+
   const unreadCount = notifications.filter((n) => !n.is_read).length
+  const filteredNotifications = filterByCategory(activeTab)
 
   if (loading) {
     return (
-      <Card className="w-full">
+      <Card className="w-full bg-gradient-to-br from-stone-50 to-stone-100 border-stone-200">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Bell className="h-4 w-4" />
-            Notifications
-          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Inbox className="h-5 w-5 text-[#002855]" />
+            <CardTitle className="text-lg text-[#002855]">Triage</CardTitle>
+          </div>
+          <CardDescription>Your consolidated to-do list</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
@@ -211,71 +276,120 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
     )
   }
 
+  const renderNotificationItem = (notification: Notification) => (
+    <div
+      key={notification.id}
+      className={`p-4 rounded-lg border-2 transition-all cursor-pointer hover:shadow-md ${getTypeColor(notification.type)} ${
+        !notification.is_read ? "bg-opacity-100" : "bg-opacity-50"
+      }`}
+      onClick={() => {
+        setSelectedNotification(notification)
+        if (!notification.is_read) {
+          markAsRead(notification.id)
+        }
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <div className={`p-2 rounded-lg ${getIconBg(notification.type)}`}>{getIcon(notification.type)}</div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-semibold text-[#002855]">{notification.title}</p>
+            <Badge variant="outline" className="h-5 px-1.5 text-xs bg-white/80">
+              {getCategoryLabel(notification.type)}
+            </Badge>
+          </div>
+          <p className="text-xs text-[#002855]/70 mt-1 line-clamp-1">{notification.message}</p>
+          <div className="flex items-center gap-2 mt-2">
+            {notification.student_name && (
+              <span className="text-xs text-[#002855]/60">From: {notification.student_name}</span>
+            )}
+            {notification.clinic && (
+              <Badge variant="secondary" className="h-4 px-1.5 text-xs">
+                {notification.clinic}
+              </Badge>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          {notification.type === "meeting_request" && notification.id.startsWith("meeting-") ? (
+            <Button size="sm" variant="outline" className="h-7 text-xs bg-white/80">
+              Respond
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" className="h-7 text-xs bg-white/80">
+              View
+            </Button>
+          )}
+          <ChevronRight className="h-4 w-4 text-[#002855]/40" />
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <>
-      <Card className="w-full">
+      <Card className="w-full bg-gradient-to-br from-stone-50 to-stone-100 border-stone-200">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Bell className="h-4 w-4" />
-              Notifications
-              {unreadCount > 0 && (
-                <Badge variant="destructive" className="h-5 px-1.5 text-xs">
-                  {unreadCount}
-                </Badge>
+            <div className="flex items-center gap-2">
+              <Inbox className="h-5 w-5 text-[#002855]" />
+              <CardTitle className="text-lg text-[#002855]">Triage</CardTitle>
+              {notifications.length > 0 && (
+                <Badge className="bg-[#002855] text-white h-5 px-1.5 text-xs">{notifications.length}</Badge>
               )}
-            </CardTitle>
+            </div>
           </div>
+          <CardDescription className="text-[#002855]/60">Your consolidated to-do list</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {notifications.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">No new notifications</p>
+        <CardContent className="space-y-4">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabCategory)} className="w-full">
+            <TabsList className="w-full grid grid-cols-5 bg-stone-200/50">
+              <TabsTrigger value="all" className="text-xs data-[state=active]:bg-white">
+                All
+                {notifications.length > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-4 px-1 text-xs">
+                    {notifications.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="documents" className="text-xs data-[state=active]:bg-white">
+                Documents
+                {documentCount > 0 && (
+                  <Badge className="ml-1 h-4 px-1 text-xs bg-blue-500 text-white">{documentCount}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="questions" className="text-xs data-[state=active]:bg-white">
+                Questions
+                {questionCount > 0 && (
+                  <Badge className="ml-1 h-4 px-1 text-xs bg-orange-500 text-white">{questionCount}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="meetings" className="text-xs data-[state=active]:bg-white">
+                Meetings
+                {meetingCount > 0 && (
+                  <Badge className="ml-1 h-4 px-1 text-xs bg-purple-500 text-white">{meetingCount}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="announcements" className="text-xs data-[state=active]:bg-white">
+                Updates
+                {announcementCount > 0 && (
+                  <Badge className="ml-1 h-4 px-1 text-xs bg-amber-500 text-white">{announcementCount}</Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {filteredNotifications.length === 0 ? (
+            <div className="text-center py-8">
+              <Inbox className="h-8 w-8 mx-auto text-[#002855]/30 mb-2" />
+              <p className="text-sm text-[#002855]/50">No {activeTab === "all" ? "" : activeTab} notifications</p>
+            </div>
           ) : (
-            <div className="space-y-2">
-              {notifications.slice(0, compact ? 5 : undefined).map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`p-3 rounded-lg border transition-colors cursor-pointer hover:bg-muted/50 ${
-                    !notification.is_read ? "bg-muted/30 border-primary/20" : "bg-background"
-                  }`}
-                  onClick={() => {
-                    setSelectedNotification(notification)
-                    if (!notification.is_read) {
-                      markAsRead(notification.id)
-                    }
-                  }}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`p-1.5 rounded-md ${getTypeColor(notification.type)}`}>
-                      {getIcon(notification.type)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium truncate">{notification.title}</p>
-                        {!notification.is_read && (
-                          <Badge variant="secondary" className="h-5 px-1.5 text-xs flex-shrink-0">
-                            New
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{notification.message}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-muted-foreground">
-                          {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
-                        </span>
-                        {notification.clinic && (
-                          <Badge variant="outline" className="h-4 px-1 text-xs">
-                            {notification.clinic}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {compact && notifications.length > 5 && (
-                <Button variant="ghost" size="sm" className="w-full" onClick={() => {}}>
-                  View all {notifications.length} notifications
+            <div className="space-y-3">
+              {filteredNotifications.slice(0, compact ? 5 : undefined).map(renderNotificationItem)}
+              {compact && filteredNotifications.length > 5 && (
+                <Button variant="ghost" size="sm" className="w-full text-[#002855]" onClick={() => {}}>
+                  View all {filteredNotifications.length} notifications
                 </Button>
               )}
             </div>

@@ -13,8 +13,27 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const clinic = searchParams.get("clinic")
     const directorId = searchParams.get("directorId")
+    const studentId = searchParams.get("studentId")
+    const targetAudience = searchParams.get("target_audience")
 
     let query = supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50)
+
+    // If fetching for a specific student
+    if (studentId && isValidUUID(studentId)) {
+      query = query.eq("student_id", studentId).eq("target_audience", "students")
+      const { data: notifications, error } = await query
+      if (error) {
+        console.error("Error fetching student notifications:", error.message)
+        return NextResponse.json({ notifications: [] })
+      }
+      return NextResponse.json({ notifications: notifications || [] })
+    }
+
+    // For director views - only show director-targeted notifications
+    // Filter by target_audience = 'directors' to avoid showing student notifications
+    if (directorId || (!studentId && !targetAudience)) {
+      query = query.eq("target_audience", "directors")
+    }
 
     if (directorId && directorId !== "all" && directorId !== "undefined" && isValidUUID(directorId)) {
       query = query.eq("director_id", directorId)
