@@ -16,5 +16,8 @@ export function createServiceClient() {
       autoRefreshToken: false,
       persistSession: false,
     },
+    db: {
+      schema: 'public',
+    },
   })
 }
