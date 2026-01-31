@@ -97,7 +97,7 @@ export async function POST(request: Request) {
       } else if (students && students.length > 0) {
         // Create individual notifications for each student
         const notifications = students.map(student => ({
-          type: "agenda_published",
+          type: "announcement",
           title: "Class Agenda Published",
           message: `The agenda for ${formattedDate} has been published. Check the Class Course page for details.`,
           target_audience: "students",
