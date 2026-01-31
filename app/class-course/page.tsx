@@ -1,5 +1,7 @@
 "use client"
 
+import React from "react"
+
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { MainNavigation } from "@/components/main-navigation"
@@ -44,10 +46,15 @@ import {
   Key,
   Save,
   XCircle,
+  Pencil,
+  Check,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react"
 import { UnifiedWeeklyAgenda } from "@/components/unified-weekly-agenda"
 import { useDemoMode } from "@/contexts/demo-mode-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useToast } from "@/hooks/use-toast"
 import { useUserRole } from "@/hooks/use-user-role"
 import { useCurrentSemester } from "@/hooks/use-current-semester"
 import { ClinicAgendaTab } from "@/components/clinic-agenda-tab"
@@ -96,6 +103,7 @@ interface AgendaSession {
   room: string
   roomNumber: string
   notes: string
+  zoom_link?: string
 }
 
 interface TimeBlock {
@@ -275,7 +283,8 @@ export default function ClassCoursePage() {
   // Initialize useSearchParams
   const searchParams = useSearchParams()
   const defaultTab = searchParams.get("tab") || "announcements"
-
+  const { toast } = useToast()
+  
   const [copied, setCopied] = useState(false)
   const [editingSession, setEditingSession] = useState<string | null>(null)
   const [directors, setDirectors] = useState<Array<{ id: string; full_name: string; clinic: string }>>([])
@@ -342,6 +351,7 @@ export default function ClassCoursePage() {
       clinic: string
       notes: string
       submittedAt?: string // Added for attendance submission time
+      is_present: boolean // Present/absent status
     }>
   >([])
   const [loadingAttendance, setLoadingAttendance] = useState(true)
@@ -361,6 +371,20 @@ export default function ClassCoursePage() {
   const [newPasswordWeek, setNewPasswordWeek] = useState<string>("")
   const [newPassword, setNewPassword] = useState<string>("")
   const [savingPassword, setSavingPassword] = useState(false)
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
+  const [editingPasswordWeek, setEditingPasswordWeek] = useState<number | null>(null)
+  const [editPasswordValue, setEditPasswordValue] = useState("")
+  const [selectedPasswordWeek, setSelectedPasswordWeek] = useState<number | null>(null)
+  const [recentlySetWeek, setRecentlySetWeek] = useState<number | null>(null)
+  
+// Attendance edit mode state - tracks which clinic is being edited and pending changes
+  const [attendanceEditMode, setAttendanceEditMode] = useState<Record<string, boolean>>({})
+  const [pendingAttendanceChanges, setPendingAttendanceChanges] = useState<
+  Record<string, { studentId: string; studentName: string; newStatus: boolean }[]>
+  >({})
+  const [confirmedAttendance, setConfirmedAttendance] = useState<Record<string, boolean>>({})
+  const [excusedStudents, setExcusedStudents] = useState<Record<string, boolean>>({})
+  const [excusingStudent, setExcusingStudent] = useState<string | null>(null)
 
   const [scheduleData, setScheduleData] = useState<TimeBlock[]>([
     {
@@ -1142,15 +1166,11 @@ setLoadingAttendance(true)
     fetchWeekPasswords()
   }, [])
 
-  // Handle setting a new password
+// Handle setting a new password
   const handleSetPassword = async () => {
-    const weekNumber = Number.parseInt(newPasswordWeek, 10)
-
-    console.log("[v0] Setting password - newPasswordWeek:", newPasswordWeek)
-    console.log("[v0] Setting password - weekNumber:", weekNumber)
-    console.log("[v0] Setting password - semesterSchedule length:", semesterSchedule.length)
-
-    if (!newPasswordWeek || !newPassword.trim()) {
+  const weekNumber = Number.parseInt(newPasswordWeek, 10)
+  
+  if (!newPasswordWeek || !newPassword.trim()) {
       alert("Please enter both week number and password")
       return
     }
@@ -1186,6 +1206,7 @@ setLoadingAttendance(true)
     }
 
     setSavingPassword(true)
+    
     try {
       const res = await fetch("/api/attendance-password", {
         method: "POST",
@@ -1196,22 +1217,104 @@ body: JSON.stringify({
   password: newPassword,
           weekStart: weekInfo.week_start || null,
           weekEnd: weekInfo.week_end || null,
+          userEmail: userEmail,
+          createdByName: userName,
         }),
       })
 
       if (res.ok) {
         const data = await res.json()
-        setWeekPasswords((prev) => [...prev, data.password])
+        // Update password list - check if updating existing or adding new
+        setWeekPasswords((prev) => {
+          const existingIndex = prev.findIndex((p) => p.week_number === weekNumber)
+          if (existingIndex >= 0) {
+            const updated = [...prev]
+            updated[existingIndex] = data.password
+            return updated
+          }
+          return [...prev, data.password]
+        })
         setNewPasswordWeek("")
         setNewPassword("")
-        alert("Password set successfully!") // Or use a toast notification
-      } else {
-        const error = await res.json()
-        alert(error.error || "Failed to set password")
+        // Navigate to the newly set week to show the user
+        setSelectedPasswordWeek(weekNumber)
+        setRecentlySetWeek(weekNumber)
+        // Clear the "just set" indicator after 10 seconds
+        setTimeout(() => setRecentlySetWeek(null), 10000)
+toast({
+          title: "Success",
+          description: `Password for Week ${weekNumber} set successfully!`,
+        })
+  } else {
+  const error = await res.json()
+        toast({
+          title: "Error",
+          description: error.error || "Failed to set password",
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error("Error setting password:", error)
       alert("Failed to set password. Please try again.")
+    } finally {
+      setSavingPassword(false)
+    }
+  }
+
+  // Handle updating an existing password
+  const handleUpdatePassword = async (weekNumber: number, newPasswordValue: string) => {
+    if (!newPasswordValue.trim()) {
+      alert("Password cannot be empty")
+      return
+    }
+
+    const weekInfo = semesterSchedule.find((w: any) => w.week_number === weekNumber)
+
+    setSavingPassword(true)
+    try {
+      const res = await fetch("/api/attendance-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          weekNumber: weekNumber,
+          semesterId: semesterId,
+          password: newPasswordValue,
+          weekStart: weekInfo?.week_start || null,
+          weekEnd: weekInfo?.week_end || null,
+          userEmail: userEmail,
+          createdByName: userName,
+        }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        // Update the password in the list
+        setWeekPasswords((prev) => {
+          const existing = prev.findIndex((p) => p.week_number === weekNumber)
+          if (existing >= 0) {
+            const updated = [...prev]
+            updated[existing] = data.password
+            return updated
+          }
+          return [...prev, data.password]
+        })
+        setEditingPasswordWeek(null)
+        setEditPasswordValue("")
+        toast({
+          title: "Success",
+          description: `Password for Week ${weekNumber} updated successfully!`,
+        })
+      } else {
+        const error = await res.json()
+        toast({
+          title: "Error",
+          description: error.error || "Failed to update password",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error updating password:", error)
+      alert("Failed to update password. Please try again.")
     } finally {
       setSavingPassword(false)
     }
@@ -2447,17 +2550,204 @@ body: JSON.stringify({
                             Students need this password to submit their weekly attendance
                           </p>
                         </div>
+                        <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="gap-2 bg-transparent">
+                              <Key className="h-4 w-4" />
+                              Manage All Passwords
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+                            <DialogHeader>
+                              <DialogTitle className="flex items-center gap-2 text-xl">
+                                <Key className="h-5 w-5 text-blue-600" />
+                                Attendance Password Management
+                              </DialogTitle>
+                              <p className="text-sm text-slate-600">
+                                View and manage attendance passwords for all weeks in {semesterName}
+                              </p>
+                            </DialogHeader>
+                            <div className="flex-1 overflow-y-auto pr-2">
+                              <div className="space-y-2">
+                                {/* Header */}
+                                <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-slate-100 rounded-lg text-sm font-medium text-slate-700">
+                                  <div className="col-span-2">Week</div>
+                                  <div className="col-span-3">Date Range</div>
+                                  <div className="col-span-3">Password</div>
+                                  <div className="col-span-2">Status</div>
+                                  <div className="col-span-2">Actions</div>
+                                </div>
+                                
+                                {/* Week rows */}
+                                {(() => {
+                                  const uniqueWeeks = semesterSchedule.length > 0
+                                    ? Array.from(new Map(semesterSchedule.map((w: any) => [w.week_number, w])).values())
+                                        .sort((a: any, b: any) => a.week_number - b.week_number)
+                                    : Array.from({ length: 17 }, (_, i) => ({
+                                        week_number: i + 1,
+                                        week_start: null,
+                                        week_end: null,
+                                      }))
+                                  
+                                  const today = new Date()
+                                  today.setHours(0, 0, 0, 0)
+                                  
+                                  return uniqueWeeks.map((week: any) => {
+                                    const password = weekPasswords.find((p) => p.week_number === week.week_number)
+                                    const isCurrentWeek = week.week_start && week.week_end && 
+                                      today >= new Date(week.week_start) && today <= new Date(week.week_end)
+                                    const isPastWeek = week.week_end && today > new Date(week.week_end)
+                                    const isEditing = editingPasswordWeek === week.week_number
+                                    
+                                    return (
+                                      <div 
+                                        key={week.week_number}
+                                        className={`grid grid-cols-12 gap-2 px-3 py-3 rounded-lg border transition-colors ${
+                                          isCurrentWeek 
+                                            ? "bg-blue-50 border-blue-200" 
+                                            : isPastWeek 
+                                              ? "bg-slate-50 border-slate-200" 
+                                              : "bg-white border-slate-200 hover:bg-slate-50"
+                                        }`}
+                                      >
+                                        <div className="col-span-2 flex items-center gap-2">
+                                          <span className={`font-semibold ${isCurrentWeek ? "text-blue-700" : "text-slate-900"}`}>
+                                            Week {week.week_number}
+                                          </span>
+                                          {isCurrentWeek && (
+                                            <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs">
+                                              Current
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <div className="col-span-3 flex items-center text-sm text-slate-600">
+                                          {week.week_start && week.week_end ? (
+                                            <>
+                                              {new Date(week.week_start).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                              {" - "}
+                                              {new Date(week.week_end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                            </>
+                                          ) : (
+                                            <span className="text-slate-400">Not scheduled</span>
+                                          )}
+                                        </div>
+                                        <div className="col-span-3 flex items-center">
+                                          {isEditing ? (
+                                            <Input
+                                              value={editPasswordValue}
+                                              onChange={(e) => setEditPasswordValue(e.target.value)}
+                                              className="h-8 text-sm"
+                                              placeholder="Enter new password"
+                                              autoFocus
+                                            />
+                                          ) : password ? (
+                                            <code className="bg-slate-100 px-2 py-1 rounded text-sm font-mono">
+                                              {password.password}
+                                            </code>
+                                          ) : (
+                                            <span className="text-slate-400 text-sm">Not set</span>
+                                          )}
+                                        </div>
+                                        <div className="col-span-2 flex items-center">
+                                          {password ? (
+                                            <Badge variant="secondary" className="bg-green-100 text-green-700">
+                                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                                              Set
+                                            </Badge>
+                                          ) : (
+                                            <Badge variant="secondary" className="bg-amber-100 text-amber-700">
+                                              <AlertTriangle className="h-3 w-3 mr-1" />
+                                              Missing
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <div className="col-span-2 flex items-center gap-1">
+                                          {isEditing ? (
+                                            <>
+                                              <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-7 w-7 p-0"
+                                                onClick={() => handleUpdatePassword(week.week_number, editPasswordValue)}
+                                                disabled={savingPassword}
+                                              >
+                                                {savingPassword ? (
+                                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                  <Check className="h-4 w-4 text-green-600" />
+                                                )}
+                                              </Button>
+                                              <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-7 w-7 p-0"
+                                                onClick={() => {
+                                                  setEditingPasswordWeek(null)
+                                                  setEditPasswordValue("")
+                                                }}
+                                              >
+                                                <XCircle className="h-4 w-4 text-slate-500" />
+                                              </Button>
+                                            </>
+                                          ) : (
+                                            <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              className="h-7 px-2 text-xs"
+                                              onClick={() => {
+                                                setEditingPasswordWeek(week.week_number)
+                                                setEditPasswordValue(password?.password || "")
+                                              }}
+                                            >
+                                              <Pencil className="h-3 w-3 mr-1" />
+                                              {password ? "Edit" : "Set"}
+                                            </Button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )
+                                  })
+                                })()}
+                              </div>
+                            </div>
+                            
+                            {/* Summary footer */}
+                            <div className="border-t pt-4 mt-4">
+                              <div className="flex items-center justify-between text-sm">
+                                <div className="flex items-center gap-4">
+                                  <span className="text-slate-600">
+                                    <strong className="text-green-600">{weekPasswords.length}</strong> passwords set
+                                  </span>
+                                  <span className="text-slate-600">
+                                    <strong className="text-amber-600">
+                                      {(semesterSchedule.length > 0 
+                                        ? new Set(semesterSchedule.map((w: any) => w.week_number)).size 
+                                        : 17) - weekPasswords.length}
+                                    </strong> missing
+                                  </span>
+                                </div>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => setPasswordDialogOpen(false)}
+                                >
+                                  Close
+                                </Button>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
                       </div>
 
                       {weekPasswords.length > 0 ? (
                         <div className="space-y-3">
-                          {/* Current Week Password Display */}
+                          {/* Week Password Display with Toggle */}
                           {(() => {
                             const today = new Date()
                             today.setHours(0, 0, 0, 0)
 
                             // Find the week that contains today's date
-                            const currentWeekRecord = semesterSchedule.find((week) => {
+                            const currentWeekRecord = semesterSchedule.find((week: any) => {
                               const weekStart = new Date(week.week_start)
                               const weekEnd = new Date(week.week_end)
                               weekStart.setHours(0, 0, 0, 0)
@@ -2471,52 +2761,152 @@ body: JSON.stringify({
 
                             // Use Week 1 if before semester or use the actual current week
                             const currentWeekNum = currentWeekRecord ? currentWeekRecord.week_number : 1
-                            const currentWeekPassword = weekPasswords.find((wp) => wp.week_number === currentWeekNum)
+                            
+                            // Use selected week or default to current week
+                            const displayWeekNum = selectedPasswordWeek ?? currentWeekNum
+                            const displayWeekPassword = weekPasswords.find((wp) => wp.week_number === displayWeekNum)
+                            const isCurrentWeek = displayWeekNum === currentWeekNum
+                            
+                            // Get all unique weeks for the toggle
+                            const uniqueWeeks = semesterSchedule.length > 0
+                              ? Array.from(new Map(semesterSchedule.map((w: any) => [w.week_number, w])).values())
+                                  .sort((a: any, b: any) => a.week_number - b.week_number)
+                              : Array.from({ length: 17 }, (_, i) => ({
+                                  week_number: i + 1,
+                                  week_start: null,
+                                  week_end: null,
+                                }))
+                            
+                            // Get week info for display
+                            const displayWeekInfo = semesterSchedule.find((w: any) => w.week_number === displayWeekNum)
 
-                            return currentWeekPassword ? (
-                              <div className="bg-white rounded-lg p-4 border-2 border-green-300 shadow-sm">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <div className="bg-green-100 p-3 rounded-full">
-                                      <CheckCircle2 className="h-6 w-6 text-green-600" />
+                            // Get min and max week numbers
+                            const minWeek = uniqueWeeks.length > 0 ? Math.min(...uniqueWeeks.map((w: any) => w.week_number)) : 1
+                            const maxWeek = uniqueWeeks.length > 0 ? Math.max(...uniqueWeeks.map((w: any) => w.week_number)) : 17
+                            
+                            const handlePrevWeek = () => {
+                              if (displayWeekNum > minWeek) {
+                                setSelectedPasswordWeek(displayWeekNum - 1)
+                              }
+                            }
+                            
+                            const handleNextWeek = () => {
+                              if (displayWeekNum < maxWeek) {
+                                setSelectedPasswordWeek(displayWeekNum + 1)
+                              }
+                            }
+
+                            return (
+                              <div className={`bg-white rounded-lg border-2 shadow-sm ${
+                                isCurrentWeek ? "border-green-300" : "border-slate-200"
+                              }`}>
+                                {/* Card with arrow navigation */}
+                                <div className="flex items-stretch">
+                                  {/* Left Arrow */}
+                                  <button
+                                    onClick={handlePrevWeek}
+                                    disabled={displayWeekNum <= minWeek}
+                                    className={`flex items-center justify-center px-3 border-r transition-colors ${
+                                      displayWeekNum <= minWeek 
+                                        ? "text-slate-300 cursor-not-allowed" 
+                                        : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                                    }`}
+                                  >
+                                    <ChevronLeft className="h-5 w-5" />
+                                  </button>
+                                  
+                                  {/* Content */}
+                                  <div className="flex-1 p-4">
+                                    {/* Header */}
+                                    <div className="flex items-center justify-between mb-2">
+                                      <div className="flex items-center gap-2">
+                                        <h4 className="text-base font-semibold text-slate-900">
+                                          Week {displayWeekNum} Password
+                                        </h4>
+                                        {isCurrentWeek ? (
+                                          <Badge variant="secondary" className="bg-green-100 text-green-700 text-xs">
+                                            Current
+                                          </Badge>
+                                        ) : recentlySetWeek === displayWeekNum ? (
+                                          <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-xs animate-pulse">
+                                            Just Set
+                                          </Badge>
+                                        ) : displayWeekNum > currentWeekNum ? (
+                                          <Badge variant="secondary" className="bg-slate-100 text-slate-600 text-xs">
+                                            Upcoming
+                                          </Badge>
+                                        ) : null}
+                                      </div>
+                                      <span className="text-xs text-slate-500">
+                                        {displayWeekNum} of {maxWeek}
+                                      </span>
                                     </div>
-                                    <div>
-                                      <p className="text-sm font-medium text-slate-700">
-                                        {isBeforeSemester
-                                          ? "Week 1 Password (Starts Tomorrow)"
-                                          : "Current Week Password"}
-                                      </p>
-                                      <p className="text-2xl font-bold text-slate-900 tracking-wider mt-1">
-                                        {currentWeekPassword.password}
-                                      </p>
-                                      <p className="text-xs text-slate-500 mt-1">
-                                        Week {currentWeekPassword.week_number}
-                                        {firstWeek && isBeforeSemester && (
-                                          <span className="ml-1">
-                                            • Starts {new Date(firstWeek.week_start).toLocaleDateString()}
-                                          </span>
-                                        )}
-                                        {!isBeforeSemester && (
-                                          <span className="ml-1">
-                                            • Set on {new Date(currentWeekPassword.created_at).toLocaleDateString()}
-                                          </span>
-                                        )}
-                                      </p>
-                                    </div>
+                                    
+                                    {/* Password or No Password state */}
+                                    {displayWeekPassword ? (
+                                      <div className="flex items-center gap-3">
+                                        <div className={`p-2 rounded-full ${
+                                          isCurrentWeek ? "bg-green-100" : "bg-blue-100"
+                                        }`}>
+                                          <CheckCircle2 className={`h-5 w-5 ${
+                                            isCurrentWeek ? "text-green-600" : "text-blue-600"
+                                          }`} />
+                                        </div>
+                                        <div>
+                                          <p className="text-xl font-bold text-slate-900 tracking-wider font-mono">
+                                            {displayWeekPassword.password}
+                                          </p>
+                                          <p className="text-xs text-slate-500">
+                                            {displayWeekInfo?.week_start && displayWeekInfo?.week_end && (
+                                              <>
+                                                {new Date(displayWeekInfo.week_start).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                                {" - "}
+                                                {new Date(displayWeekInfo.week_end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                                {" • "}
+                                              </>
+                                            )}
+                                            Set {new Date(displayWeekPassword.created_at).toLocaleDateString()}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center gap-3">
+                                        <div className="p-2 rounded-full bg-amber-100">
+                                          <AlertTriangle className="h-5 w-5 text-amber-600" />
+                                        </div>
+                                        <div>
+                                          <p className="text-sm font-medium text-amber-700">
+                                            No password set
+                                          </p>
+                                          <p className="text-xs text-slate-500">
+                                            {displayWeekInfo?.week_start && displayWeekInfo?.week_end && (
+                                              <>
+                                                {new Date(displayWeekInfo.week_start).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                                {" - "}
+                                                {new Date(displayWeekInfo.week_end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                              </>
+                                            )}
+                                            {isCurrentWeek && " • Students cannot submit attendance"}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
+                                  
+                                  {/* Right Arrow */}
+                                  <button
+                                    onClick={handleNextWeek}
+                                    disabled={displayWeekNum >= maxWeek}
+                                    className={`flex items-center justify-center px-3 border-l transition-colors ${
+                                      displayWeekNum >= maxWeek 
+                                        ? "text-slate-300 cursor-not-allowed" 
+                                        : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                                    }`}
+                                  >
+                                    <ChevronRight className="h-5 w-5" />
+                                  </button>
                                 </div>
                               </div>
-                            ) : (
-                              <Alert className="border-amber-300 bg-amber-50">
-                                <AlertTriangle className="h-4 w-4 text-amber-600" />
-                                <AlertDescription className="text-amber-800">
-                                  <strong>Action Required:</strong> No password set for{" "}
-                                  {isBeforeSemester
-                                    ? "Week 1 (starting tomorrow)"
-                                    : `the current week (${currentWeekNum})`}
-                                  . Students cannot submit attendance.
-                                </AlertDescription>
-                              </Alert>
                             )
                           })()}
 
@@ -2524,7 +2914,7 @@ body: JSON.stringify({
                           <details className="group">
                             <summary className="cursor-pointer text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-2">
                               <Plus className="h-4 w-4" />
-                              Set Password for Another Week
+                              Set Password for Next Week
                             </summary>
                             <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200">
                               <div className="flex gap-2">
@@ -2689,6 +3079,7 @@ body: JSON.stringify({
                             // Split attendance records by is_present boolean
                             const presentRecords = weekAttendance.filter((r) => r.is_present)
                             const absentRecords = weekAttendance.filter((r) => !r.is_present)
+                            const classDate = weekAttendance[0]?.classDate || ''
 
                             // Group present students by clinic
                             const byClinic = presentRecords.reduce(
@@ -2749,65 +3140,336 @@ body: JSON.stringify({
                                   .sort(([a], [b]) => a.localeCompare(b))
                                   .map(([clinicName, clinicRecords]) => {
                                     const clinicAbsentStudents = absentByClinic[clinicName] || []
+                                    const clinicKey = `${weekNum}-${clinicName}`
+                                    const isEditMode = attendanceEditMode[clinicKey] || false
+                                    const pendingChanges = pendingAttendanceChanges[clinicKey] || []
+                                    const isConfirmed = confirmedAttendance[clinicKey] || false
+                                    
+                                    // Calculate effective present/absent lists including pending changes
+                                    const effectivePresentRecords = clinicRecords.filter(r => {
+                                      const change = pendingChanges.find(c => c.studentId === r.studentId)
+                                      return change ? change.newStatus : true
+                                    })
+                                    const movedToAbsent = clinicRecords.filter(r => {
+                                      const change = pendingChanges.find(c => c.studentId === r.studentId)
+                                      return change && !change.newStatus
+                                    })
+                                    const effectiveAbsentStudents = [
+                                      ...clinicAbsentStudents.filter(s => {
+                                        const change = pendingChanges.find(c => c.studentId === s.student_id)
+                                        return change ? !change.newStatus : true
+                                      }),
+                                      ...movedToAbsent.map(r => ({
+                                        student_id: r.studentId,
+                                        student_name: r.studentName,
+                                        student_clinic_name: r.clinic
+                                      }))
+                                    ]
+                                    const movedToPresent = clinicAbsentStudents.filter(s => {
+                                      const change = pendingChanges.find(c => c.studentId === s.student_id)
+                                      return change && change.newStatus
+                                    })
+                                    const allPresentRecords = [
+                                      ...effectivePresentRecords,
+                                      ...movedToPresent.map(s => ({
+                                        studentId: s.student_id,
+                                        studentName: s.student_name,
+                                        clinic: s.student_clinic_name,
+                                        id: '',
+                                        studentEmail: '',
+                                        classDate: '',
+                                        weekNumber: weekNum,
+                                        weekEnding: '',
+                                        notes: '',
+                                        is_present: true
+                                      }))
+                                    ]
+                                    
+                                    const toggleStudentStatus = (studentId: string, studentName: string, currentlyPresent: boolean) => {
+                                      if (!isEditMode) return
+                                      
+                                      setPendingAttendanceChanges(prev => {
+                                        const current = prev[clinicKey] || []
+                                        const existingIndex = current.findIndex(c => c.studentId === studentId)
+                                        
+                                        if (existingIndex >= 0) {
+                                          // Toggle back - remove the pending change
+                                          const newChanges = [...current]
+                                          newChanges.splice(existingIndex, 1)
+                                          return { ...prev, [clinicKey]: newChanges }
+                                        } else {
+                                          // Add new pending change
+                                          return {
+                                            ...prev,
+                                            [clinicKey]: [...current, { studentId, studentName, newStatus: !currentlyPresent }]
+                                          }
+                                        }
+                                      })
+                                    }
+                                    
+                                    const handleConfirm = async () => {
+                                      // If there are pending changes, save them to the database
+                                      if (pendingChanges.length > 0) {
+                                        for (const change of pendingChanges) {
+                                          // Find the attendance record for this student
+                                          const record = weekAttendance.find(r => r.studentId === change.studentId)
+                                          if (record) {
+                                            try {
+                                              const res = await fetch('/api/attendance/update-status', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                  attendanceId: record.id,
+                                                  isPresent: change.newStatus,
+                                                  userEmail: userEmail
+                                                })
+                                              })
+                                              if (res.ok) {
+                                                // Update local state
+                                                setAttendanceRecords(prev => prev.map(r => 
+                                                  r.id === record.id ? { ...r, is_present: change.newStatus } : r
+                                                ))
+                                              }
+                                            } catch (error) {
+                                              console.error('Failed to update attendance:', error)
+                                            }
+                                          }
+                                        }
+                                        toast({
+                                          title: "Attendance Updated",
+                                          description: `Updated ${pendingChanges.length} student(s) attendance status.`,
+                                        })
+                                      } else {
+                                        toast({
+                                          title: "Confirmed",
+                                          description: "Attendance records confirmed as correct.",
+                                        })
+                                      }
+                                      // Clear edit mode and pending changes, mark as confirmed
+                                      setAttendanceEditMode(prev => ({ ...prev, [clinicKey]: false }))
+                                      setPendingAttendanceChanges(prev => ({ ...prev, [clinicKey]: [] }))
+                                      setConfirmedAttendance(prev => ({ ...prev, [clinicKey]: true }))
+                                      
+                                      // Send notification to all students in this clinic that attendance was confirmed
+                                      const studentsInClinic = [...clinicRecords, ...clinicAbsentStudents]
+                                      for (const student of studentsInClinic) {
+                                        try {
+                                          await fetch('/api/notifications', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                              type: 'attendance_approved',
+                                              title: 'Attendance Confirmed',
+                                              message: `Your attendance for Week ${weekNum} has been confirmed by the director.`,
+                                              studentId: student.studentId || student.student_id,
+                                              studentName: student.studentName || student.student_name,
+                                              studentEmail: student.studentEmail || student.student_email,
+                                              clinicId: student.clinicId || student.clinic_id,
+                                              targetAudience: 'students',
+                                              relatedId: `week-${weekNum}`,
+                                              createdByUserId: userEmail,
+                                            })
+                                          })
+                                        } catch (error) {
+                                          console.error('Failed to send attendance confirmation notification:', error)
+                                        }
+                                      }
+                                    }
+                                    
                                     return (
-                                      <div key={clinicName} className="border rounded-lg p-4 bg-slate-50">
-                                        <h4 className="font-semibold text-md mb-3 flex items-center gap-2">
+                                      <div key={clinicName} className={`border rounded-lg p-4 ${isEditMode ? 'bg-blue-50 border-blue-300' : 'bg-slate-50'}`}>
+                                        <div className="flex items-center justify-between mb-3">
+<h4 className="font-semibold text-md flex items-center gap-2">
                                           <Building2 className="h-4 w-4 text-blue-600" />
                                           {clinicName}
-                                          <span className="text-sm font-normal text-slate-500">
-                                            ({clinicRecords.length} present)
-                                          </span>
                                         </h4>
+                                          <div className="flex gap-2">
+                                            {isConfirmed ? (
+                                              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-100 text-green-700 rounded-md text-sm font-medium">
+                                                <CheckCircle2 className="h-4 w-4" />
+                                                Confirmed
+                                              </div>
+                                            ) : isEditMode ? (
+                                              <>
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline"
+                                                  className="bg-transparent text-slate-600 border-slate-300 hover:bg-slate-100"
+                                                  onClick={() => {
+                                                    setAttendanceEditMode(prev => ({ ...prev, [clinicKey]: false }))
+                                                    setPendingAttendanceChanges(prev => ({ ...prev, [clinicKey]: [] }))
+                                                  }}
+                                                >
+                                                  Cancel
+                                                </Button>
+                                                <Button
+                                                  size="sm"
+                                                  className="bg-green-600 hover:bg-green-700 text-white"
+                                                  onClick={handleConfirm}
+                                                >
+                                                  <Check className="h-4 w-4 mr-1" />
+                                                  Confirm
+                                                </Button>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Button
+                                                  size="sm"
+                                                  className="bg-green-600 hover:bg-green-700 text-white"
+                                                  onClick={handleConfirm}
+                                                >
+                                                  <Check className="h-4 w-4 mr-1" />
+                                                  Confirm
+                                                </Button>
+                                                <Button
+                                                  size="sm"
+                                                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                                                  onClick={() => setAttendanceEditMode(prev => ({ ...prev, [clinicKey]: true }))}
+                                                >
+                                                  <Pencil className="h-4 w-4 mr-1" />
+                                                  Edit
+                                                </Button>
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+                                        
+                                        {isEditMode && (
+                                          <div className="mb-3 p-2 bg-blue-100 rounded text-sm text-blue-800">
+                                            Click on a student name to move them between Present and Absent. Click Confirm when done.
+                                          </div>
+                                        )}
 
                                         {/* Present Students - Concise Badge View */}
                                         <div className="mb-3">
                                           <p className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
                                             <CheckCircle2 className="h-4 w-4 text-green-600" />
-                                            Present Students
+                                            Present Students ({allPresentRecords.length})
                                           </p>
                                           <div className="flex flex-wrap gap-2">
-                                            {clinicRecords.map((record, idx) => (
-                                              <Badge
-                                                key={idx}
-                                                variant="outline"
-                                                className="bg-white hover:bg-green-50 border-green-200 text-green-700 cursor-pointer transition-colors"
-                                                onClick={() => {
-                                                  // Navigate to student profile if exists
-                                                  if (record.studentId) {
-                                                    window.open(`/student-profile?id=${record.studentId}`, "_blank")
-                                                  }
-                                                }}
-                                              >
-                                                <CheckCircle2 className="h-3 w-3 mr-1" />
-                                                {record.studentName}
-                                              </Badge>
-                                            ))}
+                                            {allPresentRecords.map((record, idx) => {
+                                              const isPendingChange = pendingChanges.some(c => c.studentId === record.studentId)
+                                              return (
+                                                <Badge
+                                                  key={idx}
+                                                  variant="outline"
+                                                  className={`${
+                                                    isPendingChange 
+                                                      ? 'bg-yellow-100 border-yellow-400 text-yellow-800' 
+                                                      : 'bg-white border-green-200 text-green-700'
+                                                  } ${isEditMode ? 'cursor-pointer hover:bg-green-100' : ''} transition-colors`}
+                                                  onClick={() => toggleStudentStatus(record.studentId, record.studentName, true)}
+                                                >
+                                                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                                                  {record.studentName}
+                                                  {isPendingChange && <span className="ml-1 text-xs">(moved)</span>}
+                                                </Badge>
+                                              )
+                                            })}
                                           </div>
                                         </div>
 
                                         {/* Absent Students */}
-                                        {clinicAbsentStudents.length > 0 && (
+                                        {(effectiveAbsentStudents.length > 0 || isEditMode) && (
                                           <div className="pt-3 border-t border-slate-200">
                                             <p className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
                                               <XCircle className="h-4 w-4 text-red-600" />
-                                              Absent Students ({clinicAbsentStudents.length})
+                                              Absent Students ({effectiveAbsentStudents.length})
                                             </p>
                                             <div className="flex flex-wrap gap-2">
-                                              {clinicAbsentStudents.map((student, idx) => (
-                                                <Badge
-                                                  key={idx}
-                                                  variant="outline"
-                                                  className="bg-red-50 border-red-200 text-red-700 cursor-pointer hover:bg-red-100 transition-colors"
-                                                  onClick={() => {
-                                                    if (student.student_id) {
-                                                      window.open(`/student-profile?id=${student.student_id}`, "_blank")
+                                              {effectiveAbsentStudents.map((student, idx) => {
+                                                const isPendingChange = pendingChanges.some(c => c.studentId === student.student_id)
+                                                const studentKey = `${student.student_id}-${classDate}`
+                                                const isExcused = excusedStudents[studentKey] || student.is_excused
+                                                const isExcusing = excusingStudent === studentKey
+                                                
+                                                const handleExcuse = async (e: React.MouseEvent) => {
+                                                  e.stopPropagation()
+                                                  setExcusingStudent(studentKey)
+                                                  try {
+                                                    const res = await fetch("/api/attendance/mark-excused", {
+                                                      method: "POST",
+                                                      headers: { "Content-Type": "application/json" },
+                                                      body: JSON.stringify({
+                                                        studentId: student.student_id,
+                                                        classDate: classDate,
+                                                        semesterId: semesterId,
+                                                        isExcused: !isExcused,
+                                                        userEmail: userEmail,
+                                                      }),
+                                                    })
+                                                    if (res.ok) {
+                                                      setExcusedStudents(prev => ({ ...prev, [studentKey]: !isExcused }))
+                                                      toast({
+                                                        title: isExcused ? "Unexcused" : "Excused",
+                                                        description: `${student.student_name} has been marked as ${isExcused ? "unexcused" : "excused"}.`,
+                                                      })
+                                                    } else {
+                                                      const error = await res.json()
+                                                      toast({
+                                                        title: "Error",
+                                                        description: error.error || "Failed to update excused status",
+                                                        variant: "destructive",
+                                                      })
                                                     }
-                                                  }}
-                                                >
-                                                  <XCircle className="h-3 w-3 mr-1" />
-                                                  {student.student_name}
-                                                </Badge>
-                                              ))}
+                                                  } catch (error) {
+                                                    console.error("Error marking excused:", error)
+                                                    toast({
+                                                      title: "Error",
+                                                      description: "Failed to update excused status",
+                                                      variant: "destructive",
+                                                    })
+                                                  } finally {
+                                                    setExcusingStudent(null)
+                                                  }
+                                                }
+                                                
+                                                return (
+                                                  <div key={idx} className="flex items-center gap-1">
+                                                    <Badge
+                                                      variant="outline"
+                                                      className={`${
+                                                        isExcused
+                                                          ? 'bg-amber-50 border-amber-300 text-amber-700'
+                                                          : isPendingChange 
+                                                            ? 'bg-yellow-100 border-yellow-400 text-yellow-800' 
+                                                            : 'bg-red-50 border-red-200 text-red-700'
+                                                      } ${isEditMode ? 'cursor-pointer hover:bg-red-100' : ''} transition-colors`}
+                                                      onClick={() => isEditMode && toggleStudentStatus(student.student_id, student.student_name, false)}
+                                                    >
+                                                      {isExcused ? (
+                                                        <AlertTriangle className="h-3 w-3 mr-1" />
+                                                      ) : (
+                                                        <XCircle className="h-3 w-3 mr-1" />
+                                                      )}
+                                                      {student.student_name}
+                                                      {isExcused && <span className="ml-1 text-xs">(excused)</span>}
+                                                      {isPendingChange && !isExcused && <span className="ml-1 text-xs">(moved)</span>}
+                                                    </Badge>
+                                                    {!isConfirmed && (
+                                                      <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className={`h-6 px-2 text-xs ${
+                                                          isExcused 
+                                                            ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-50' 
+                                                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                                                        }`}
+                                                        onClick={handleExcuse}
+                                                        disabled={isExcusing}
+                                                      >
+                                                        {isExcusing ? (
+                                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                                        ) : isExcused ? (
+                                                          "Unexcuse"
+                                                        ) : (
+                                                          "Excuse"
+                                                        )}
+                                                      </Button>
+                                                    )}
+                                                  </div>
+                                                )
+                                              })}
                                             </div>
                                           </div>
                                         )}

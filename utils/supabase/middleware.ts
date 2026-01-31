@@ -35,7 +35,14 @@ export async function updateSession(request: NextRequest) {
   try {
     const { error } = await supabase.auth.getUser()
 
-    if (error?.code === "session_not_found" || error?.message?.includes("session_not_found")) {
+    // Check for various auth errors that indicate invalid/stale session
+    const isAuthError = error?.code === "session_not_found" || 
+      error?.message?.includes("session_not_found") ||
+      error?.message?.includes("refresh_token_not_found") ||
+      error?.message?.includes("Invalid Refresh Token") ||
+      error?.code === "refresh_token_not_found"
+
+    if (isAuthError) {
       // Clear all Supabase auth cookies to force re-authentication
       const cookieNames = request.cookies.getAll().map((c) => c.name)
       const supabaseCookies = cookieNames.filter((name) => name.startsWith("sb-") || name.includes("supabase"))
@@ -46,13 +53,28 @@ export async function updateSession(request: NextRequest) {
 
       // Redirect to sign-in page if not already there
       const pathname = request.nextUrl.pathname
-      if (!pathname.startsWith("/sign-in") && !pathname.startsWith("/sign-up")) {
+      if (!pathname.startsWith("/sign-in") && !pathname.startsWith("/sign-up") && !pathname.startsWith("/login")) {
         const signInUrl = new URL("/sign-in", request.url)
         return NextResponse.redirect(signInUrl)
       }
     }
-  } catch {
-    // Auth may not be set up yet, ignore errors
+  } catch (err: any) {
+    // Handle refresh token errors that throw exceptions
+    if (err?.message?.includes("refresh_token_not_found") || 
+        err?.message?.includes("Invalid Refresh Token")) {
+      const cookieNames = request.cookies.getAll().map((c) => c.name)
+      const supabaseCookies = cookieNames.filter((name) => name.startsWith("sb-") || name.includes("supabase"))
+      supabaseCookies.forEach((name) => {
+        response.cookies.delete(name)
+      })
+      
+      const pathname = request.nextUrl.pathname
+      if (!pathname.startsWith("/sign-in") && !pathname.startsWith("/sign-up") && !pathname.startsWith("/login")) {
+        const signInUrl = new URL("/sign-in", request.url)
+        return NextResponse.redirect(signInUrl)
+      }
+    }
+    // Other auth errors - may not be set up yet, ignore
   }
 
   return response

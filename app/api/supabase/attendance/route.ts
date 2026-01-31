@@ -137,6 +137,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // Create notification for the student's clinic director
+    try {
+      // Get the student's clinic director from v_complete_mapping
+      const { data: studentData } = await supabase
+        .from("v_complete_mapping")
+        .select("clinic_director_id, clinic_id, student_clinic_name")
+        .eq("student_id", studentId)
+        .eq("semester_id", semesterId)
+        .limit(1)
+        .maybeSingle()
+
+      if (studentData?.clinic_director_id) {
+        await supabase.from("notifications").insert({
+          type: "attendance",
+          title: `${studentName} marked attendance`,
+          message: `Attendance submitted for Week ${weekNumber}`,
+          student_id: studentId,
+          student_name: studentName,
+          student_email: studentEmail,
+          clinic_id: studentData.clinic_id,
+          director_id: studentData.clinic_director_id,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        })
+      }
+    } catch (notifError) {
+      // Don't fail the attendance submission if notification fails
+      console.log("[v0] Error creating attendance notification:", notifError)
+    }
+
     return NextResponse.json({ success: true, attendance: data })
   } catch (error) {
     console.error("Error in attendance POST:", error)

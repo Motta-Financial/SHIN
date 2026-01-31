@@ -36,6 +36,7 @@ import {
   Sparkles,
   ArrowRight,
   RefreshCw,
+  Lock,
 } from "lucide-react"
 import { upload } from "@vercel/blob/client"
 import {
@@ -904,17 +905,25 @@ export default function StudentPortal() {
       })
 
       if (response.ok) {
+        // Send notification with proper targeting based on question type
+        const questionLabel = questionType === "clinic" ? "Clinic Question" : "Client Question"
+        const questionContext = questionType === "clinic" 
+          ? `[${currentStudent.clinic}]` 
+          : `[${currentStudent.clientName || currentStudent.clientTeam || "Client"}]`
+        
         await fetch("/api/notifications", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "question",
-            title: `Question from ${currentStudent.fullName}`,
-            message: questionText,
+            title: `${questionLabel} from ${currentStudent.fullName}`,
+            message: `${questionContext} ${questionText}`,
             studentId: currentStudent.id,
             studentName: currentStudent.fullName,
             studentEmail: currentStudent.email,
             clinic: currentStudent.clinic,
+            clinicId: currentStudent.clinicId,
+            clientId: currentStudent.clientId,
             questionType: questionType,
           }),
         })
@@ -924,9 +933,13 @@ export default function StudentPortal() {
         const debriefsData = await safeJsonParse(debriefsRes, { debriefs: [] }) // Use safeJsonParse
         setDebriefs(debriefsData.debriefs || [])
         setQuestionText("")
+        alert("Your question has been sent to your director!")
+      } else {
+        alert("Failed to send question. Please try again.")
       }
     } catch (error) {
       console.error("Error submitting question:", error)
+      alert("An error occurred. Please try again.")
     } finally {
       setSubmitting(false)
     }
@@ -977,9 +990,13 @@ export default function StudentPortal() {
         setMeetingSubject("")
         setMeetingMessage("")
         setPreferredDates(["", "", ""])
+        alert("Meeting request sent successfully! Your director will respond soon.")
+      } else {
+        alert("Failed to send meeting request. Please try again.")
       }
     } catch (error) {
       console.error("Error submitting meeting request:", error)
+      alert("An error occurred. Please try again.")
     } finally {
       setSubmittingMeeting(false)
     }
@@ -2321,6 +2338,9 @@ export default function StudentPortal() {
                             const hasAttendance = attendanceRecords.some(
                               (r) => r.weekNumber === Number(week.week_number),
                             ) // Compare numbers
+                            const attendanceRecord = attendanceRecords.find(
+                              (r) => r.weekNumber === Number(week.week_number),
+                            )
                             const weekDebrief = debriefs.find((d) => {
                               const debriefWeekNumber = d.weekNumber
                               return debriefWeekNumber === Number(week.week_number) // Compare numbers
@@ -2329,6 +2349,13 @@ export default function StudentPortal() {
                             const isPast = new Date(week.week_end) < new Date()
                             const isCurrent =
                               new Date(week.week_start) <= new Date() && new Date(week.week_end) >= new Date()
+                            
+                            // Check if today is the class day (Monday - week_start)
+                            const today = new Date()
+                            const classDay = new Date(week.week_start)
+                            const isClassDay = today.toDateString() === classDay.toDateString()
+                            // Attendance is only available on the class day itself
+                            const canSubmitAttendance = isClassDay && !hasAttendance
 
                             return (
                               <div
@@ -2370,31 +2397,39 @@ export default function StudentPortal() {
                                   <div className="flex items-center gap-3 shrink-0">
                                     {!week.is_break && (
                                       <>
-                                        <Dialog
-                                          open={openDialog === "attendance" && selectedWeekForAttendance === week.id}
-                                          onOpenChange={(open) => setOpenDialog(open ? "attendance" : null)}
-                                        >
-                                          <DialogTrigger asChild>
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              className="text-xs h-8 bg-transparent"
-                                              onClick={() => {
-                                                setSelectedWeekForAttendance(week.id)
-                                                setOpenDialog("attendance")
-                                              }}
-                                              disabled={!isCurrent && isPast}
-                                            >
-                                              {hasAttendance ? (
-                                                <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
-                                              ) : isPast ? (
-                                                <AlertCircle className="h-4 w-4 mr-2 text-red-500" />
-                                              ) : (
-                                                <CalendarClock className="h-4 w-4 mr-2 text-blue-600" />
-                                              )}
-                                              {hasAttendance ? "Attended" : isPast ? "Missing" : "Mark Attendance"}
-                                            </Button>
-                                          </DialogTrigger>
+                                        {/* Attendance Status/Button */}
+                                        {hasAttendance ? (
+                                          // Already submitted - show status
+                                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-100 border border-green-200">
+                                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                            <span className="text-xs font-medium text-green-700">Present</span>
+                                          </div>
+                                        ) : isPast ? (
+                                          // Past week without attendance - show absent status (locked)
+                                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-100 border border-red-200">
+                                            <AlertCircle className="h-4 w-4 text-red-500" />
+                                            <span className="text-xs font-medium text-red-700">Absent</span>
+                                          </div>
+                                        ) : canSubmitAttendance ? (
+                                          // Class day - can submit
+                                          <Dialog
+                                            open={openDialog === "attendance" && selectedWeekForAttendance === week.id}
+                                            onOpenChange={(open) => setOpenDialog(open ? "attendance" : null)}
+                                          >
+                                            <DialogTrigger asChild>
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="text-xs h-8 bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                                                onClick={() => {
+                                                  setSelectedWeekForAttendance(week.id)
+                                                  setOpenDialog("attendance")
+                                                }}
+                                              >
+                                                <CalendarClock className="h-4 w-4 mr-2" />
+                                                Mark Attendance
+                                              </Button>
+                                            </DialogTrigger>
                                           <DialogContent className="sm:max-w-[425px]">
                                             <DialogHeader>
                                               <DialogTitle>Mark Attendance</DialogTitle>
@@ -2428,7 +2463,16 @@ export default function StudentPortal() {
                                               </Button>
                                             </DialogFooter>
                                           </DialogContent>
-                                        </Dialog>
+                                          </Dialog>
+                                        ) : (
+                                          // Future week - show locked badge
+                                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-slate-100 border border-slate-200">
+                                            <Lock className="h-4 w-4 text-slate-400" />
+                                            <span className="text-xs font-medium text-slate-500">Locked</span>
+                                          </div>
+                                        )}
+
+                                        {/* Debrief Status/Button */}
                                         <Dialog open={showDebriefDialog} onOpenChange={setShowDebriefDialog}>
                                           <DialogTrigger asChild>
                                             <Button

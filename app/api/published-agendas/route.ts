@@ -1,16 +1,22 @@
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
+import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
+import { cookies } from "next/headers"
+import { createServerClient } from "@supabase/supabase-js"
+
+// Use service role client for bypassing RLS
+function getServiceClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.supabase_SUPABASE_SERVICE_ROLE_KEY
+  
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Missing Supabase credentials")
+  }
+  
+  return createClient(supabaseUrl, serviceRoleKey)
+}
 
 export async function GET(request: Request) {
-  const cookieStore = await cookies()
-  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value
-      },
-    },
-  })
+  const supabase = getServiceClient()
 
   const { searchParams } = new URL(request.url)
   const semesterId = searchParams.get("semester_id")
@@ -28,8 +34,9 @@ export async function GET(request: Request) {
       query = query.gte("schedule_date", weekStart).lte("schedule_date", weekEnd)
     }
 
-    // Default to current agenda if no filters
-    if (!weekStart && !weekEnd) {
+    // If semester_id is provided without date filters, return all agendas for that semester
+    // Otherwise, default to current agenda if no filters at all
+    if (!weekStart && !weekEnd && !semesterId) {
       query = query.eq("is_current", true).limit(1)
     }
 
@@ -38,7 +45,7 @@ export async function GET(request: Request) {
     if (error && error.code !== "PGRST116") throw error
 
     // Return single or array based on query type
-    if (!weekStart && !weekEnd) {
+    if (!weekStart && !weekEnd && !semesterId) {
       return NextResponse.json({ success: true, agenda: data?.[0] || null })
     }
 
@@ -50,14 +57,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const cookieStore = await cookies()
-  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value
-      },
-    },
-  })
+  const supabase = getServiceClient()
 
   try {
     const body = await request.json()
@@ -81,6 +81,28 @@ export async function POST(request: Request) {
       .single()
 
     if (error) throw error
+
+    // Create notification for all students (broadcast notification)
+    try {
+      const scheduleDate = new Date(body.schedule_date)
+      const formattedDate = scheduleDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      
+      await supabase.from("notifications").insert({
+        type: "agenda_published",
+        title: "Class Agenda Published",
+        message: `The agenda for ${formattedDate} has been published. Check the Class Course page for details.`,
+        target_audience: "students",
+        student_id: null, // null means broadcast to all students
+        clinic_id: null,
+        related_id: data.id,
+        is_read: false,
+        created_by: body.published_by,
+        created_at: new Date().toISOString(),
+      })
+    } catch (notifError) {
+      // Don't fail the agenda publish if notification fails
+      console.log("[v0] Error creating agenda notification:", notifError)
+    }
 
     return NextResponse.json({ success: true, agenda: data })
   } catch (error) {

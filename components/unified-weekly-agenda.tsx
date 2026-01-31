@@ -26,7 +26,58 @@ import {
   Loader2,
   MapPin,
   Save,
+  Download,
+  Send,
+  CheckCircle,
+  AlertTriangle,
+  ArrowDown,
 } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+
+// Time utility functions for smart agenda management
+const parseTime = (timeStr: string): number => {
+  // Parse time like "5:00 PM" or "17:00" into minutes from midnight
+  const cleanTime = timeStr.trim().toUpperCase()
+  const isPM = cleanTime.includes("PM")
+  const isAM = cleanTime.includes("AM")
+  const timeOnly = cleanTime.replace(/\s*(AM|PM)\s*/i, "")
+  const [hoursStr, minutesStr] = timeOnly.split(":")
+  let hours = Number.parseInt(hoursStr, 10)
+  const minutes = Number.parseInt(minutesStr || "0", 10)
+  
+  if (isPM && hours !== 12) hours += 12
+  if (isAM && hours === 12) hours = 0
+  
+  return hours * 60 + minutes
+}
+
+const formatTime = (totalMinutes: number): string => {
+  // Format minutes from midnight back to "5:00 PM" format
+  let hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  const isPM = hours >= 12
+  
+  if (hours > 12) hours -= 12
+  if (hours === 0) hours = 12
+  
+  return `${hours}:${minutes.toString().padStart(2, "0")} ${isPM ? "PM" : "AM"}`
+}
+
+const getEndTime = (startTime: string, duration: number): string => {
+  const startMinutes = parseTime(startTime)
+  return formatTime(startMinutes + duration)
+}
+
+const checkTimeOverlap = (block1Start: string, block1Duration: number, block2Start: string): boolean => {
+  const start1 = parseTime(block1Start)
+  const end1 = start1 + block1Duration
+  const start2 = parseTime(block2Start)
+  return start2 < end1
+}
+
+const sortBlocksByTime = (blocks: TimeBlock[]): TimeBlock[] => {
+  return [...blocks].sort((a, b) => parseTime(a.time) - parseTime(b.time))
+}
 
 interface Activity {
   id: string
@@ -55,6 +106,7 @@ interface AgendaSession {
   room: string
   roomNumber: string
   notes: string
+  zoom_link?: string
 }
 
 interface TimeBlock {
@@ -350,12 +402,105 @@ function UnifiedWeeklyAgenda({
     weekNumber: number
     timeBlockId: string
     timeBlock: TimeBlock
+    originalTime?: string
+    originalDuration?: number
   } | null>(null)
   const [showEditTimeBlockDialog, setShowEditTimeBlockDialog] = useState(false)
+  
+  // Smart agenda state
+  const [showCascadeConfirm, setShowCascadeConfirm] = useState(false)
+  const [cascadeChanges, setCascadeChanges] = useState<{
+    weekNumber: number
+    editedBlockId: string
+    timeDiff: number
+    affectedBlocks: TimeBlock[]
+  } | null>(null)
 
   // Directors data - assuming it's fetched elsewhere or hardcoded if static
   const directors = [] // Placeholder: In a real app, fetch this data.
-
+  
+  // Calculate time conflicts for current editing state
+  const getTimeConflicts = (activities: TimeBlock[], editingBlockId: string, newTime: string, newDuration: number): { hasConflict: boolean; conflictWith: string[] } => {
+    const conflicts: string[] = []
+    const editStart = parseTime(newTime)
+    const editEnd = editStart + newDuration
+    
+    for (const block of activities) {
+      if (block.id === editingBlockId) continue
+      const blockStart = parseTime(block.time)
+      const blockEnd = blockStart + block.duration
+      
+      // Check for overlap
+      if (editStart < blockEnd && editEnd > blockStart) {
+        conflicts.push(block.activity)
+      }
+    }
+    
+    return { hasConflict: conflicts.length > 0, conflictWith: conflicts }
+  }
+  
+  // Detect all time conflicts in the schedule (for banner warning)
+  const detectAllTimeConflicts = (activities: TimeBlock[]): { activity1: string; activity2: string; time1: string; time2: string }[] => {
+    if (!activities || activities.length < 2) return []
+    
+    const conflicts: { activity1: string; activity2: string; time1: string; time2: string }[] = []
+    const sortedBlocks = sortBlocksByTime(activities)
+    
+    for (let i = 0; i < sortedBlocks.length - 1; i++) {
+      const current = sortedBlocks[i]
+      const currentEnd = parseTime(current.time) + current.duration
+      
+      for (let j = i + 1; j < sortedBlocks.length; j++) {
+        const next = sortedBlocks[j]
+        const nextStart = parseTime(next.time)
+        
+        // If current activity ends after next starts, there's an overlap
+        if (currentEnd > nextStart) {
+          conflicts.push({
+            activity1: current.activity,
+            activity2: next.activity,
+            time1: `${current.time} - ${getEndTime(current.time, current.duration)}`,
+            time2: `${next.time} - ${getEndTime(next.time, next.duration)}`,
+          })
+        }
+      }
+    }
+    
+    return conflicts
+  }
+  
+  // Calculate which blocks would be affected by a cascade
+  const getBlocksToShift = (activities: TimeBlock[], editedBlockId: string, newEndTime: number): TimeBlock[] => {
+    const sortedBlocks = sortBlocksByTime(activities)
+    const editedIndex = sortedBlocks.findIndex(b => b.id === editedBlockId)
+    if (editedIndex === -1) return []
+    
+    return sortedBlocks.slice(editedIndex + 1).filter(block => {
+      const blockStart = parseTime(block.time)
+      return blockStart < newEndTime
+    })
+  }
+  
+  // Apply cascade shift to all affected blocks
+  const applyCascadeShift = async (weekNumber: number, editedBlockId: string, timeDiff: number) => {
+    const schedule = schedules.find(s => s.week_number === weekNumber)
+    if (!schedule) return
+    
+    const sortedBlocks = sortBlocksByTime(schedule.activities || [])
+    const editedIndex = sortedBlocks.findIndex(b => b.id === editedBlockId)
+    
+    const updatedActivities = sortedBlocks.map((block, index) => {
+      if (index <= editedIndex) return block
+      // Shift all blocks after the edited one
+      const newStartMinutes = parseTime(block.time) + timeDiff
+      return { ...block, time: formatTime(newStartMinutes) }
+    })
+    
+    await updateSchedule(schedule.id, { activities: updatedActivities })
+    setShowCascadeConfirm(false)
+    setCascadeChanges(null)
+  }
+  
   useEffect(() => {
     fetchSchedules()
     // fetchDirectors() // Removed unused fetch
@@ -378,24 +523,52 @@ function UnifiedWeeklyAgenda({
   const fetchSchedules = async () => {
     setLoading(true)
     try {
+      // First, always fetch the semester schedule structure for week info
       const response = await fetch(`/api/semester-schedule?semester=${encodeURIComponent(semester)}`)
       const data = await response.json()
+      
       if (data.schedules && data.schedules.length > 0) {
-        // Initialize activities with default time blocks if not present
-        const schedulesWithActivities = data.schedules.map((s: WeekSchedule) => ({
-          ...s,
-          // Ensure 'activities' array exists, using defaultTimeBlocks if empty
-          activities:
-            s.activities && s.activities.length > 0 ? s.activities : JSON.parse(JSON.stringify(defaultTimeBlocks)),
-          // schedule_data: s.schedule_data || [], // Ensure schedule_data is initialized
-          zoom_link: s.zoom_link || "https://zoom.us/j/123456789",
-          room_assignment: s.room_assignment || "Main Classroom", // Default room assignment
-        }))
-        setSchedules(schedulesWithActivities)
-        // Removed the line setting openWeeks as it's no longer needed
-      } else {
+        // For student view, fetch published agendas and merge with schedule structure
+        if (isStudentView) {
+          const publishedRes = await fetch(`/api/published-agendas?semester_id=${semesterId}`)
+          const publishedData = await publishedRes.json()
+          const publishedAgendas = publishedData.agendas || []
+          
+          // Merge published agenda activities into schedules
+          const schedulesWithPublished = data.schedules.map((s: WeekSchedule) => {
+            // Find matching published agenda by date range
+            const publishedAgenda = publishedAgendas.find((pa: any) => {
+              const publishDate = new Date(pa.schedule_date)
+              const weekStart = new Date(s.week_start)
+              const weekEnd = new Date(s.week_end)
+              return publishDate >= weekStart && publishDate <= weekEnd
+            })
+            
+            return {
+              ...s,
+              // Use published activities if available, otherwise show "Not yet published"
+              activities: publishedAgenda?.schedule_data || [],
+              zoom_link: publishedAgenda?.zoom_link || s.zoom_link || "",
+              notes: publishedAgenda?.notes || s.notes || "",
+              _isPublished: !!publishedAgenda,
+              _publishedAt: publishedAgenda?.published_at,
+            }
+          })
+          setSchedules(schedulesWithPublished)
+        } else {
+          // Director view - show editable schedule from semester_schedule
+          const schedulesWithActivities = data.schedules.map((s: WeekSchedule) => ({
+            ...s,
+            activities:
+              s.activities && s.activities.length > 0 ? s.activities : JSON.parse(JSON.stringify(defaultTimeBlocks)),
+            zoom_link: s.zoom_link || "https://zoom.us/j/123456789",
+            room_assignment: s.room_assignment || "Main Classroom",
+          }))
+          setSchedules(schedulesWithActivities)
+        }
+      } else if (!isStudentView) {
+        // Only create default weeks for director view
         const defaultWeeks = generateDefaultWeeks(semester)
-        // Create all weeks in database
         for (const week of defaultWeeks) {
           try {
             await fetch("/api/semester-schedule", {
@@ -407,19 +580,16 @@ function UnifiedWeeklyAgenda({
             console.error("Error creating week:", e)
           }
         }
-        // Refetch to get the created weeks with IDs
         const refetchResponse = await fetch(`/api/semester-schedule?semester=${encodeURIComponent(semester)}`)
         const refetchData = await refetchResponse.json()
         if (refetchData.schedules) {
           const schedulesWithActivities = refetchData.schedules.map((s: WeekSchedule) => ({
             ...s,
             activities: s.activities || JSON.parse(JSON.stringify(defaultTimeBlocks)),
-            // schedule_data: s.schedule_data || [],
             zoom_link: s.zoom_link || "https://zoom.us/j/123456789",
             room_assignment: s.room_assignment || "Main Classroom",
           }))
           setSchedules(schedulesWithActivities)
-          // Removed the line setting openWeeks as it's no longer needed
         }
       }
     } catch (error) {
@@ -746,22 +916,23 @@ function UnifiedWeeklyAgenda({
     const schedule = schedules.find((s) => s.week_number === activeWeekForDialog)
     if (!schedule) return
 
-    const timeBlockToAdd: TimeBlock = {
-      id: crypto.randomUUID(),
-      ...newTimeBlock,
-      sessions: [
-        // Default session for a new time block
-        {
-          id: `${crypto.randomUUID()}-session`,
-          activity: newTimeBlock.activity, // Use the activity as the session activity
-          team: "All Teams",
-          directorInitials: "",
-          room: "",
-          roomNumber: "",
-          notes: "",
-        },
-      ],
-    }
+const timeBlockToAdd: TimeBlock = {
+  id: crypto.randomUUID(),
+  ...newTimeBlock,
+  sessions: [
+  // Default session for a new time block
+  {
+  id: `${crypto.randomUUID()}-session`,
+  activity: newTimeBlock.activity, // Use the activity as the session activity
+  team: "All Teams",
+  directorInitials: "",
+  room: "",
+  roomNumber: "",
+  notes: "",
+  zoom_link: "",
+  },
+  ],
+  }
     const updatedTimeBlocks = [...(schedule.activities || []), timeBlockToAdd] // Use 'activities' for TimeBlocks
     await updateSchedule(schedule.id, { activities: updatedTimeBlocks }) // Use 'activities' for TimeBlocks
     setShowAddActivityDialog(false) // Close dialog after adding
@@ -903,11 +1074,12 @@ function UnifiedWeeklyAgenda({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           schedule_date: schedule.week_start || new Date().toISOString().split("T")[0],
-          director_name: "Nick Vadala", // Placeholder, consider fetching dynamically
-          zoom_link: schedule.zoom_link || "https://zoom.us/j/123456789",
-          schedule_data: schedule.activities, // Use 'activities' for TimeBlocks
+          director_name: "SEED Director",
+          zoom_link: schedule.zoom_link || "",
+          schedule_data: schedule.activities,
           notes: schedule.notes,
-          published_by: "director@example.com", // Placeholder, consider fetching dynamically
+          published_by: "director",
+          semester_id: schedule.semester_id,
         }),
       })
 
@@ -968,10 +1140,11 @@ function UnifiedWeeklyAgenda({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           schedule_date: currentSchedule.week_start || new Date().toISOString().split("T")[0],
-          director_name: "Nick Vadala", // Placeholder, consider fetching dynamically
-          zoom_link: currentSchedule.zoom_link || "https://zoom.us/j/123456789",
-          schedule_data: currentSchedule.activities, // Use 'activities' for TimeBlocks
+          director_name: "SEED Director",
+          zoom_link: currentSchedule.zoom_link || "",
+          schedule_data: currentSchedule.activities,
           notes: currentSchedule.notes,
+          semester_id: currentSchedule.semester_id,
           published_by: "director@example.com", // Placeholder, consider fetching dynamically
         }),
       })
@@ -1029,6 +1202,235 @@ function UnifiedWeeklyAgenda({
     await updateSchedule(schedule.id, { recording_links: updatedRecordings })
   }
 
+  // PDF Download function for agenda
+  const downloadAgendaPDF = async () => {
+    if (!selectedSchedule) return
+    
+    const { default: jsPDF } = await import('jspdf')
+    
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'letter'
+    })
+    
+    const pageWidth = doc.internal.pageSize.getWidth()
+    const pageHeight = doc.internal.pageSize.getHeight()
+    const margin = 15
+    const contentWidth = pageWidth - (margin * 2)
+    let yPos = 0
+    
+    // Colors
+    const navy: [number, number, number] = [17, 34, 80]
+    const white: [number, number, number] = [255, 255, 255]
+    const black: [number, number, number] = [30, 30, 30]
+    const gray: [number, number, number] = [100, 100, 100]
+    const lightGray: [number, number, number] = [245, 245, 245]
+    const borderGray: [number, number, number] = [220, 220, 220]
+    
+    const activityColors: Record<string, [number, number, number]> = {
+      blue: [59, 130, 246],
+      teal: [20, 184, 166],
+      amber: [245, 158, 11],
+      slate: [100, 116, 139],
+      green: [34, 197, 94],
+      purple: [168, 85, 247],
+    }
+    
+    // Format date helper
+    const formatShortDate = (dateStr: string) => {
+      const date = new Date(dateStr + 'T00:00:00')
+      return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
+    }
+    
+    // ===== HEADER BAR =====
+    doc.setFillColor(...navy)
+    doc.rect(0, 0, pageWidth, 24, 'F')
+    
+    // Suffolk University SEED
+    doc.setFontSize(20)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...white)
+    doc.text('Suffolk University SEED', margin, 15)
+    
+    // Week badge on right - centered in badge
+    const weekText = `Week ${selectedSchedule.week_number}`
+    doc.setFontSize(12)
+    const weekTextWidth = doc.getTextWidth(weekText)
+    const badgeWidth = weekTextWidth + 14
+    const badgeX = pageWidth - margin - badgeWidth
+    doc.setFillColor(...white)
+    doc.roundedRect(badgeX, 7, badgeWidth, 11, 3, 3, 'F')
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...navy)
+    doc.text(weekText, badgeX + 7, 14.5)
+    
+    yPos = 32
+    
+    // ===== DATE ROW =====
+    doc.setFontSize(15)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(...black)
+    doc.text(`${formatShortDate(selectedSchedule.week_start)} - ${formatShortDate(selectedSchedule.week_end)}`, margin, yPos + 6)
+    
+    // Topic badge (if exists) - bigger and nicer
+    if (selectedSchedule.session_focus) {
+      doc.setFillColor(213, 196, 140)
+      const focusText = selectedSchedule.session_focus
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      const focusWidth = doc.getTextWidth(focusText) + 14
+      doc.roundedRect(pageWidth - margin - focusWidth, yPos, focusWidth, 10, 3, 3, 'F')
+      doc.setTextColor(80, 65, 20)
+      doc.text(focusText, pageWidth - margin - focusWidth + 7, yPos + 7)
+    }
+    
+    yPos += 14
+    
+    // Divider line
+    doc.setDrawColor(...borderGray)
+    doc.setLineWidth(0.5)
+    doc.line(margin, yPos, pageWidth - margin, yPos)
+    
+    yPos += 8
+    
+    // ===== ACTIVITIES =====
+    const activities = selectedSchedule.activities || []
+    const assignments = selectedSchedule.assignments || []
+    
+    // Calculate available space and distribute evenly
+    const footerSpace = 12
+    const assignmentSpace = assignments.length > 0 ? 30 : 0
+    const availableHeight = pageHeight - yPos - footerSpace - assignmentSpace
+    const totalActivities = activities.length
+    const cardGap = 4
+    const totalGaps = (totalActivities - 1) * cardGap
+    const cardHeight = Math.floor((availableHeight - totalGaps) / totalActivities)
+    
+    for (let i = 0; i < activities.length; i++) {
+      const block = activities[i]
+      const sessions = block.sessions || []
+      const sessionCount = sessions.length
+      
+      // Activity card with border
+      doc.setFillColor(...white)
+      doc.setDrawColor(...borderGray)
+      doc.setLineWidth(0.3)
+      doc.roundedRect(margin, yPos, contentWidth, cardHeight, 2, 2, 'FD')
+      
+      // Left color accent bar
+      const barColor = activityColors[block.color] || activityColors.slate
+      doc.setFillColor(...barColor)
+      doc.roundedRect(margin, yPos, 4, cardHeight, 2, 0, 'F')
+      doc.rect(margin + 2, yPos, 2, cardHeight, 'F')
+      
+      // Time - bold
+      doc.setFontSize(13)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...black)
+      doc.text(block.time, margin + 8, yPos + 6)
+      
+      // Duration below time
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...gray)
+      doc.text(`${block.duration} min`, margin + 8, yPos + 11)
+      
+      // Activity name
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...black)
+      doc.text(block.activity, margin + 38, yPos + 6)
+      
+      // Session count
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...gray)
+      doc.text(`${sessionCount} session${sessionCount !== 1 ? 's' : ''}`, margin + 38, yPos + 11)
+      
+      // Sessions - calculate spacing based on available height in card
+      const sessionAreaStart = yPos + 15
+      const sessionAreaHeight = cardHeight - 17
+      const sessionSpacing = Math.min(sessionAreaHeight / Math.max(sessions.length, 1), 10)
+      let sessionY = sessionAreaStart
+      
+      for (const session of sessions) {
+        // Bullet point
+        doc.setFillColor(...barColor)
+        doc.circle(margin + 42, sessionY, 1, 'F')
+        
+        // Team name
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(...black)
+        doc.text(session.team, margin + 46, sessionY + 1)
+        
+        // Director initials badge
+        if (session.directorInitials) {
+          const teamWidth = doc.getTextWidth(session.team)
+          doc.setFillColor(...lightGray)
+          doc.roundedRect(margin + 48 + teamWidth, sessionY - 2, 9, 4, 1, 1, 'F')
+          doc.setFontSize(6)
+          doc.setFont('helvetica', 'bold')
+          doc.setTextColor(...gray)
+          doc.text(session.directorInitials, margin + 49.5 + teamWidth, sessionY + 1)
+        }
+        
+        // Room on right
+        if (session.room || session.roomNumber) {
+          doc.setFontSize(8)
+          doc.setFont('helvetica', 'normal')
+          doc.setTextColor(...gray)
+          const roomText = `${session.room || ''} ${session.roomNumber || ''}`.trim()
+          doc.text(roomText, pageWidth - margin - 4 - doc.getTextWidth(roomText), sessionY + 1)
+        }
+        
+        // Notes on same line if space allows
+        if (session.notes) {
+          doc.setFontSize(7)
+          doc.setFont('helvetica', 'italic')
+          doc.setTextColor(140, 140, 140)
+          const noteX = margin + 46 + doc.getTextWidth(session.team) + (session.directorInitials ? 14 : 4)
+          doc.text(`- ${session.notes}`, noteX, sessionY + 1)
+        }
+        
+        sessionY += sessionSpacing
+      }
+      
+      yPos += cardHeight + cardGap
+    }
+    
+// ===== ASSIGNMENTS SECTION =====
+    if (assignments.length > 0) {
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...navy)
+      doc.text('ASSIGNMENTS', margin, yPos + 4)
+      
+      let assignX = margin + 32
+      for (const assignment of assignments) {
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(...black)
+        const assignText = assignment.title + (assignment.dueDate ? ` (Due: ${assignment.dueDate})` : '')
+        doc.text(`• ${assignText}`, assignX, yPos + 4)
+        assignX += doc.getTextWidth(`• ${assignText}`) + 8
+      }
+      yPos += 10
+    }
+    
+    // ===== FOOTER =====
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(...gray)
+    doc.text('Suffolk University SEED Program', margin, pageHeight - 8)
+    doc.text(`Week ${selectedSchedule.week_number} Agenda`, pageWidth - margin - doc.getTextWidth(`Week ${selectedSchedule.week_number} Agenda`), pageHeight - 8)
+    
+    // Save
+    const fileName = `SEED_Week${selectedSchedule.week_number}_Agenda.pdf`
+    doc.save(fileName)
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between px-1">
@@ -1037,13 +1439,24 @@ function UnifiedWeeklyAgenda({
           Unified Course & Weekly Agenda - {semester}
         </h2>
         {!isStudentView && (
-          <Dialog open={showAddWeekDialog} onOpenChange={setShowAddWeekDialog}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="gap-1" style={{ backgroundColor: "#112250" }}>
-                <Plus className="h-4 w-4" />
-                Add Week
-              </Button>
-            </DialogTrigger>
+          <div className="flex gap-2">
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="gap-1 bg-transparent"
+              onClick={downloadAgendaPDF}
+              disabled={!selectedSchedule}
+            >
+              <Download className="h-4 w-4" />
+              Download Agenda
+            </Button>
+            <Dialog open={showAddWeekDialog} onOpenChange={setShowAddWeekDialog}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="gap-1" style={{ backgroundColor: "#112250" }}>
+                  <Plus className="h-4 w-4" />
+                  Add Week
+                </Button>
+              </DialogTrigger>
             {/* Add Week Dialog Content - unchanged */}
             <DialogContent>
               <DialogHeader>
@@ -1111,7 +1524,8 @@ function UnifiedWeeklyAgenda({
                 <Button onClick={addWeek}>Add Week</Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+          </div>
         )}
       </div>
 
@@ -1270,16 +1684,18 @@ function UnifiedWeeklyAgenda({
                                     />
                                   </div>
                                   <div>
-                                    <Label>Duration (min)</Label>
-                                    <Input
-                                      type="number"
-                                      value={newTimeBlock.duration}
-                                      onChange={(e) =>
-                                        setNewTimeBlock({
-                                          ...newTimeBlock,
-                                          duration: Number.parseInt(e.target.value),
-                                        })
-                                      }
+<Label>Duration (min)</Label>
+  <Input
+  type="text"
+  inputMode="numeric"
+  value={newTimeBlock.duration === 0 ? "" : newTimeBlock.duration}
+  onChange={(e) => {
+  const val = e.target.value.replace(/\D/g, "")
+  setNewTimeBlock({
+  ...newTimeBlock,
+  duration: val === "" ? 0 : Number.parseInt(val, 10),
+  })
+  }}
                                       min={5}
                                       max={180}
                                     />
@@ -1418,9 +1834,39 @@ function UnifiedWeeklyAgenda({
                       </div>
                     </div>
 
-                    {selectedSchedule.activities && selectedSchedule.activities.length > 0 ? (
-                      <div className="space-y-2">
-                        {selectedSchedule.activities.map((timeBlock) => (
+{selectedSchedule.activities && selectedSchedule.activities.length > 0 ? (
+  <div className="space-y-2">
+  {/* Time Conflict Warning Banner */}
+  {(() => {
+    const conflicts = detectAllTimeConflicts(selectedSchedule.activities)
+    if (conflicts.length === 0) return null
+    
+    return (
+      <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-3">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-red-800">Time Conflict Detected</p>
+            <p className="text-xs text-red-600 mt-1">
+              The following activities have overlapping times:
+            </p>
+            <ul className="mt-2 space-y-1">
+              {conflicts.map((conflict, idx) => (
+                <li key={idx} className="text-xs text-red-700 flex items-center gap-1">
+                  <span className="font-medium">{conflict.activity1}</span>
+                  <span className="text-red-400">({conflict.time1})</span>
+                  <span className="text-red-500 mx-1">overlaps with</span>
+                  <span className="font-medium">{conflict.activity2}</span>
+                  <span className="text-red-400">({conflict.time2})</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    )
+  })()}
+  {selectedSchedule.activities.map((timeBlock) => (
                           <div key={timeBlock.id} className="flex border rounded-md overflow-hidden bg-white">
                             {/* Left accent bar based on activity type */}
                             <div
@@ -1443,9 +1889,13 @@ function UnifiedWeeklyAgenda({
                             <div className="flex-1 px-3 py-2">
                               <div className="flex items-start justify-between">
                                 <div className="flex items-center gap-3">
-                                  <div className="text-center min-w-[50px]">
+                                  <div className="text-center min-w-[70px]">
                                     <div className="font-medium text-sm">{timeBlock.time}</div>
-                                    <div className="text-[10px] text-gray-500">{timeBlock.duration} min</div>
+                                    <div className="text-[10px] text-gray-400 flex items-center justify-center gap-0.5">
+                                      <span>{timeBlock.duration}m</span>
+                                      <span className="mx-0.5">·</span>
+                                      <span className="text-gray-500">{getEndTime(timeBlock.time, timeBlock.duration)}</span>
+                                    </div>
                                   </div>
                                   <div>
                                     <div className="font-medium text-sm">{timeBlock.activity}</div>
@@ -1467,6 +1917,8 @@ function UnifiedWeeklyAgenda({
                                           weekNumber: selectedSchedule.week_number,
                                           timeBlockId: timeBlock.id,
                                           timeBlock: { ...timeBlock },
+                                          originalTime: timeBlock.time,
+                                          originalDuration: timeBlock.duration,
                                         })
                                         setShowEditTimeBlockDialog(true)
                                       }}
@@ -1487,26 +1939,46 @@ function UnifiedWeeklyAgenda({
 
                               {/* Sessions within TimeBlock */}
                               {timeBlock.sessions && timeBlock.sessions.length > 0 && (
-                                <div className="mt-1.5 pt-1.5 border-t border-dashed space-y-1">
+                                <div className="mt-1.5 pt-1.5 border-t border-dashed space-y-1.5">
                                   {timeBlock.sessions.map((session) => (
                                     <div
                                       key={session.id}
-                                      className="flex items-center justify-between text-[11px] text-gray-600"
+                                      className="text-[11px] text-gray-600"
                                     >
-                                      <div className="flex items-center gap-1.5">
-                                        <Users className="h-3 w-3 text-gray-400" />
-                                        <span>{session.team}</span>
-                                        {session.directorInitials && (
-                                          <span className="text-[10px] px-1 py-0 rounded bg-gray-100 text-gray-600">
-                                            {session.directorInitials}
-                                          </span>
-                                        )}
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5">
+                                          <Users className="h-3 w-3 text-gray-400" />
+                                          <span>{session.team}</span>
+                                          {session.directorInitials && (
+                                            <span className="text-[10px] px-1 py-0 rounded bg-gray-100 text-gray-600">
+                                              {session.directorInitials}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          {session.zoom_link && (
+                                            <a
+                                              href={session.zoom_link}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="flex items-center gap-1 text-blue-600 hover:text-blue-700 hover:underline"
+                                            >
+                                              <Video className="h-2.5 w-2.5" />
+                                              <span className="text-[10px]">Zoom</span>
+                                            </a>
+                                          )}
+                                          {session.room && session.roomNumber && (
+                                            <span className="flex items-center gap-1 text-gray-500">
+                                              <MapPin className="h-2.5 w-2.5" />
+                                              {session.room} {session.roomNumber}
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
-                                      {session.room && session.roomNumber && (
-                                        <span className="flex items-center gap-1 text-gray-500">
-                                          <MapPin className="h-2.5 w-2.5" />
-                                          {session.room} {session.roomNumber}
-                                        </span>
+                                      {session.notes && (
+                                        <div className="ml-4 mt-0.5 text-[10px] text-gray-500 italic">
+                                          {session.notes}
+                                        </div>
                                       )}
                                     </div>
                                   ))}
@@ -1516,12 +1988,19 @@ function UnifiedWeeklyAgenda({
                           </div>
                         ))}
                       </div>
-                    ) : (
-                      <div className="text-center py-4 text-gray-500 text-xs border rounded-md border-dashed">
-                        No activities scheduled.
-                        {!isStudentView && " Click 'Add Activity' to add one."}
-                      </div>
-                    )}
+) : (
+  <div className="text-center py-8 text-gray-500 border rounded-md border-dashed">
+  {isStudentView ? (
+    <>
+      <Calendar className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+      <p className="text-sm font-medium text-gray-600">Agenda Not Yet Published</p>
+      <p className="text-xs text-gray-400 mt-1">The agenda for this week will be available once published by a director.</p>
+    </>
+  ) : (
+    <p className="text-xs">No activities scheduled. Click &apos;Add Activity&apos; to add one.</p>
+  )}
+  </div>
+  )}
                   </div>
 
                   <div className="px-4 py-3 border-t">
@@ -1718,6 +2197,38 @@ function UnifiedWeeklyAgenda({
                       <p className="text-xs text-gray-400 italic">No recordings added for this week.</p>
                     )}
                   </div>
+                  
+                  {/* Publish to Students Button */}
+                  {!isStudentView && (
+                    <div className="px-4 py-4 flex justify-center">
+                      <Button
+                        onClick={() => handlePublishAgenda(selectedSchedule)}
+                        disabled={publishing}
+                        className={`gap-2 px-6 ${
+                          publishSuccess === selectedSchedule.week_number
+                            ? 'bg-green-600 hover:bg-green-700'
+                            : 'bg-[#112250] hover:bg-[#1a3470]'
+                        } text-white`}
+                      >
+                        {publishing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Publishing...
+                          </>
+                        ) : publishSuccess === selectedSchedule.week_number ? (
+                          <>
+                            <CheckCircle className="h-4 w-4" />
+                            Published!
+                          </>
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4" />
+                            Publish to Students
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -1782,16 +2293,18 @@ function UnifiedWeeklyAgenda({
                   />
                 </div>
                 <div>
-                  <Label>Duration (minutes)</Label>
-                  <Input
-                    type="number"
-                    value={editingScheduleItem.item.minutes}
-                    onChange={(e) =>
-                      setEditingScheduleItem({
-                        ...editingScheduleItem,
-                        item: { ...editingScheduleItem.item, minutes: Number.parseInt(e.target.value) || 0 },
-                      })
-                    }
+<Label>Duration (minutes)</Label>
+  <Input
+  type="text"
+  inputMode="numeric"
+  value={editingScheduleItem.item.minutes === 0 ? "" : editingScheduleItem.item.minutes}
+  onChange={(e) => {
+  const val = e.target.value.replace(/\D/g, "")
+  setEditingScheduleItem({
+  ...editingScheduleItem,
+  item: { ...editingScheduleItem.item, minutes: val === "" ? 0 : Number.parseInt(val, 10) },
+  })
+  }}
                     min={5}
                     max={180}
                   />
@@ -1873,19 +2386,95 @@ function UnifiedWeeklyAgenda({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showEditTimeBlockDialog} onOpenChange={setShowEditTimeBlockDialog}>
+      <Dialog open={showEditTimeBlockDialog} onOpenChange={(open) => {
+          setShowEditTimeBlockDialog(open)
+          if (!open) {
+            setEditingTimeBlock(null)
+          }
+        }}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Activity</DialogTitle>
           </DialogHeader>
-          {editingTimeBlock && (
+          {editingTimeBlock && (() => {
+            const schedule = schedules.find(s => s.week_number === editingTimeBlock.weekNumber)
+            const activities = schedule?.activities || []
+            const conflicts = getTimeConflicts(
+              activities,
+              editingTimeBlock.timeBlockId,
+              editingTimeBlock.timeBlock.time,
+              editingTimeBlock.timeBlock.duration
+            )
+            const endTime = getEndTime(editingTimeBlock.timeBlock.time, editingTimeBlock.timeBlock.duration)
+            const originalEndMinutes = editingTimeBlock.originalTime && editingTimeBlock.originalDuration
+              ? parseTime(editingTimeBlock.originalTime) + editingTimeBlock.originalDuration
+              : null
+            const newEndMinutes = parseTime(editingTimeBlock.timeBlock.time) + editingTimeBlock.timeBlock.duration
+            const timeDiff = originalEndMinutes ? newEndMinutes - originalEndMinutes : 0
+            const blocksToShift = timeDiff > 0 ? getBlocksToShift(activities, editingTimeBlock.timeBlockId, newEndMinutes) : []
+            
+            return (
             <div className="space-y-4 mt-4">
+              {/* Time Conflict Warning */}
+              {conflicts.hasConflict && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-red-800">Time Conflict Detected</p>
+                    <p className="text-xs text-red-600 mt-0.5">
+                      This activity overlaps with: {conflicts.conflictWith.join(", ")}
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Cascade Suggestion */}
+              {blocksToShift.length > 0 && !conflicts.hasConflict && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <ArrowDown className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-amber-800">Shift Following Activities?</p>
+                      <p className="text-xs text-amber-600 mt-0.5">
+                        This change extends into the next activity. Would you like to shift {blocksToShift.length} activity(ies) forward by {timeDiff} minutes?
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {blocksToShift.map(block => (
+                          <Badge key={block.id} variant="outline" className="text-xs bg-white">
+                            {block.activity} ({block.time})
+                          </Badge>
+                        ))}
+                      </div>
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs bg-transparent"
+                          onClick={() => {
+                            setCascadeChanges({
+                              weekNumber: editingTimeBlock.weekNumber,
+                              editedBlockId: editingTimeBlock.timeBlockId,
+                              timeDiff,
+                              affectedBlocks: blocksToShift
+                            })
+                            setShowCascadeConfirm(true)
+                          }}
+                        >
+                          <ArrowDown className="h-3 w-3 mr-1" />
+                          Shift All Below
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Activity Header Settings */}
               <div className="p-3 bg-gray-50 rounded-lg border">
                 <h4 className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-3">Activity Settings</h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label className="text-xs">Time</Label>
+                    <Label className="text-xs">Start Time</Label>
                     <Input
                       value={editingTimeBlock.timeBlock.time}
                       onChange={(e) =>
@@ -1899,20 +2488,37 @@ function UnifiedWeeklyAgenda({
                     />
                   </div>
                   <div>
-                    <Label className="text-xs">Duration (min)</Label>
-                    <Input
-                      type="number"
-                      value={editingTimeBlock.timeBlock.duration}
-                      onChange={(e) =>
-                        setEditingTimeBlock({
-                          ...editingTimeBlock,
-                          timeBlock: { ...editingTimeBlock.timeBlock, duration: Number.parseInt(e.target.value) || 0 },
-                        })
-                      }
-                      min={5}
-                      max={180}
-                      className="h-8 text-sm"
-                    />
+<Label className="text-xs">Duration (min)</Label>
+  <div className="flex items-center gap-2">
+  <Input
+  type="text"
+  inputMode="numeric"
+  value={editingTimeBlock.timeBlock.duration === 0 ? "" : editingTimeBlock.timeBlock.duration}
+  onChange={(e) => {
+  const val = e.target.value.replace(/\D/g, "")
+  setEditingTimeBlock({
+  ...editingTimeBlock,
+  timeBlock: { ...editingTimeBlock.timeBlock, duration: val === "" ? 0 : Number.parseInt(val, 10) },
+  })
+  }}
+                        min={5}
+                        max={180}
+                        className="h-8 text-sm flex-1"
+                      />
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="secondary" className="h-8 px-2 text-xs whitespace-nowrap">
+                              <Clock className="h-3 w-3 mr-1" />
+                              Ends {endTime}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Activity ends at {endTime}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </div>
                   <div>
                     <Label className="text-xs">Activity Name</Label>
@@ -2005,6 +2611,7 @@ function UnifiedWeeklyAgenda({
                         room: "",
                         roomNumber: "",
                         notes: "",
+                        zoom_link: "",
                       }
                       setEditingTimeBlock({
                         ...editingTimeBlock,
@@ -2129,6 +2736,26 @@ function UnifiedWeeklyAgenda({
                           className="h-7 text-xs"
                         />
                       </div>
+                      <div>
+                        <Label className="text-[10px] text-gray-500 flex items-center gap-1">
+                          <Video className="h-3 w-3" />
+                          Zoom Link
+                        </Label>
+                        <Input
+                          value={session.zoom_link || ""}
+                          onChange={(e) => {
+                            const updatedSessions = editingTimeBlock.timeBlock.sessions.map((s) =>
+                              s.id === session.id ? { ...s, zoom_link: e.target.value } : s
+                            )
+                            setEditingTimeBlock({
+                              ...editingTimeBlock,
+                              timeBlock: { ...editingTimeBlock.timeBlock, sessions: updatedSessions },
+                            })
+                          }}
+                          placeholder="https://zoom.us/j/..."
+                          className="h-7 text-xs"
+                        />
+                      </div>
                     </div>
                   ))}
                   
@@ -2140,7 +2767,7 @@ function UnifiedWeeklyAgenda({
                 </div>
               </div>
             </div>
-          )}
+          )})()}
           <DialogFooter>
             <Button
               variant="outline"
@@ -2172,6 +2799,77 @@ function UnifiedWeeklyAgenda({
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Cascade Confirmation Dialog */}
+      <Dialog open={showCascadeConfirm} onOpenChange={setShowCascadeConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowDown className="h-5 w-5 text-amber-600" />
+              Shift Following Activities
+            </DialogTitle>
+          </DialogHeader>
+          {cascadeChanges && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                This will shift the following {cascadeChanges.affectedBlocks.length} activity(ies) forward by {cascadeChanges.timeDiff} minutes:
+              </p>
+              <div className="bg-gray-50 rounded-lg p-3 space-y-2 max-h-[200px] overflow-y-auto">
+                {cascadeChanges.affectedBlocks.map(block => {
+                  const newTime = formatTime(parseTime(block.time) + cascadeChanges.timeDiff)
+                  return (
+                    <div key={block.id} className="flex items-center justify-between text-sm">
+                      <span className="font-medium">{block.activity}</span>
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <span className="line-through">{block.time}</span>
+                        <ChevronRight className="h-3 w-3" />
+                        <span className="text-green-600 font-medium">{newTime}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowCascadeConfirm(false)
+                    setCascadeChanges(null)
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={async () => {
+                    if (cascadeChanges && editingTimeBlock) {
+                      // First save the current edit
+                      await updateTimeBlock(editingTimeBlock.weekNumber, editingTimeBlock.timeBlockId, editingTimeBlock.timeBlock)
+                      // Then apply cascade
+                      await applyCascadeShift(cascadeChanges.weekNumber, cascadeChanges.editedBlockId, cascadeChanges.timeDiff)
+                      setShowEditTimeBlockDialog(false)
+                      setEditingTimeBlock(null)
+                    }
+                  }}
+                  disabled={saving}
+                  className="bg-amber-600 hover:bg-amber-700"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Shifting...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowDown className="h-4 w-4 mr-2" />
+                      Shift All
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
