@@ -90,7 +90,7 @@ export async function POST(request: Request) {
       // Get all active students for this semester
       const { data: students, error: studentsError } = await supabase
         .from("students_current")
-        .select("id, clinic_id")
+        .select("id, full_name, email, clinic_id")
       
       if (studentsError) {
         console.log("[v0] Error fetching students for notification:", studentsError.message)
@@ -102,6 +102,8 @@ export async function POST(request: Request) {
           message: `The agenda for ${formattedDate} has been published. Check the Class Course page for details.`,
           target_audience: "students",
           student_id: student.id,
+          student_name: student.full_name,
+          student_email: student.email,
           clinic_id: student.clinic_id,
           is_read: false,
           created_at: new Date().toISOString(),
