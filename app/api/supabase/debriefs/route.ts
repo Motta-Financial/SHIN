@@ -185,6 +185,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // Create notification for the student's clinic director
+    try {
+      const studentName = studentData?.student_name || "A student"
+      const clinic = studentData?.student_clinic_name || body.clinic || "Unknown"
+      const clinicDirectorId = studentData?.clinic_director_id || null
+      const clinicId = studentData?.clinic_id || null
+      const weekEnding = body.weekEnding || new Date().toISOString().split("T")[0]
+
+      const notificationData: Record<string, any> = {
+        type: "debrief",
+        title: `${studentName} submitted a debrief`,
+        message: `Debrief for week ending ${weekEnding} - ${body.hoursWorked || 0} hours logged`,
+        student_id: insertData.student_id,
+        student_name: studentName,
+        student_email: insertData.student_email,
+        clinic_id: clinicId,
+        director_id: clinicDirectorId,
+        is_read: false,
+        related_id: data.id,
+        created_at: new Date().toISOString(),
+      }
+
+      // Only insert if we have a director to notify
+      if (clinicDirectorId) {
+        await supabase.from("notifications").insert(notificationData)
+      }
+    } catch (notifError) {
+      // Don't fail the debrief creation if notification fails
+      console.log("[v0] Error creating debrief notification:", notifError)
+    }
+
     return NextResponse.json({ success: true, debrief: data })
   } catch (error) {
     console.log("[v0] Error in POST debriefs:", error)

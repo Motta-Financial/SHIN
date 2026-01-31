@@ -38,6 +38,7 @@ import {
   Inbox,
   Send,
   Building2,
+  CalendarCheck, // Added import for CalendarCheck
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
@@ -413,15 +414,38 @@ export function Triage({
 
       // Student notifications/announcements
       studentNotifications.forEach((notif) => {
+        // Icon and color based on notification type
+        const studentIconMap: Record<string, React.ReactNode> = {
+          attendance_ready: <CalendarCheck className="h-4 w-4" />,
+          attendance_approved: <CheckCircle2 className="h-4 w-4" />,
+          agenda_published: <Calendar className="h-4 w-4" />,
+          meeting_response: <Users className="h-4 w-4" />,
+          debrief: <FileText className="h-4 w-4" />,
+        }
+        const studentBgMap: Record<string, string> = {
+          attendance_ready: "bg-orange-100 text-orange-700",
+          attendance_approved: "bg-teal-100 text-teal-700",
+          agenda_published: "bg-amber-100 text-amber-700",
+          meeting_response: "bg-purple-100 text-purple-700",
+          debrief: "bg-blue-100 text-blue-700",
+        }
+        const studentCategoryMap: Record<string, string> = {
+          attendance_ready: "Attendance",
+          attendance_approved: "Attendance",
+          agenda_published: "Class",
+          meeting_response: "Meetings",
+          debrief: "Debriefs",
+        }
+        
         items.push({
           id: `notification-announcement-${notif.id}`,
           type: "notification",
-          category: "Announcements",
-          priority: notif.priority === "high" ? "high" : "medium",
+          category: studentCategoryMap[notif.type] || "Announcements",
+          priority: notif.is_read ? "low" : (notif.priority === "high" ? "high" : "medium"),
           title: notif.title,
           description: notif.message,
-          icon: <Bell className="h-4 w-4" />,
-          iconBg: "bg-purple-100 text-purple-700",
+          icon: studentIconMap[notif.type] || <Bell className="h-4 w-4" />,
+          iconBg: studentBgMap[notif.type] || "bg-purple-100 text-purple-700",
           timestamp: notif.created_at,
           metadata: { from: notif.created_by },
         })

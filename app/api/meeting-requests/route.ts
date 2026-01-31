@@ -80,6 +80,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // Create notification for the student's clinic director
+    try {
+      // Get the student's clinic and director info
+      const { data: clinicData } = await supabase
+        .from("clinics")
+        .select("id, director_id")
+        .ilike("name", `%${clinic}%`)
+        .limit(1)
+        .maybeSingle()
+
+      if (clinicData?.director_id) {
+        await supabase.from("notifications").insert({
+          type: "meeting_request",
+          title: `${studentName} requested a meeting`,
+          message: subject ? `Subject: ${subject}` : "Meeting request submitted",
+          student_id: studentId,
+          student_name: studentName,
+          student_email: studentEmail,
+          clinic_id: clinicData.id,
+          director_id: clinicData.director_id,
+          related_id: data.id,
+          is_read: false,
+          created_at: new Date().toISOString(),
+        })
+      }
+    } catch (notifError) {
+      // Don't fail the meeting request creation if notification fails
+      console.log("[v0] Error creating meeting request notification:", notifError)
+    }
+
     return NextResponse.json({ success: true, request: data })
   } catch (error) {
     console.error("Error in meeting-requests POST:", error)

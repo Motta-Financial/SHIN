@@ -3,26 +3,80 @@
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useEffect, useState } from "react"
-import { FileText, Clock } from "lucide-react"
+import { FileText, Clock, CalendarCheck, Users, Calendar, CheckCircle, Bell } from "lucide-react"
 import { getClinicColor } from "@/lib/clinic-colors"
 
 interface Activity {
   id: string
-  type: "debrief"
+  type: "debrief" | "attendance" | "meeting_request" | "agenda_published" | "attendance_approved" | "attendance_ready"
   student: string
-  description: string
-  workSummary: string
+  title: string
+  message: string
   timestamp: string
   clinic?: string
-  hours: number
+  isRead: boolean
 }
 
 interface RecentActivityProps {
   selectedWeeks: string[]
   selectedClinic: string
+  directorId?: string
 }
 
-export function RecentActivity({ selectedWeeks, selectedClinic }: RecentActivityProps) {
+const getActivityIcon = (type: string) => {
+  switch (type) {
+    case "debrief":
+      return FileText
+    case "attendance":
+      return CalendarCheck
+    case "meeting_request":
+      return Users
+    case "agenda_published":
+      return Calendar
+    case "attendance_approved":
+      return CheckCircle
+    case "attendance_ready":
+      return Bell
+    default:
+      return Clock
+  }
+}
+
+const getActivityColor = (type: string) => {
+  switch (type) {
+    case "debrief":
+      return "bg-blue-500/20 border-blue-300 text-blue-700"
+    case "attendance":
+      return "bg-green-500/20 border-green-300 text-green-700"
+    case "meeting_request":
+      return "bg-purple-500/20 border-purple-300 text-purple-700"
+    case "agenda_published":
+      return "bg-amber-500/20 border-amber-300 text-amber-700"
+    case "attendance_approved":
+      return "bg-teal-500/20 border-teal-300 text-teal-700"
+    case "attendance_ready":
+      return "bg-orange-500/20 border-orange-300 text-orange-700"
+    default:
+      return "bg-gray-500/20 border-gray-300 text-gray-700"
+  }
+}
+
+const formatTimestamp = (dateString: string) => {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return "Just now"
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+  return date.toLocaleDateString()
+}
+
+export function RecentActivity({ selectedWeeks, selectedClinic, directorId }: RecentActivityProps) {
   const [activities, setActivities] = useState<Activity[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -30,57 +84,38 @@ export function RecentActivity({ selectedWeeks, selectedClinic }: RecentActivity
     async function fetchData() {
       setLoading(true)
       try {
-        const res = await fetch("/api/supabase/debriefs")
+        // Fetch notifications from the notifications table
+        const params = new URLSearchParams()
+        if (directorId) params.append("directorId", directorId)
+        if (selectedClinic && selectedClinic !== "all") params.append("clinic", selectedClinic)
+        
+        const res = await fetch(`/api/notifications?${params.toString()}`)
         if (res.ok) {
           const data = await res.json()
-          const debriefs = data.debriefs || []
+          const notifications = data.notifications || []
 
-          const filteredRecords = debriefs.filter((debrief: any) => {
-            const recordWeek = debrief.week_ending || debrief.weekEnding || ""
-            const relatedClinic = debrief.clinic || ""
-            const matchesClinic = selectedClinic === "all" || relatedClinic === selectedClinic
-            const matchesWeek = selectedWeeks.length === 0 || selectedWeeks.includes(recordWeek)
-            return matchesWeek && matchesClinic
-          })
-
-          const sortedRecords = filteredRecords
-            .sort((a: any, b: any) => {
-              const dateA = new Date(a.week_ending || a.weekEnding || 0)
-              const dateB = new Date(b.week_ending || b.weekEnding || 0)
-              return dateB.getTime() - dateA.getTime()
-            })
-            .slice(0, 10)
-
-          const activityList: Activity[] = sortedRecords.map((debrief: any) => {
-            const studentName = debrief.student_name || debrief.studentName || "Unknown"
-            const hours = Number.parseFloat(debrief.hours_worked || debrief.hoursWorked || "0")
-            const workDescription = debrief.work_summary || debrief.workSummary || ""
-            const clinic = debrief.clinic || ""
-            const workPreview = workDescription.length > 60 ? `${workDescription.substring(0, 60)}...` : workDescription
-
-            return {
-              id: debrief.id,
-              type: "debrief",
-              student: studentName,
-              description: `Logged ${hours} hours`,
-              workSummary: workPreview,
-              timestamp: "This week",
-              clinic,
-              hours,
-            }
-          })
+          const activityList: Activity[] = notifications.map((notif: any) => ({
+            id: notif.id,
+            type: notif.type || "debrief",
+            student: notif.student_name || "System",
+            title: notif.title || "",
+            message: notif.message || "",
+            timestamp: formatTimestamp(notif.created_at),
+            clinic: notif.clinic || "",
+            isRead: notif.is_read || false,
+          }))
 
           setActivities(activityList)
         }
       } catch (error) {
-        console.error("Error fetching debriefs:", error)
+        console.error("Error fetching notifications:", error)
       } finally {
         setLoading(false)
       }
     }
 
     fetchData()
-  }, [selectedWeeks, selectedClinic])
+  }, [selectedWeeks, selectedClinic, directorId])
 
   const getInitials = (name: string) => {
     return name
@@ -116,13 +151,14 @@ export function RecentActivity({ selectedWeeks, selectedClinic }: RecentActivity
           <p className="text-center text-[#002855]/50 py-8">No recent activity</p>
         ) : (
           activities.map((activity) => {
-            const Icon = activity.type === "debrief" ? FileText : Clock
-            const colors = getClinicColor(activity.clinic)
+            const Icon = getActivityIcon(activity.type)
+            const iconColors = getActivityColor(activity.type)
+            const clinicColors = activity.clinic ? getClinicColor(activity.clinic) : null
 
             return (
               <div
                 key={activity.id}
-                className="flex items-start gap-4 rounded-lg border-2 border-blue-200/50 bg-white/80 backdrop-blur-sm p-4 transition-all hover:border-blue-400 hover:shadow-xl hover:scale-[1.02] hover:bg-white"
+                className={`flex items-start gap-4 rounded-lg border-2 ${activity.isRead ? "border-blue-100/50 bg-white/60" : "border-blue-200/50 bg-white/80"} backdrop-blur-sm p-4 transition-all hover:border-blue-400 hover:shadow-xl hover:scale-[1.02] hover:bg-white`}
               >
                 <Avatar className="h-10 w-10 border-2 border-blue-500">
                   <AvatarFallback className="bg-blue-600 text-white font-semibold text-xs">
@@ -133,21 +169,24 @@ export function RecentActivity({ selectedWeeks, selectedClinic }: RecentActivity
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-medium text-[#002855]">{activity.student}</p>
-                    {activity.clinic && (
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${colors.bg} ${colors.text}`}>
+                    {activity.clinic && clinicColors && (
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${clinicColors.bg} ${clinicColors.text}`}>
                         {activity.clinic}
                       </span>
                     )}
+                    {!activity.isRead && (
+                      <span className="w-2 h-2 rounded-full bg-blue-500" title="Unread" />
+                    )}
                   </div>
-                  <p className="text-sm text-[#002855]/70">{activity.description}</p>
-                  {activity.workSummary && (
-                    <p className="text-xs text-[#002855]/60 italic mt-1">"{activity.workSummary}"</p>
+                  <p className="text-sm font-medium text-[#002855]/80">{activity.title}</p>
+                  {activity.message && (
+                    <p className="text-xs text-[#002855]/60">{activity.message}</p>
                   )}
                   <p className="text-xs text-[#002855]/50">{activity.timestamp}</p>
                 </div>
 
-                <div className="rounded-lg bg-blue-500/20 p-2 border border-blue-300">
-                  <Icon className="h-4 w-4 text-blue-700" />
+                <div className={`rounded-lg p-2 border ${iconColors}`}>
+                  <Icon className="h-4 w-4" />
                 </div>
               </div>
             )

@@ -104,6 +104,25 @@ export function AttendancePasswordManager({
       if (response.ok) {
         await fetchData()
         setNewPassword("")
+        
+        // Send notification to all students that attendance is ready
+        try {
+          await fetch('/api/notifications/attendance-ready', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              weekNumber: selectedWeek.week_number,
+              semesterId: semesterId,
+              weekStart: selectedWeek.week_start,
+              weekEnd: selectedWeek.week_end,
+              createdByName: currentDirectorName,
+              createdByEmail: currentUserEmail,
+            })
+          })
+        } catch (notifError) {
+          console.error("Error sending attendance ready notification:", notifError)
+        }
+        
         setSelectedWeek(null)
         setDialogOpen(false)
       }

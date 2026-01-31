@@ -41,8 +41,48 @@ export async function POST(request: NextRequest) {
     const supabase = createServiceClient()
     const body = await request.json()
 
-    const { type, title, message, studentId, studentName, studentEmail, clinic, questionType } = body
+    const { 
+      type, 
+      title, 
+      message, 
+      studentId, 
+      studentName, 
+      studentEmail, 
+      clinic, 
+      clinicId,
+      questionType,
+      targetAudience,
+      relatedId,
+      createdByUserId,
+      directorId 
+    } = body
 
+    // If this is a student-targeted notification, create it directly
+    if (targetAudience === "students") {
+      const { data, error } = await supabase.from("notifications").insert({
+        type,
+        title,
+        message,
+        student_id: studentId,
+        student_name: studentName,
+        student_email: studentEmail,
+        clinic_id: clinicId || null,
+        target_audience: "students",
+        related_id: relatedId,
+        created_by_user_id: createdByUserId,
+        is_read: false,
+        created_at: new Date().toISOString(),
+      }).select()
+
+      if (error) {
+        console.error("Error creating student notification:", error.message)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+
+      return NextResponse.json({ success: true, notifications: data })
+    }
+
+    // Director-targeted notifications
     // Get directors for this clinic to notify them
     const { data: directors } = await supabase
       .from("directors")
@@ -50,7 +90,11 @@ export async function POST(request: NextRequest) {
       .order("full_name")
 
     // Get clinic ID for matching
-    const { data: clinicData } = await supabase.from("clinics").select("id, name").ilike("name", `%${clinic}%`).single()
+    let resolvedClinicId = clinicId
+    if (!resolvedClinicId && clinic) {
+      const { data: clinicData } = await supabase.from("clinics").select("id, name").ilike("name", `%${clinic}%`).single()
+      resolvedClinicId = clinicData?.id
+    }
 
     // Create notification for each relevant director
     const notifications = []
@@ -60,7 +104,7 @@ export async function POST(request: NextRequest) {
         // If question type is "clinic", notify directors of that clinic
         // If question type is "client", notify all directors
         const shouldNotify =
-          questionType === "client" || !clinicData?.id || director.clinic_id === clinicData?.id || !director.clinic_id
+          questionType === "client" || !resolvedClinicId || director.clinic_id === resolvedClinicId || !director.clinic_id
 
         if (shouldNotify) {
           notifications.push({
@@ -70,8 +114,11 @@ export async function POST(request: NextRequest) {
             student_id: studentId,
             student_name: studentName,
             student_email: studentEmail,
-            clinic_id: clinicData?.id || null,
-            director_id: director.id,
+            clinic_id: resolvedClinicId || null,
+            director_id: directorId || director.id,
+            target_audience: targetAudience || "directors",
+            related_id: relatedId,
+            created_by_user_id: createdByUserId,
             is_read: false,
             created_at: new Date().toISOString(),
           })
@@ -88,7 +135,10 @@ export async function POST(request: NextRequest) {
         student_id: studentId,
         student_name: studentName,
         student_email: studentEmail,
-        clinic_id: clinicData?.id || null,
+        clinic_id: resolvedClinicId || null,
+        target_audience: targetAudience || "directors",
+        related_id: relatedId,
+        created_by_user_id: createdByUserId,
         is_read: false,
         created_at: new Date().toISOString(),
       })

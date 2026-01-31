@@ -3249,6 +3249,31 @@ toast({
                                       setAttendanceEditMode(prev => ({ ...prev, [clinicKey]: false }))
                                       setPendingAttendanceChanges(prev => ({ ...prev, [clinicKey]: [] }))
                                       setConfirmedAttendance(prev => ({ ...prev, [clinicKey]: true }))
+                                      
+                                      // Send notification to all students in this clinic that attendance was confirmed
+                                      const studentsInClinic = [...clinicRecords, ...clinicAbsentStudents]
+                                      for (const student of studentsInClinic) {
+                                        try {
+                                          await fetch('/api/notifications', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                              type: 'attendance_approved',
+                                              title: 'Attendance Confirmed',
+                                              message: `Your attendance for Week ${weekNum} has been confirmed by the director.`,
+                                              studentId: student.studentId || student.student_id,
+                                              studentName: student.studentName || student.student_name,
+                                              studentEmail: student.studentEmail || student.student_email,
+                                              clinicId: student.clinicId || student.clinic_id,
+                                              targetAudience: 'students',
+                                              relatedId: `week-${weekNum}`,
+                                              createdByUserId: userEmail,
+                                            })
+                                          })
+                                        } catch (error) {
+                                          console.error('Failed to send attendance confirmation notification:', error)
+                                        }
+                                      }
                                     }
                                     
                                     return (
