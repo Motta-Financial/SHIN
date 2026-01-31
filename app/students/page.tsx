@@ -905,17 +905,25 @@ export default function StudentPortal() {
       })
 
       if (response.ok) {
+        // Send notification with proper targeting based on question type
+        const questionLabel = questionType === "clinic" ? "Clinic Question" : "Client Question"
+        const questionContext = questionType === "clinic" 
+          ? `[${currentStudent.clinic}]` 
+          : `[${currentStudent.clientName || currentStudent.clientTeam || "Client"}]`
+        
         await fetch("/api/notifications", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "question",
-            title: `Question from ${currentStudent.fullName}`,
-            message: questionText,
+            title: `${questionLabel} from ${currentStudent.fullName}`,
+            message: `${questionContext} ${questionText}`,
             studentId: currentStudent.id,
             studentName: currentStudent.fullName,
             studentEmail: currentStudent.email,
             clinic: currentStudent.clinic,
+            clinicId: currentStudent.clinicId,
+            clientId: currentStudent.clientId,
             questionType: questionType,
           }),
         })

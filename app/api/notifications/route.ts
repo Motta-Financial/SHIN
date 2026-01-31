@@ -83,12 +83,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Director-targeted notifications
-    // Get directors for this clinic to notify them
-    const { data: directors } = await supabase
-      .from("directors")
-      .select("id, full_name, email, clinic_id")
-      .order("full_name")
-
     // Get clinic ID for matching
     let resolvedClinicId = clinicId
     if (!resolvedClinicId && clinic) {
@@ -96,17 +90,18 @@ export async function POST(request: NextRequest) {
       resolvedClinicId = clinicData?.id
     }
 
-    // Create notification for each relevant director
+    // Create notification for each relevant director based on question type
     const notifications = []
-
-    if (directors && directors.length > 0) {
-      for (const director of directors) {
-        // If question type is "clinic", notify directors of that clinic
-        // If question type is "client", notify all directors
-        const shouldNotify =
-          questionType === "client" || !resolvedClinicId || director.clinic_id === resolvedClinicId || !director.clinic_id
-
-        if (shouldNotify) {
+    
+    // For client questions, find directors assigned to the client
+    if (questionType === "client" && body.clientId) {
+      const { data: clientDirectors } = await supabase
+        .from("client_directors")
+        .select("director_id")
+        .eq("client_id", body.clientId)
+      
+      if (clientDirectors && clientDirectors.length > 0) {
+        for (const cd of clientDirectors) {
           notifications.push({
             type,
             title,
@@ -115,13 +110,74 @@ export async function POST(request: NextRequest) {
             student_name: studentName,
             student_email: studentEmail,
             clinic_id: resolvedClinicId || null,
-            director_id: directorId || director.id,
+            director_id: cd.director_id,
             target_audience: targetAudience || "directors",
             related_id: relatedId,
             created_by_user_id: createdByUserId,
             is_read: false,
             created_at: new Date().toISOString(),
           })
+        }
+      }
+    }
+    
+    // For clinic questions, find directors assigned to the clinic
+    if (questionType === "clinic" && resolvedClinicId) {
+      const { data: clinicDirectors } = await supabase
+        .from("clinic_directors")
+        .select("director_id")
+        .eq("clinic_id", resolvedClinicId)
+      
+      if (clinicDirectors && clinicDirectors.length > 0) {
+        for (const cd of clinicDirectors) {
+          notifications.push({
+            type,
+            title,
+            message,
+            student_id: studentId,
+            student_name: studentName,
+            student_email: studentEmail,
+            clinic_id: resolvedClinicId,
+            director_id: cd.director_id,
+            target_audience: targetAudience || "directors",
+            related_id: relatedId,
+            created_by_user_id: createdByUserId,
+            is_read: false,
+            created_at: new Date().toISOString(),
+          })
+        }
+      }
+    }
+    
+    // Fallback: If no specific directors found via relationships, use the old logic
+    if (notifications.length === 0) {
+      const { data: directors } = await supabase
+        .from("directors")
+        .select("id, full_name, email, clinic_id")
+        .order("full_name")
+      
+      if (directors && directors.length > 0) {
+        for (const director of directors) {
+          // Only notify directors of the same clinic
+          const shouldNotify = !resolvedClinicId || director.clinic_id === resolvedClinicId || !director.clinic_id
+
+          if (shouldNotify) {
+            notifications.push({
+              type,
+              title,
+              message,
+              student_id: studentId,
+              student_name: studentName,
+              student_email: studentEmail,
+              clinic_id: resolvedClinicId || null,
+              director_id: directorId || director.id,
+              target_audience: targetAudience || "directors",
+              related_id: relatedId,
+              created_by_user_id: createdByUserId,
+              is_read: false,
+              created_at: new Date().toISOString(),
+            })
+          }
         }
       }
     }

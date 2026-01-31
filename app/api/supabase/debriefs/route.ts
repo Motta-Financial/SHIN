@@ -185,31 +185,104 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Create notification for the student's clinic director
+    // Create notifications for directors based on question type
     try {
       const studentName = studentData?.student_name || "A student"
       const clinic = studentData?.student_clinic_name || body.clinic || "Unknown"
-      const clinicDirectorId = studentData?.clinic_director_id || null
-      const clinicId = studentData?.clinic_id || null
+      const clinicId = studentData?.clinic_id || body.clinicId || null
+      const clientId = studentData?.client_id || body.clientId || null
       const weekEnding = body.weekEnding || new Date().toISOString().split("T")[0]
+      const questionType = body.questionType || "clinic"
+      const hasQuestion = body.questions && body.questions.trim().length > 0
 
-      const notificationData: Record<string, any> = {
-        type: "debrief",
-        title: `${studentName} submitted a debrief`,
-        message: `Debrief for week ending ${weekEnding} - ${body.hoursWorked || 0} hours logged`,
-        student_id: insertData.student_id,
-        student_name: studentName,
-        student_email: insertData.student_email,
-        clinic_id: clinicId,
-        director_id: clinicDirectorId,
-        is_read: false,
-        related_id: data.id,
-        created_at: new Date().toISOString(),
+      const notifications: Record<string, any>[] = []
+
+      // If there's a question, notify the appropriate directors
+      if (hasQuestion) {
+        if (questionType === "client" && clientId) {
+          // For client questions, notify client directors
+          const { data: clientDirectors } = await supabase
+            .from("client_directors")
+            .select("director_id")
+            .eq("client_id", clientId)
+
+          if (clientDirectors && clientDirectors.length > 0) {
+            for (const cd of clientDirectors) {
+              notifications.push({
+                type: "debrief",
+                title: `Client Question from ${studentName}`,
+                message: `[${studentData?.client_name || "Client"}] ${body.questions}`,
+                student_id: insertData.student_id,
+                student_name: studentName,
+                student_email: insertData.student_email,
+                clinic_id: clinicId,
+                director_id: cd.director_id,
+                is_read: false,
+                related_id: data.id,
+                created_at: new Date().toISOString(),
+              })
+            }
+          }
+        } else if (questionType === "clinic" && clinicId) {
+          // For clinic questions, notify clinic directors
+          const { data: clinicDirectors } = await supabase
+            .from("clinic_directors")
+            .select("director_id")
+            .eq("clinic_id", clinicId)
+
+          if (clinicDirectors && clinicDirectors.length > 0) {
+            for (const cd of clinicDirectors) {
+              notifications.push({
+                type: "debrief",
+                title: `Clinic Question from ${studentName}`,
+                message: `[${clinic}] ${body.questions}`,
+                student_id: insertData.student_id,
+                student_name: studentName,
+                student_email: insertData.student_email,
+                clinic_id: clinicId,
+                director_id: cd.director_id,
+                is_read: false,
+                related_id: data.id,
+                created_at: new Date().toISOString(),
+              })
+            }
+          }
+        }
       }
 
-      // Only insert if we have a director to notify
-      if (clinicDirectorId) {
-        await supabase.from("notifications").insert(notificationData)
+      // Always notify the clinic director of the debrief submission (separate from questions)
+      if (clinicId) {
+        const { data: clinicDirectors } = await supabase
+          .from("clinic_directors")
+          .select("director_id")
+          .eq("clinic_id", clinicId)
+
+        if (clinicDirectors && clinicDirectors.length > 0) {
+          for (const cd of clinicDirectors) {
+            // Only add debrief submission notification if not already notified via question
+            const alreadyNotified = notifications.some(n => n.director_id === cd.director_id)
+            if (!alreadyNotified) {
+              notifications.push({
+                type: "debrief",
+                title: `${studentName} submitted a debrief`,
+                message: `Debrief for week ending ${weekEnding} - ${body.hoursWorked || 0} hours logged`,
+                student_id: insertData.student_id,
+                student_name: studentName,
+                student_email: insertData.student_email,
+                clinic_id: clinicId,
+                director_id: cd.director_id,
+                is_read: false,
+                related_id: data.id,
+                created_at: new Date().toISOString(),
+              })
+            }
+          }
+        }
+      }
+
+      // Insert all notifications
+      if (notifications.length > 0) {
+        await supabase.from("notifications").insert(notifications)
       }
     } catch (notifError) {
       // Don't fail the debrief creation if notification fails

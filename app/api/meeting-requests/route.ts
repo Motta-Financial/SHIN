@@ -80,30 +80,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Create notification for the student's clinic director
+    // Create notification for the student's clinic director(s)
     try {
-      // Get the student's clinic and director info
+      // Get the student's clinic info
       const { data: clinicData } = await supabase
         .from("clinics")
-        .select("id, director_id")
+        .select("id")
         .ilike("name", `%${clinic}%`)
         .limit(1)
         .maybeSingle()
 
-      if (clinicData?.director_id) {
-        await supabase.from("notifications").insert({
-          type: "meeting_request",
-          title: `${studentName} requested a meeting`,
-          message: subject ? `Subject: ${subject}` : "Meeting request submitted",
-          student_id: studentId,
-          student_name: studentName,
-          student_email: studentEmail,
-          clinic_id: clinicData.id,
-          director_id: clinicData.director_id,
-          related_id: data.id,
-          is_read: false,
-          created_at: new Date().toISOString(),
-        })
+      if (clinicData?.id) {
+        // Get directors assigned to this clinic
+        const { data: clinicDirectors } = await supabase
+          .from("clinic_directors")
+          .select("director_id")
+          .eq("clinic_id", clinicData.id)
+
+        if (clinicDirectors && clinicDirectors.length > 0) {
+          // Create notification for each clinic director
+          const notifications = clinicDirectors.map((cd) => ({
+            type: "meeting_request",
+            title: `Meeting Request from ${studentName}`,
+            message: `[${clinic}] ${subject || "Meeting request submitted"}`,
+            student_id: studentId,
+            student_name: studentName,
+            student_email: studentEmail,
+            clinic_id: clinicData.id,
+            director_id: cd.director_id,
+            related_id: data.id,
+            is_read: false,
+            created_at: new Date().toISOString(),
+          }))
+
+          await supabase.from("notifications").insert(notifications)
+        }
       }
     } catch (notifError) {
       // Don't fail the meeting request creation if notification fails
