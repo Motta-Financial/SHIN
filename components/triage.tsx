@@ -419,6 +419,7 @@ export function Triage({
           attendance_ready: <CalendarCheck className="h-4 w-4" />,
           attendance_approved: <CheckCircle2 className="h-4 w-4" />,
           agenda_published: <Calendar className="h-4 w-4" />,
+          announcement: <Calendar className="h-4 w-4" />, // Same as agenda_published for backwards compatibility
           meeting_response: <Users className="h-4 w-4" />,
           debrief: <FileText className="h-4 w-4" />,
         }
@@ -426,6 +427,7 @@ export function Triage({
           attendance_ready: "bg-orange-100 text-orange-700",
           attendance_approved: "bg-teal-100 text-teal-700",
           agenda_published: "bg-amber-100 text-amber-700",
+          announcement: "bg-amber-100 text-amber-700", // Same as agenda_published
           meeting_response: "bg-purple-100 text-purple-700",
           debrief: "bg-blue-100 text-blue-700",
         }
@@ -433,6 +435,7 @@ export function Triage({
           attendance_ready: "Attendance",
           attendance_approved: "Attendance",
           agenda_published: "Class",
+          announcement: "Class", // Same as agenda_published
           meeting_response: "Meetings",
           debrief: "Debriefs",
         }

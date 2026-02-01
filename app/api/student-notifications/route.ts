@@ -50,6 +50,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ notifications: [] })
     }
 
+    console.log("[v0] Student-notifications API - Found notifications for student", studentId, ":", data?.length || 0)
+    
     const response = { notifications: data || [] }
 
     return NextResponse.json(response)
