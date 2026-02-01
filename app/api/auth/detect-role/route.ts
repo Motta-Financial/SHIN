@@ -39,9 +39,9 @@ export async function POST(request: Request) {
 
     const normalizedEmail = email.toLowerCase().trim()
 
-    // Check directors first
+    // Check directors first - use directors_current view for current semester
     const { data: directors, error: directorError } = await supabaseAdmin
-      .from("directors")
+      .from("directors_current")
       .select("id, email, role, full_name")
 
     if (directorError) {
@@ -82,8 +82,8 @@ export async function POST(request: Request) {
       })
     }
 
-    // Check clients
-    const { data: clients, error: clientError } = await supabaseAdmin.from("clients").select("id, name, email")
+    // Check clients - use clients_current view for current semester
+    const { data: clients, error: clientError } = await supabaseAdmin.from("clients_current").select("id, name, email")
 
     if (clientError) {
       console.error("detect-role - Client query error:", clientError)

@@ -103,9 +103,9 @@ async function fetchUserRole(): Promise<UserRoleData> {
       }
     }
 
-    // Check clients table
+    // Check clients table - use clients_current view for current semester
     const { data: clientData } = await supabase
-      .from("clients")
+      .from("clients_current")
       .select("id, name, email")
       .ilike("email", userEmail)
       .maybeSingle()
