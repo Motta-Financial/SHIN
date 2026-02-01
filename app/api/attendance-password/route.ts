@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/utils/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
+import { createBulkStudentNotifications } from "@/lib/notifications"
 
 // Service role client for admin operations (bypasses RLS after authorization check)
 function getServiceClient() {
@@ -110,6 +111,31 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error("Error creating/updating attendance password:", error)
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Send notification to all students that attendance password is set for this week
+    try {
+      const classDate = new Date(defaultWeekStart).toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        month: 'short', 
+        day: 'numeric' 
+      })
+      
+      const notificationResult = await createBulkStudentNotifications(
+        "attendance",
+        "Attendance Password Set",
+        `The attendance password for Week ${weekNumber} (${classDate}) has been set by ${createdByName || director?.full_name || 'a director'}. You can now submit your attendance during class.`,
+        semesterId
+      )
+      
+      if (notificationResult.success) {
+        console.log(`[v0] Sent attendance password notification to ${notificationResult.count} students`)
+      } else {
+        console.error("[v0] Failed to send attendance notifications:", notificationResult.error)
+      }
+    } catch (notificationError) {
+      // Don't fail the request if notifications fail - password was still set successfully
+      console.error("[v0] Error sending attendance notifications:", notificationError)
     }
 
     return NextResponse.json({ password: data, success: true })

@@ -49,8 +49,10 @@ interface QuickStats {
   totalHours: number
   activeStudents: number
   totalStudents: number
+  clinicStudentCount: number // Students specific to the director's clinic
   activeClients: number
-  debriefsSubmitted: number
+  debriefsSubmitted: number // Clinic-specific debriefs submitted (for Clinic Health)
+  totalDebriefsSubmitted: number // Program-wide debriefs submitted (for Overview card)
   pendingReviews: number
   hoursChange: number
   studentsChange: number
@@ -158,17 +160,24 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
     const directorStudentIds = new Set<string>()
     const directorClientNames = new Set<string>()
 
-    if (selectedDirectorId && selectedDirectorId !== "all") {
-      mappings.forEach((m: any) => {
-        if (m.student_id) directorStudentIds.add(m.student_id)
-        if (m.client_name) directorClientNames.add(m.client_name)
-      })
-    }
+    // When a specific director is selected, get their clinic's students
+    // When "all" is selected, still track all students in mappings for clinic-level stats
+    mappings.forEach((m: any) => {
+      if (m.student_id) directorStudentIds.add(m.student_id)
+      if (m.client_name) directorClientNames.add(m.client_name)
+    })
+
+    // Count students specific to this director's clinic (unique student IDs from mappings)
+    // For "all directors", this will be all mapped students; for specific director, it's their clinic's students
+    const clinicStudentCount = selectedDirectorId && selectedDirectorId !== "all" 
+      ? directorStudentIds.size 
+      : totalStudents // Use total students when viewing all directors
 
     let totalHours = 0
     const activeStudents = new Set<string>()
     const activeClients = new Set<string>()
-    let debriefsSubmitted = 0
+    let debriefsSubmitted = 0 // Clinic-specific debriefs
+    let totalDebriefsSubmitted = 0 // Program-wide debriefs (all students)
 
     const allDebriefs = debriefsData.debriefs || []
     allDebriefs.forEach((debrief: any) => {
@@ -187,13 +196,19 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
           return debriefDate >= weekStartDate && debriefDate <= weekEndDate
         })
 
+      // For clinic-specific filtering, check if student belongs to director's clinic
       const matchesDirector =
         selectedDirectorId === "all" ||
-        directorStudentIds.size === 0 ||
-        directorStudentIds.has(studentId) ||
-        directorClientNames.has(clientName)
+        (directorStudentIds.size > 0 && (directorStudentIds.has(studentId) || directorClientNames.has(clientName)))
 
-      if (matchesWeek && matchesDirector) {
+      // Count program-wide debriefs (matching week filter only)
+      if (matchesWeek) {
+        totalDebriefsSubmitted++
+      }
+
+      // Count clinic-specific debriefs (matching both week and director filters)
+      // When "all directors" is selected, count all debriefs as clinic-specific too
+      if (matchesWeek && (selectedDirectorId === "all" || matchesDirector)) {
         totalHours += Number.parseFloat(debrief.hours_worked || debrief.hoursWorked || "0")
         if (studentId) activeStudents.add(studentId)
         if (clientName) activeClients.add(clientName)
@@ -221,8 +236,10 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
       totalHours: Math.round(totalHours * 10) / 10,
       activeStudents: activeStudents.size,
       totalStudents: totalStudents,
+      clinicStudentCount: clinicStudentCount,
       activeClients: activeClients.size,
-      debriefsSubmitted,
+      debriefsSubmitted, // Clinic-specific
+      totalDebriefsSubmitted, // Program-wide
       pendingReviews,
       hoursChange,
       studentsChange,
@@ -233,8 +250,10 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
       totalHours: 0,
       activeStudents: 0,
       totalStudents: 0,
+      clinicStudentCount: 0,
       activeClients: 0,
       debriefsSubmitted: 0,
+      totalDebriefsSubmitted: 0,
       pendingReviews: 0,
       hoursChange: 0,
       studentsChange: 0,
@@ -268,8 +287,10 @@ export default function DirectorDashboard() {
     totalHours: 0,
     activeStudents: 0,
     totalStudents: 0,
+    clinicStudentCount: 0,
     activeClients: 0,
     debriefsSubmitted: 0,
+    totalDebriefsSubmitted: 0,
     pendingReviews: 0,
     hoursChange: 0,
     studentsChange: 0,
@@ -311,14 +332,14 @@ export default function DirectorDashboard() {
     attendanceSummary: { present: number; absent: number; rate: number }
     recentClientActivity: Array<{ client: string; activity: string; time: string; type: string }>
     studentQuestions: Array<{ student: string; question: string; time: string; answered: boolean }>
-    weeklyProgress: { hoursTarget: number; hoursActual: number; debriefsExpected: number; debriefsSubmitted: number }
+    weeklyProgress: { hoursTarget: number; hoursActual: number; debriefsExpected: number; clinicDebriefsExpected: number; debriefsSubmitted: number }
     notifications: Array<{ type: string; title: string; time: string }> // Added for notifications
   }>({
     urgentItems: [],
     attendanceSummary: { present: 0, absent: 0, rate: 0 },
     recentClientActivity: [],
     studentQuestions: [],
-    weeklyProgress: { hoursTarget: 0, hoursActual: 0, debriefsExpected: 0, debriefsSubmitted: 0 },
+    weeklyProgress: { hoursTarget: 0, hoursActual: 0, debriefsExpected: 0, clinicDebriefsExpected: 0, debriefsSubmitted: 0 },
     notifications: [], // Initialize notifications
   })
 
@@ -637,11 +658,15 @@ export default function DirectorDashboard() {
         // })
 
         const elapsedWeeksForDebrief = getElapsedWeeksRequiringDebrief(semesterScheduleData)
-        const expectedDebriefs = (quickStats.activeStudents || 0) * elapsedWeeksForDebrief.length
+        // Expected debriefs for the entire program (all students in SEED)
+        const expectedDebriefs = (quickStats.totalStudents || 0) * elapsedWeeksForDebrief.length
+        // Expected debriefs for just this director's clinic (clinic-specific students)
+        const clinicDebriefsExpected = (quickStats.clinicStudentCount || 0) * elapsedWeeksForDebrief.length
         const weeklyProgress = {
-          hoursTarget: (quickStats.activeStudents || 0) * 3 * elapsedWeeksForDebrief.length, // Assuming 3 hours target per student per week
+          hoursTarget: (quickStats.clinicStudentCount || quickStats.activeStudents || 0) * 3 * elapsedWeeksForDebrief.length, // Assuming 3 hours target per student per week
           hoursActual: quickStats.totalHours || 0,
-          debriefsExpected: expectedDebriefs,
+          debriefsExpected: expectedDebriefs, // Program-wide expected (for overview card)
+          clinicDebriefsExpected: clinicDebriefsExpected, // Clinic-specific expected (for Clinic Health)
           debriefsSubmitted: quickStats.debriefsSubmitted || 0,
         }
 
@@ -1095,7 +1120,7 @@ export default function DirectorDashboard() {
                       </CardContent>
                     </Card>
 
-                    {/* Debriefs Card */}
+                    {/* Debriefs Card - Shows PROGRAM-WIDE stats (all students in SEED) */}
                     <Card
                       className="group w-[160px] bg-white border border-gray-200 shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
                       onClick={() => setDebriefsDialogOpen(true)}
@@ -1106,7 +1131,7 @@ export default function DirectorDashboard() {
                           <FileText className="h-4 w-4" style={{ color: "#6A6352" }} />
                         </div>
                         <div className="flex items-baseline gap-1 mt-1">
-                          <span className="text-3xl font-bold text-gray-900">{quickStats.debriefsSubmitted}</span>
+                          <span className="text-3xl font-bold text-gray-900">{quickStats.totalDebriefsSubmitted}</span>
                           <span className="text-lg text-gray-400">
                             /{overviewData.weeklyProgress.debriefsExpected || quickStats.totalStudents || 0}
                           </span>
@@ -1114,7 +1139,7 @@ export default function DirectorDashboard() {
                         <div className="mt-1.5 space-y-0.5 text-xs">
                           <div className="flex justify-between">
                             <span className="text-gray-500">Submitted</span>
-                            <span className="text-gray-700 font-medium">{quickStats.debriefsSubmitted}</span>
+                            <span className="text-gray-700 font-medium">{quickStats.totalDebriefsSubmitted}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-gray-500">Missing</span>
@@ -1122,7 +1147,7 @@ export default function DirectorDashboard() {
                               {Math.max(
                                 0,
                                 (overviewData.weeklyProgress.debriefsExpected || quickStats.totalStudents || 0) -
-                                  quickStats.debriefsSubmitted,
+                                  quickStats.totalDebriefsSubmitted,
                               )}
                             </span>
                           </div>
@@ -1225,15 +1250,15 @@ export default function DirectorDashboard() {
                               <div className="flex justify-between text-sm mb-1">
                                 <span className="text-muted-foreground">Debriefs Submitted</span>
                                 <span className="font-medium">
-                                  {quickStats.debriefsSubmitted} / {overviewData.weeklyProgress.debriefsExpected || "—"}{" "}
+                                  {quickStats.debriefsSubmitted} / {overviewData.weeklyProgress.clinicDebriefsExpected || "—"}{" "}
                                   expected
                                 </span>
                               </div>
                               <Progress
                                 value={
-                                  overviewData.weeklyProgress.debriefsExpected > 0
+                                  overviewData.weeklyProgress.clinicDebriefsExpected > 0
                                     ? Math.min(
-                                        (quickStats.debriefsSubmitted / overviewData.weeklyProgress.debriefsExpected) *
+                                        (quickStats.debriefsSubmitted / overviewData.weeklyProgress.clinicDebriefsExpected) *
                                           100,
                                         100,
                                       )

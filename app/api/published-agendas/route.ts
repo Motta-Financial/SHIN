@@ -82,30 +82,41 @@ export async function POST(request: Request) {
 
     if (error) throw error
 
-    // Create ONE notification for directors about the published agenda
+    // Create notifications for students about the published agenda
     try {
       const scheduleDate = new Date(body.schedule_date)
       const formattedDate = scheduleDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })
       
-      // Create a single director notification for the agenda
-      const directorNotification = {
-        type: "announcement",
-        title: "Class Agenda Published",
-        message: `You published the agenda for ${formattedDate}. All students have been notified.`,
-        target_audience: "directors",
-        is_read: false,
-        created_at: new Date().toISOString(),
+      // Get current semester ID from app_settings if not provided
+      let semesterId = body.semester_id
+      if (!semesterId) {
+        const { data: settingsData } = await supabase
+          .from("app_settings")
+          .select("value")
+          .eq("key", "current_semester_id")
+          .single()
+        semesterId = settingsData?.value
       }
       
-      await supabase.from("notifications").insert(directorNotification)
+      console.log("[v0] Publishing agenda - semester_id:", semesterId)
       
-      // Get all active students for this semester
-      const { data: students, error: studentsError } = await supabase
-        .from("students_current")
+      // Get all active students for this semester using the base table with semester filter
+      // This is more reliable than the view in production
+      let studentsQuery = supabase
+        .from("students")
         .select("id, full_name, email, clinic_id")
+        .eq("status", "active")
+      
+      if (semesterId) {
+        studentsQuery = studentsQuery.eq("semester_id", semesterId)
+      }
+      
+      const { data: students, error: studentsError } = await studentsQuery
+      
+      console.log("[v0] Found students for notifications:", students?.length || 0, "error:", studentsError?.message || "none")
       
       if (studentsError) {
-        console.log("[v0] Error fetching students for notification:", studentsError.message)
+        console.error("[v0] Error fetching students for notification:", studentsError.message, studentsError.code)
       } else if (students && students.length > 0) {
         // Create individual notifications for each student
         const studentNotifications = students.map(student => ({
@@ -121,16 +132,22 @@ export async function POST(request: Request) {
           created_at: new Date().toISOString(),
         }))
         
-        const { error: insertError } = await supabase.from("notifications").insert(studentNotifications)
+        const { data: insertedNotifs, error: insertError } = await supabase
+          .from("notifications")
+          .insert(studentNotifications)
+          .select()
+        
         if (insertError) {
-          console.log("[v0] Error inserting student notifications:", insertError.message)
+          console.error("[v0] Error inserting student notifications:", insertError.message, insertError.code, insertError.details)
         } else {
-          console.log(`[v0] Created ${studentNotifications.length} agenda notifications for students + 1 for directors`)
+          console.log(`[v0] Successfully created ${studentNotifications.length} agenda notifications for students`)
         }
+      } else {
+        console.log("[v0] No students found for agenda notifications")
       }
     } catch (notifError) {
       // Don't fail the agenda publish if notification fails
-      console.log("[v0] Error creating agenda notification:", notifError)
+      console.error("[v0] Error creating agenda notification:", notifError)
     }
 
     return NextResponse.json({ success: true, agenda: data })
