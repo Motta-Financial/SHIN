@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase/service"
+import { getCached, setCache, LONG_TTL, clearCache } from "@/lib/api-cache"
 
 export async function GET() {
   try {
+    // Check cache first
+    const cacheKey = "semester-config"
+    const cached = getCached<{ semesters: unknown[] }>(cacheKey)
+    if (cached) {
+      console.log("[v0] Semester config - Returning cached response")
+      return NextResponse.json(cached)
+    }
+
     const supabase = createServiceClient()
 
     const { data, error } = await supabase
@@ -20,7 +29,9 @@ export async function GET() {
       data?.map((s) => ({ id: s.id, semester: s.semester, is_active: s.is_active })),
     )
 
-    return NextResponse.json({ semesters: data || [] })
+    const response = { semesters: data || [] }
+    setCache(cacheKey, response, LONG_TTL)
+    return NextResponse.json(response)
   } catch (error) {
     console.error("[v0] Error in semester-config API:", error)
     return NextResponse.json({ error: "Failed to fetch semester configuration" }, { status: 500 })
@@ -62,6 +73,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // Clear cache so next GET fetches fresh data
+    clearCache("semester-config")
     return NextResponse.json({ semester: data })
   } catch (error) {
     console.error("Error in semester-config POST:", error)

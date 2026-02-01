@@ -832,16 +832,22 @@ function UnifiedWeeklyAgenda({
 
     setSaving(true)
     try {
+      console.log("[v0] updateTimeBlock - Saving activities for schedule:", schedule.id, "timeBlockId:", timeBlockId)
       const response = await fetch("/api/semester-schedule", {
-        method: "PUT",
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: schedule.id, schedule_data: newActivities }),
+        body: JSON.stringify({ id: schedule.id, activities: newActivities }),
       })
 
-      if (response.ok) {
+      const data = await response.json()
+      console.log("[v0] updateTimeBlock - Response:", response.ok, data)
+      
+      if (response.ok && data.schedule) {
         setSchedules(schedules.map((s) => (s.id === schedule.id ? { ...s, activities: newActivities } : s)))
         setShowEditTimeBlockDialog(false)
         setEditingTimeBlock(null)
+      } else {
+        console.error("[v0] updateTimeBlock - Failed to save:", data.error)
       }
     } catch (error) {
       console.error("Error updating time block:", error)

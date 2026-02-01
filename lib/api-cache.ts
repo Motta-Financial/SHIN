@@ -9,8 +9,11 @@ interface CacheEntry<T> {
 
 const cache = new Map<string, CacheEntry<unknown>>()
 
-// Default TTL of 30 seconds - short enough to get fresh data, long enough to prevent rate limiting
-const DEFAULT_TTL = 30 * 1000
+// Default TTL of 60 seconds - short enough to get fresh data, long enough to prevent rate limiting
+const DEFAULT_TTL = 60 * 1000
+
+// Longer TTL for expensive/frequently accessed data
+export const LONG_TTL = 5 * 60 * 1000 // 5 minutes
 
 export function getCached<T>(key: string): T | null {
   const entry = cache.get(key) as CacheEntry<T> | undefined

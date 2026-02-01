@@ -24,27 +24,10 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { fetchWithRateLimit, fetchAllWithRateLimit } from "@/lib/fetch-with-rate-limit"
 
-async function fetchWithRetry(url: string, retries = 3, delay = 500): Promise<Response> {
-  for (let i = 0; i < retries; i++) {
-    const res = await fetch(url)
-    if (res.ok) return res
-    if (res.status === 429) {
-      // Rate limited - wait and retry with exponential backoff
-      await new Promise((resolve) => setTimeout(resolve, delay * (i + 1)))
-      continue
-    }
-    return res // Return non-429 errors immediately
-  }
-  // Final attempt
-  return fetch(url)
-}
-
-async function fetchSequentially(urls: string[]): Promise<Response[]> {
-  // Use Promise.all for parallel fetching - faster than sequential with delays
-  const results = await Promise.all(urls.map((url) => fetchWithRetry(url)))
-  return results
-}
+// Use the global rate-limited fetch for all API calls
+const fetchSequentially = fetchAllWithRateLimit
 
 interface ClinicData {
   name: string
@@ -917,7 +900,9 @@ export function ClinicPerformance({
                           <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: clinic.color }} />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium truncate">{clinic.name}</span>
+                              <span className="text-sm font-medium truncate" style={{ color: clinic.color }}>
+                                {clinic.name}
+                              </span>
                               <div className="flex items-center gap-1">
                                 {clinic.weeklyTrend > 0 ? (
                                   <TrendingUp className="h-3 w-3 text-green-500" />
