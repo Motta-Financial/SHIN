@@ -100,18 +100,12 @@ export async function POST(request: Request) {
       
       console.log("[v0] Publishing agenda - semester_id:", semesterId)
       
-      // Get all active students for this semester using the base table with semester filter
-      // This is more reliable than the view in production
-      let studentsQuery = supabase
-        .from("students")
+      // Get all active students for this semester using the students_current view
+      // The view already filters by current semester via app_settings
+      const { data: students, error: studentsError } = await supabase
+        .from("students_current")
         .select("id, full_name, email, clinic_id")
         .eq("status", "active")
-      
-      if (semesterId) {
-        studentsQuery = studentsQuery.eq("semester_id", semesterId)
-      }
-      
-      const { data: students, error: studentsError } = await studentsQuery
       
       console.log("[v0] Found students for notifications:", students?.length || 0, "error:", studentsError?.message || "none")
       
@@ -119,8 +113,9 @@ export async function POST(request: Request) {
         console.error("[v0] Error fetching students for notification:", studentsError.message, studentsError.code)
       } else if (students && students.length > 0) {
         // Create individual notifications for each student
+        // Use "agenda_published" type which is recognized by Triage component
         const studentNotifications = students.map(student => ({
-          type: "announcement",
+          type: "agenda_published",
           title: "Class Agenda Published",
           message: `The agenda for ${formattedDate} has been published. Check the Class Course page for details.`,
           target_audience: "students",

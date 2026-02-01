@@ -659,9 +659,11 @@ export default function DirectorDashboard() {
 
         const elapsedWeeksForDebrief = getElapsedWeeksRequiringDebrief(semesterScheduleData)
         // Expected debriefs for the entire program (all students in SEED)
-        const expectedDebriefs = (quickStats.totalStudents || 0) * elapsedWeeksForDebrief.length
+        // Use totalStudents which is the actual count of all students (49 in this case)
+        const expectedDebriefs = quickStats.totalStudents || 0
         // Expected debriefs for just this director's clinic (clinic-specific students)
-        const clinicDebriefsExpected = (quickStats.clinicStudentCount || 0) * elapsedWeeksForDebrief.length
+        // If director is not tied to a clinic (clinicStudentCount is 0), show all students (49)
+        const clinicDebriefsExpected = quickStats.clinicStudentCount > 0 ? quickStats.clinicStudentCount : quickStats.totalStudents || 0
         const weeklyProgress = {
           hoursTarget: (quickStats.clinicStudentCount || quickStats.activeStudents || 0) * 3 * elapsedWeeksForDebrief.length, // Assuming 3 hours target per student per week
           hoursActual: quickStats.totalHours || 0,
@@ -1133,7 +1135,7 @@ export default function DirectorDashboard() {
                         <div className="flex items-baseline gap-1 mt-1">
                           <span className="text-3xl font-bold text-gray-900">{quickStats.totalDebriefsSubmitted}</span>
                           <span className="text-lg text-gray-400">
-                            /{overviewData.weeklyProgress.debriefsExpected || quickStats.totalStudents || 0}
+                            /{quickStats.totalStudents || 0}
                           </span>
                         </div>
                         <div className="mt-1.5 space-y-0.5 text-xs">
@@ -1144,11 +1146,7 @@ export default function DirectorDashboard() {
                           <div className="flex justify-between">
                             <span className="text-gray-500">Missing</span>
                             <span className="text-red-500 font-medium">
-                              {Math.max(
-                                0,
-                                (overviewData.weeklyProgress.debriefsExpected || quickStats.totalStudents || 0) -
-                                  quickStats.totalDebriefsSubmitted,
-                              )}
+                              {Math.max(0, (quickStats.totalStudents || 0) - quickStats.totalDebriefsSubmitted)}
                             </span>
                           </div>
                         </div>
@@ -1250,8 +1248,7 @@ export default function DirectorDashboard() {
                               <div className="flex justify-between text-sm mb-1">
                                 <span className="text-muted-foreground">Debriefs Submitted</span>
                                 <span className="font-medium">
-                                  {quickStats.debriefsSubmitted} / {overviewData.weeklyProgress.clinicDebriefsExpected || "—"}{" "}
-                                  expected
+                                  {quickStats.debriefsSubmitted} / {overviewData.weeklyProgress.clinicDebriefsExpected || "—"}
                                 </span>
                               </div>
                               <Progress
