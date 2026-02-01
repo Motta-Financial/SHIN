@@ -19,10 +19,11 @@ export async function POST(request: Request) {
     })
 
     // Get all active students for this semester
+    // students_current view already filters by current semester via app_settings
+    // Do NOT add .eq("semester_id", ...) as this causes filtering issues
     const { data: students, error: studentsError } = await supabase
       .from("students_current")
       .select("id, full_name, email, clinic_id")
-      .eq("semester_id", semesterId)
 
     if (studentsError) {
       console.error("Error fetching students:", studentsError)
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
 
     // Create notifications for all students
     const notifications = students.map(student => ({
-      type: "announcement",
+      type: "attendance_open",
       title: "Attendance Open",
       message: `Attendance for Week ${weekNumber} (${classDate}) is now open. Please submit your attendance during class.`,
       student_id: student.id,

@@ -384,8 +384,6 @@ export default function ClassCoursePage() {
   Record<string, { studentId: string; studentName: string; newStatus: boolean }[]>
   >({})
   const [confirmedAttendance, setConfirmedAttendance] = useState<Record<string, boolean>>({})
-  const [excusedStudents, setExcusedStudents] = useState<Record<string, boolean>>({})
-  const [excusingStudent, setExcusingStudent] = useState<string | null>(null)
 
   const [scheduleData, setScheduleData] = useState<TimeBlock[]>([
     {
@@ -3380,95 +3378,22 @@ toast({
                                             <div className="flex flex-wrap gap-2">
                                               {effectiveAbsentStudents.map((student, idx) => {
                                                 const isPendingChange = pendingChanges.some(c => c.studentId === student.student_id)
-                                                const studentKey = `${student.student_id}-${classDate}`
-                                                const isExcused = excusedStudents[studentKey] || student.is_excused
-                                                const isExcusing = excusingStudent === studentKey
-                                                
-                                                const handleExcuse = async (e: React.MouseEvent) => {
-                                                  e.stopPropagation()
-                                                  setExcusingStudent(studentKey)
-                                                  try {
-                                                    const res = await fetch("/api/attendance/mark-excused", {
-                                                      method: "POST",
-                                                      headers: { "Content-Type": "application/json" },
-                                                      body: JSON.stringify({
-                                                        studentId: student.student_id,
-                                                        classDate: classDate,
-                                                        semesterId: semesterId,
-                                                        isExcused: !isExcused,
-                                                        userEmail: userEmail,
-                                                      }),
-                                                    })
-                                                    if (res.ok) {
-                                                      setExcusedStudents(prev => ({ ...prev, [studentKey]: !isExcused }))
-                                                      toast({
-                                                        title: isExcused ? "Unexcused" : "Excused",
-                                                        description: `${student.student_name} has been marked as ${isExcused ? "unexcused" : "excused"}.`,
-                                                      })
-                                                    } else {
-                                                      const error = await res.json()
-                                                      toast({
-                                                        title: "Error",
-                                                        description: error.error || "Failed to update excused status",
-                                                        variant: "destructive",
-                                                      })
-                                                    }
-                                                  } catch (error) {
-                                                    console.error("Error marking excused:", error)
-                                                    toast({
-                                                      title: "Error",
-                                                      description: "Failed to update excused status",
-                                                      variant: "destructive",
-                                                    })
-                                                  } finally {
-                                                    setExcusingStudent(null)
-                                                  }
-                                                }
                                                 
                                                 return (
-                                                  <div key={idx} className="flex items-center gap-1">
-                                                    <Badge
-                                                      variant="outline"
-                                                      className={`${
-                                                        isExcused
-                                                          ? 'bg-amber-50 border-amber-300 text-amber-700'
-                                                          : isPendingChange 
-                                                            ? 'bg-yellow-100 border-yellow-400 text-yellow-800' 
-                                                            : 'bg-red-50 border-red-200 text-red-700'
-                                                      } ${isEditMode ? 'cursor-pointer hover:bg-red-100' : ''} transition-colors`}
-                                                      onClick={() => isEditMode && toggleStudentStatus(student.student_id, student.student_name, false)}
-                                                    >
-                                                      {isExcused ? (
-                                                        <AlertTriangle className="h-3 w-3 mr-1" />
-                                                      ) : (
-                                                        <XCircle className="h-3 w-3 mr-1" />
-                                                      )}
-                                                      {student.student_name}
-                                                      {isExcused && <span className="ml-1 text-xs">(excused)</span>}
-                                                      {isPendingChange && !isExcused && <span className="ml-1 text-xs">(moved)</span>}
-                                                    </Badge>
-                                                    {!isConfirmed && (
-                                                      <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className={`h-6 px-2 text-xs ${
-                                                          isExcused 
-                                                            ? 'text-amber-600 hover:text-amber-700 hover:bg-amber-50' 
-                                                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
-                                                        }`}
-                                                        onClick={handleExcuse}
-                                                        disabled={isExcusing}
-                                                      >
-                                                        {isExcusing ? (
-                                                          <Loader2 className="h-3 w-3 animate-spin" />
-                                                        ) : isExcused ? (
-                                                          "Unexcuse"
-                                                        ) : (
-                                                          "Excuse"
-                                                        )}
-                                                      </Button>
-                                                    )}
-                                                  </div>
+                                                  <Badge
+                                                    key={idx}
+                                                    variant="outline"
+                                                    className={`${
+                                                      isPendingChange 
+                                                        ? 'bg-yellow-100 border-yellow-400 text-yellow-800' 
+                                                        : 'bg-red-50 border-red-200 text-red-700'
+                                                    } ${isEditMode ? 'cursor-pointer hover:bg-red-100' : ''} transition-colors`}
+                                                    onClick={() => isEditMode && toggleStudentStatus(student.student_id, student.student_name, false)}
+                                                  >
+                                                    <XCircle className="h-3 w-3 mr-1" />
+                                                    {student.student_name}
+                                                    {isPendingChange && <span className="ml-1 text-xs">(moved)</span>}
+                                                  </Badge>
                                                 )
                                               })}
                                             </div>

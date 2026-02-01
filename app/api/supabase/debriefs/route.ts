@@ -1,7 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
 import { getCachedData, setCachedData } from "@/lib/api-cache"
-import { getCurrentSemesterId } from "@/lib/semester"
 
 export async function GET(request: Request) {
   try {
@@ -72,22 +71,25 @@ export async function GET(request: Request) {
       return NextResponse.json({ debriefs: [] })
     }
 
-    const currentSemesterId = await getCurrentSemesterId()
-    const { data: mappingData, error: mappingError } = await supabase
-      .from("v_complete_mapping")
-      .select("*")
-      .eq("semester_id", currentSemesterId)
+    // Use students_current view to get student info for current semester
+    const { data: studentsData, error: studentsError } = await supabase
+      .from("students_current")
+      .select("id, email, full_name, clinic_id, clinic")
 
-    if (mappingError) {
-      console.log("[v0] Error fetching v_complete_mapping:", mappingError.message)
+    if (studentsError) {
+      console.log("[v0] Error fetching students_current:", studentsError.message)
     }
 
     const studentMap = new Map<string, any>()
-    if (mappingData) {
-      for (const row of mappingData) {
-        if (!studentMap.has(row.student_id)) {
-          studentMap.set(row.student_id, row)
-        }
+    if (studentsData) {
+      for (const row of studentsData) {
+        studentMap.set(row.id, {
+          student_id: row.id,
+          student_email: row.email,
+          student_name: row.full_name,
+          clinic_id: row.clinic_id,
+          student_clinic_name: row.clinic,
+        })
       }
     }
 
@@ -143,29 +145,44 @@ export async function POST(request: Request) {
       questionType: body.questionType,
     }))
 
+    // Use students_current view to get student data for the current semester
     let studentData = null
     if (body.studentId) {
-      const { data, error: mappingError } = await supabase
-        .from("v_complete_mapping")
-        .select("*")
-        .eq("student_id", body.studentId)
-        .limit(1)
+      const { data, error: studentError } = await supabase
+        .from("students_current")
+        .select("id, email, full_name, clinic_id, clinic")
+        .eq("id", body.studentId)
         .maybeSingle()
-      studentData = data
-      if (mappingError) {
-        console.log("[v0] Debriefs POST - Error fetching student mapping:", mappingError.message)
+      if (data) {
+        studentData = {
+          student_id: data.id,
+          student_email: data.email,
+          student_name: data.full_name,
+          clinic_id: data.clinic_id,
+          student_clinic_name: data.clinic,
+        }
       }
-      console.log("[v0] Debriefs POST - Found student mapping:", studentData ? "yes" : "no")
+      if (studentError) {
+        console.log("[v0] Debriefs POST - Error fetching student:", studentError.message)
+      }
+      console.log("[v0] Debriefs POST - Found student data:", studentData ? "yes" : "no", "clinic_id:", studentData?.clinic_id)
     } else if (body.studentEmail) {
-      const { data, error: mappingError } = await supabase
-        .from("v_complete_mapping")
-        .select("*")
-        .eq("student_email", body.studentEmail)
-        .limit(1)
+      const { data, error: studentError } = await supabase
+        .from("students_current")
+        .select("id, email, full_name, clinic_id, clinic")
+        .ilike("email", body.studentEmail)
         .maybeSingle()
-      studentData = data
-      if (mappingError) {
-        console.log("[v0] Debriefs POST - Error fetching student mapping by email:", mappingError.message)
+      if (data) {
+        studentData = {
+          student_id: data.id,
+          student_email: data.email,
+          student_name: data.full_name,
+          clinic_id: data.clinic_id,
+          student_clinic_name: data.clinic,
+        }
+      }
+      if (studentError) {
+        console.log("[v0] Debriefs POST - Error fetching student by email:", studentError.message)
       }
     }
 
@@ -187,11 +204,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No active semester found" }, { status: 400 })
     }
 
+    // Get clinic_id from student data - this is REQUIRED for notifications and director visibility
+    const clinicId = studentData?.clinic_id || body.clinicId || null
+    
+    if (!clinicId) {
+      console.log("[v0] Warning: No clinic_id found for debrief - notifications won't be sent")
+    }
+
     const insertData: Record<string, any> = {
       student_id: body.studentId || studentData?.student_id,
       student_email: studentData?.student_email || body.studentEmail,
       client_name: studentData?.client_name || body.clientName,
       clinic: studentData?.student_clinic_name || body.clinic,
+      clinic_id: clinicId, // IMPORTANT: Include clinic_id so directors can see the debrief
       hours_worked: body.hoursWorked || 0,
       work_summary: body.workSummary,
       questions: body.questions,
@@ -220,7 +245,7 @@ export async function POST(request: Request) {
     try {
       const studentName = studentData?.student_name || "A student"
       const clinic = studentData?.student_clinic_name || body.clinic || "Unknown"
-      const clinicId = studentData?.clinic_id || body.clinicId || null
+      // Use the clinicId we already determined above (from studentData or body)
       const clientId = studentData?.client_id || body.clientId || null
       const weekEnding = body.weekEnding || new Date().toISOString().split("T")[0]
       const questionType = body.questionType || "clinic"
@@ -240,7 +265,7 @@ export async function POST(request: Request) {
           if (clientDirectors && clientDirectors.length > 0) {
             for (const cd of clientDirectors) {
               notifications.push({
-                type: "debrief",
+                type: "debrief_question",
                 title: `Client Question from ${studentName}`,
                 message: `[${studentData?.client_name || "Client"}] ${body.questions}`,
                 student_id: insertData.student_id,
@@ -264,7 +289,7 @@ export async function POST(request: Request) {
           if (clinicDirectors && clinicDirectors.length > 0) {
             for (const cd of clinicDirectors) {
               notifications.push({
-                type: "debrief",
+                type: "debrief_question",
                 title: `Clinic Question from ${studentName}`,
                 message: `[${clinic}] ${body.questions}`,
                 student_id: insertData.student_id,
@@ -294,7 +319,7 @@ export async function POST(request: Request) {
             const alreadyNotified = notifications.some(n => n.director_id === cd.director_id)
             if (!alreadyNotified) {
               notifications.push({
-                type: "debrief",
+                type: "debrief_submitted",
                 title: `${studentName} submitted a debrief`,
                 message: `Debrief for week ending ${weekEnding} - ${body.hoursWorked || 0} hours logged`,
                 student_id: insertData.student_id,

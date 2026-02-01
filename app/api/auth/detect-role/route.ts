@@ -39,9 +39,9 @@ export async function POST(request: Request) {
 
     const normalizedEmail = email.toLowerCase().trim()
 
-    // Check directors first
+    // Check directors first - use directors_current view for current semester
     const { data: directors, error: directorError } = await supabaseAdmin
-      .from("directors")
+      .from("directors_current")
       .select("id, email, role, full_name")
 
     if (directorError) {
@@ -60,10 +60,11 @@ export async function POST(request: Request) {
       })
     }
 
-    // Check students
+    // Check students - use students_current view to get ONLY the current semester's student record
+    // This is critical because a student may exist in multiple semesters with different IDs
     const { data: students, error: studentError } = await supabaseAdmin
-      .from("students")
-      .select("id, email, full_name, clinic")
+      .from("students_current")
+      .select("id, email, full_name, clinic, clinic_id")
 
     if (studentError) {
       console.error("detect-role - Student query error:", studentError)
@@ -81,8 +82,8 @@ export async function POST(request: Request) {
       })
     }
 
-    // Check clients
-    const { data: clients, error: clientError } = await supabaseAdmin.from("clients").select("id, name, email")
+    // Check clients - use clients_current view for current semester
+    const { data: clients, error: clientError } = await supabaseAdmin.from("clients_current").select("id, name, email")
 
     if (clientError) {
       console.error("detect-role - Client query error:", clientError)
