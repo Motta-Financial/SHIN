@@ -1,7 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
 import { getCachedData, setCachedData } from "@/lib/api-cache"
-import { getCurrentSemesterId } from "@/lib/semester"
 
 export async function GET(request: Request) {
   try {
@@ -72,22 +71,25 @@ export async function GET(request: Request) {
       return NextResponse.json({ debriefs: [] })
     }
 
-    const currentSemesterId = await getCurrentSemesterId()
-    const { data: mappingData, error: mappingError } = await supabase
-      .from("v_complete_mapping")
-      .select("*")
-      .eq("semester_id", currentSemesterId)
+    // Use students_current view to get student info for current semester
+    const { data: studentsData, error: studentsError } = await supabase
+      .from("students_current")
+      .select("id, email, full_name, clinic_id, clinic")
 
-    if (mappingError) {
-      console.log("[v0] Error fetching v_complete_mapping:", mappingError.message)
+    if (studentsError) {
+      console.log("[v0] Error fetching students_current:", studentsError.message)
     }
 
     const studentMap = new Map<string, any>()
-    if (mappingData) {
-      for (const row of mappingData) {
-        if (!studentMap.has(row.student_id)) {
-          studentMap.set(row.student_id, row)
-        }
+    if (studentsData) {
+      for (const row of studentsData) {
+        studentMap.set(row.id, {
+          student_id: row.id,
+          student_email: row.email,
+          student_name: row.full_name,
+          clinic_id: row.clinic_id,
+          student_clinic_name: row.clinic,
+        })
       }
     }
 
@@ -143,29 +145,44 @@ export async function POST(request: Request) {
       questionType: body.questionType,
     }))
 
+    // Use students_current view to get student data for the current semester
     let studentData = null
     if (body.studentId) {
-      const { data, error: mappingError } = await supabase
-        .from("v_complete_mapping")
-        .select("*")
-        .eq("student_id", body.studentId)
-        .limit(1)
+      const { data, error: studentError } = await supabase
+        .from("students_current")
+        .select("id, email, full_name, clinic_id, clinic")
+        .eq("id", body.studentId)
         .maybeSingle()
-      studentData = data
-      if (mappingError) {
-        console.log("[v0] Debriefs POST - Error fetching student mapping:", mappingError.message)
+      if (data) {
+        studentData = {
+          student_id: data.id,
+          student_email: data.email,
+          student_name: data.full_name,
+          clinic_id: data.clinic_id,
+          student_clinic_name: data.clinic,
+        }
       }
-      console.log("[v0] Debriefs POST - Found student mapping:", studentData ? "yes" : "no")
+      if (studentError) {
+        console.log("[v0] Debriefs POST - Error fetching student:", studentError.message)
+      }
+      console.log("[v0] Debriefs POST - Found student data:", studentData ? "yes" : "no", "clinic_id:", studentData?.clinic_id)
     } else if (body.studentEmail) {
-      const { data, error: mappingError } = await supabase
-        .from("v_complete_mapping")
-        .select("*")
-        .eq("student_email", body.studentEmail)
-        .limit(1)
+      const { data, error: studentError } = await supabase
+        .from("students_current")
+        .select("id, email, full_name, clinic_id, clinic")
+        .ilike("email", body.studentEmail)
         .maybeSingle()
-      studentData = data
-      if (mappingError) {
-        console.log("[v0] Debriefs POST - Error fetching student mapping by email:", mappingError.message)
+      if (data) {
+        studentData = {
+          student_id: data.id,
+          student_email: data.email,
+          student_name: data.full_name,
+          clinic_id: data.clinic_id,
+          student_clinic_name: data.clinic,
+        }
+      }
+      if (studentError) {
+        console.log("[v0] Debriefs POST - Error fetching student by email:", studentError.message)
       }
     }
 
