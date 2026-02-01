@@ -187,11 +187,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No active semester found" }, { status: 400 })
     }
 
+    // Get clinic_id from student data - this is REQUIRED for notifications and director visibility
+    const clinicId = studentData?.clinic_id || body.clinicId || null
+    
+    if (!clinicId) {
+      console.log("[v0] Warning: No clinic_id found for debrief - notifications won't be sent")
+    }
+
     const insertData: Record<string, any> = {
       student_id: body.studentId || studentData?.student_id,
       student_email: studentData?.student_email || body.studentEmail,
       client_name: studentData?.client_name || body.clientName,
       clinic: studentData?.student_clinic_name || body.clinic,
+      clinic_id: clinicId, // IMPORTANT: Include clinic_id so directors can see the debrief
       hours_worked: body.hoursWorked || 0,
       work_summary: body.workSummary,
       questions: body.questions,
@@ -220,7 +228,7 @@ export async function POST(request: Request) {
     try {
       const studentName = studentData?.student_name || "A student"
       const clinic = studentData?.student_clinic_name || body.clinic || "Unknown"
-      const clinicId = studentData?.clinic_id || body.clinicId || null
+      // Use the clinicId we already determined above (from studentData or body)
       const clientId = studentData?.client_id || body.clientId || null
       const weekEnding = body.weekEnding || new Date().toISOString().split("T")[0]
       const questionType = body.questionType || "clinic"
