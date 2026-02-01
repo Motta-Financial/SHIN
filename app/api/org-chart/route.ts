@@ -46,7 +46,8 @@ export async function GET(request: Request) {
     // Small delay between requests
     await new Promise((resolve) => setTimeout(resolve, 100))
 
-    const directorsRes = await supabase.from("directors").select("*").order("full_name")
+    // Use directors_current view for current semester
+    const directorsRes = await supabase.from("directors_current").select("*").order("full_name")
     if (directorsRes.error) {
       console.error("[v0] Directors error:", directorsRes.error)
       return NextResponse.json({ error: directorsRes.error.message }, { status: 500 })
@@ -54,11 +55,8 @@ export async function GET(request: Request) {
 
     await new Promise((resolve) => setTimeout(resolve, 100))
 
-    let studentsQuery = supabase.from("students").select("*").eq("status", "active").order("last_name")
-    if (activeSemesterId) {
-      studentsQuery = studentsQuery.eq("semester_id", activeSemesterId)
-    }
-    const studentsRes = await studentsQuery
+    // Use students_current view which already filters by current semester
+    const studentsRes = await supabase.from("students_current").select("*").order("last_name")
     if (studentsRes.error) {
       console.error("[v0] Students error:", studentsRes.error)
       return NextResponse.json({ error: studentsRes.error.message }, { status: 500 })
@@ -66,11 +64,8 @@ export async function GET(request: Request) {
 
     await new Promise((resolve) => setTimeout(resolve, 100))
 
-    let clientsQuery = supabase.from("clients").select("*").order("name")
-    if (activeSemesterId) {
-      clientsQuery = clientsQuery.eq("semester_id", activeSemesterId)
-    }
-    const clientsRes = await clientsQuery
+    // Use clients_current view which already filters by current semester
+    const clientsRes = await supabase.from("clients_current").select("*").order("name")
     if (clientsRes.error) {
       console.error("[v0] Clients error:", clientsRes.error)
       return NextResponse.json({ error: clientsRes.error.message }, { status: 500 })

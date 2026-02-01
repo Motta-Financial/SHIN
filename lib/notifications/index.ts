@@ -139,15 +139,11 @@ export async function createBulkStudentNotifications(
     const supabase = getServiceClient()
     
     // Get all active students for the semester
-    let query = supabase
+    // students_current view already filters by current semester via app_settings
+    // Do NOT add .eq("semester_id", ...) as this is redundant and can cause issues
+    const { data: students, error: studentsError } = await supabase
       .from("students_current")
       .select("id, full_name, email, clinic_id")
-    
-    if (semesterId) {
-      query = query.eq("semester_id", semesterId)
-    }
-    
-    const { data: students, error: studentsError } = await query
     
     if (studentsError) {
       console.error("[Notifications] Error fetching students:", studentsError.message)
@@ -359,8 +355,9 @@ export async function getStudentClinicId(studentId: string): Promise<string | nu
   try {
     const supabase = getServiceClient()
     
+    // Use students_current view to get current semester's clinic assignment
     const { data } = await supabase
-      .from("students")
+      .from("students_current")
       .select("clinic_id")
       .eq("id", studentId)
       .limit(1)

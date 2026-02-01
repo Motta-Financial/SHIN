@@ -18,9 +18,9 @@ export async function GET(request: NextRequest) {
 
     const userEmail = emailParam || user.email || ""
 
-    // Check directors first
+    // Check directors first - use directors_current view for current semester
     const { data: directorData, error: directorError } = await supabase
-      .from("directors")
+      .from("directors_current")
       .select("id, email, role, full_name, clinic_id")
       .filter("email", "ilike", userEmail)
       .maybeSingle()
@@ -40,9 +40,9 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Check students
+    // Check students - use students_current view for current semester
     const { data: studentData, error: studentError } = await supabase
-      .from("students")
+      .from("students_current")
       .select("id, email, full_name, clinic_id, clinic")
       .filter("email", "ilike", userEmail)
       .maybeSingle()
@@ -63,9 +63,9 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Check clients
+    // Check clients - use clients_current view for current semester
     const { data: clientData, error: clientError } = await supabase
-      .from("clients")
+      .from("clients_current")
       .select("id, name, email")
       .filter("email", "ilike", userEmail)
       .maybeSingle()

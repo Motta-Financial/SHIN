@@ -96,7 +96,7 @@ export default function AccountManagementPage() {
         const supabase = createClient()
 
         const { data: directorData, error: directorError } = await supabase
-          .from("directors")
+          .from("directors_current")
           .select("id, full_name, email, clinic_id, phone, bio, profile_picture_url")
           .eq("email", email)
           .limit(1)
@@ -133,7 +133,7 @@ export default function AccountManagementPage() {
         }
 
         const { data: studentData, error: studentError } = await supabase
-          .from("students")
+          .from("students_current")
           .select("id, full_name, email, clinic_id, phone, bio, profile_picture_url")
           .eq("email", email)
           .limit(1)

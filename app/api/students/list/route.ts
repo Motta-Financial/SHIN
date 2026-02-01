@@ -8,29 +8,12 @@ export async function GET(request: Request) {
     const semesterId = searchParams.get("semesterId")
     const includeAll = searchParams.get("includeAll") === "true"
 
-    // Get active semester if not specified and not including all
-    let activeSemesterId = semesterId
-    if (!activeSemesterId && !includeAll) {
-      const { data: activeSemester } = await supabase
-        .from("semester_config")
-        .select("id")
-        .eq("is_active", true)
-        .maybeSingle()
-      activeSemesterId = activeSemester?.id || null
-    }
-
-    let query = supabase
-      .from("students")
+    // Use students_current view which already filters by current semester via app_settings
+    // No need to manually filter by semester_id or status
+    const { data: students, error } = await supabase
+      .from("students_current")
       .select("id, full_name, email, clinic, status, semester_id")
-      .eq("status", "Active")
       .order("full_name")
-
-    // Filter by active semester (Spring 2026) by default
-    if (activeSemesterId) {
-      query = query.eq("semester_id", activeSemesterId)
-    }
-
-    const { data: students, error } = await query
 
     if (error) throw error
 
