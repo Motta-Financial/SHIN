@@ -1,9 +1,18 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
+import { getCached, setCache, LONG_TTL } from "@/lib/api-cache"
 
 // API endpoint for fetching students from the students table
 export async function GET() {
   try {
+    // Check cache first
+    const cacheKey = "supabase-students"
+    const cached = getCached<{ students: unknown[] }>(cacheKey)
+    if (cached) {
+      console.log("[v0] Students API - Returning cached response")
+      return NextResponse.json(cached)
+    }
+
     const supabase = createServiceClient()
 
     // Using students_current view for current semester data
@@ -42,7 +51,9 @@ export async function GET() {
     }))
 
     console.log("[v0] Fetched students count:", students.length)
-    return NextResponse.json({ students })
+    const response = { students }
+    setCache(cacheKey, response, LONG_TTL)
+    return NextResponse.json(response)
   } catch (error) {
     console.error("[v0] Error fetching students:", error)
     return NextResponse.json({ students: [] })

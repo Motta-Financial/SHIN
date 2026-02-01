@@ -1,6 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
-import { getCached, setCache, getCacheKey } from "@/lib/api-cache"
+import { getCached, setCache, getCacheKey, LONG_TTL } from "@/lib/api-cache"
 
 export async function GET(request: Request) {
   try {
@@ -21,8 +21,9 @@ export async function GET(request: Request) {
       semesterId: semesterId || undefined,
       includeAll: includeAll.toString(),
     })
-    const cached = getCached<{ success: boolean; data: any[]; records: any[]; mappings: any[] }>(cacheKey)
+    const cached = getCached<{ success: boolean; data: unknown[]; records: unknown[]; mappings: unknown[] }>(cacheKey)
     if (cached) {
+      console.log("[v0] v-complete-mapping - Returning cached response")
       return NextResponse.json(cached)
     }
 
@@ -77,10 +78,19 @@ export async function GET(request: Request) {
       records: data || [],
       mappings: data || [],
     }
-    setCache(cacheKey, response)
+    // Use longer TTL for v_complete_mapping as it's expensive and changes infrequently
+    setCache(cacheKey, response, LONG_TTL)
+    console.log("[v0] v-complete-mapping - Cached response with", (data || []).length, "records")
     return NextResponse.json(response)
   } catch (err) {
     console.error("Error in v-complete-mapping route:", err)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    // Return empty data on error to prevent UI breakage
+    return NextResponse.json({ 
+      success: false, 
+      error: "Internal server error", 
+      data: [], 
+      records: [], 
+      mappings: [] 
+    }, { status: 500 })
   }
 }
