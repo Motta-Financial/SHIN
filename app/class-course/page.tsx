@@ -57,6 +57,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
 import { useUserRole } from "@/hooks/use-user-role"
 import { useCurrentSemester } from "@/hooks/use-current-semester"
+import { MeetingsQueue } from "@/components/meetings-queue"
 import { ClinicAgendaTab } from "@/components/clinic-agenda-tab"
 
 // Mock announcements - REMOVED - will fetch from database
@@ -1489,11 +1490,11 @@ toast({
                   Attendance
                 </TabsTrigger>
                 <TabsTrigger
-                  value="clinic-agenda"
+                  value="meetings"
                   className="gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md px-4"
                 >
-                  <Building2 className="h-4 w-4" />
-                  Clinic Agenda
+                  <Users className="h-4 w-4" />
+                  Meetings
                 </TabsTrigger>
               </TabsList>
 
@@ -3486,9 +3487,19 @@ toast({
               </TabsContent>
               {/* End of Attendance Tab */}
 
-              <TabsContent value="clinic-agenda">
-                <ClinicAgendaTab />
-              </TabsContent>
+<TabsContent value="meetings" className="space-y-4">
+                  <Card className="border-0 shadow-sm">
+                    <CardHeader className="border-b bg-muted/30 rounded-t-lg">
+                      <CardTitle className="text-xl font-semibold flex items-center gap-2">
+                        <Users className="h-5 w-5" />
+                        Meeting Requests
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-6">
+                      <MeetingsQueue weekNumber={getCurrentWeekNumber()} />
+                    </CardContent>
+                  </Card>
+                </TabsContent>
             </Tabs>
 
             {/* Evaluation Dialog */}

@@ -8,8 +8,17 @@ export async function GET(request: NextRequest) {
     const studentId = searchParams.get("studentId")
     const clinic = searchParams.get("clinic")
     const status = searchParams.get("status")
+    const clientId = searchParams.get("clientId")
+    const forQueue = searchParams.get("forQueue") // For director queue view
 
-    let query = supabase.from("meeting_requests").select("*").order("created_at", { ascending: false })
+    let query = supabase.from("meeting_requests").select("*")
+    
+    // For queue view, sort by created_at ascending (first come first serve)
+    if (forQueue === "true") {
+      query = query.order("created_at", { ascending: true })
+    } else {
+      query = query.order("created_at", { ascending: false })
+    }
 
     if (studentId) {
       query = query.eq("student_id", studentId)
@@ -21,6 +30,10 @@ export async function GET(request: NextRequest) {
 
     if (status) {
       query = query.eq("status", status)
+    }
+
+    if (clientId) {
+      query = query.eq("client_id", clientId)
     }
 
     const { data, error } = await query
@@ -40,6 +53,12 @@ export async function GET(request: NextRequest) {
       message: r.message,
       preferredDates: r.preferred_dates,
       status: r.status,
+      notes: r.notes,
+      debriefNotes: r.debrief_notes,
+      clientId: r.client_id,
+      clientName: r.client_name,
+      startedAt: r.started_at,
+      completedAt: r.completed_at,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     }))
@@ -56,7 +75,7 @@ export async function POST(request: NextRequest) {
     const supabase = createServiceClient()
     const body = await request.json()
 
-    const { studentId, studentName, studentEmail, clinic, subject, message, preferredDates } = body
+    const { studentId, studentName, studentEmail, clinic, subject, message, preferredDates, clientId, clientName } = body
 
     const { data, error } = await supabase
       .from("meeting_requests")
@@ -68,6 +87,8 @@ export async function POST(request: NextRequest) {
         subject: subject,
         message: message,
         preferred_dates: preferredDates || [],
+        client_id: clientId || null,
+        client_name: clientName || null,
         status: "pending",
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -132,23 +153,100 @@ export async function PATCH(request: NextRequest) {
   try {
     const supabase = createServiceClient()
     const body = await request.json()
-    const { id, status, notes } = body
+    const { id, status, notes, debriefNotes } = body
 
-    const { error } = await supabase
+    // Build the update object dynamically
+    const updateData: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    }
+
+    if (status !== undefined) {
+      updateData.status = status
+      
+      // Set timestamps based on status
+      if (status === "in_progress") {
+        updateData.started_at = new Date().toISOString()
+      } else if (status === "completed") {
+        updateData.completed_at = new Date().toISOString()
+      }
+    }
+
+    if (notes !== undefined) {
+      updateData.notes = notes
+    }
+
+    if (debriefNotes !== undefined) {
+      updateData.debrief_notes = debriefNotes
+    }
+
+    const { data: updatedRequest, error } = await supabase
       .from("meeting_requests")
-      .update({
-        status,
-        notes,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq("id", id)
+      .select()
+      .single()
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true })
+    // If status changed to in_progress, notify the next group in queue that they're next
+    if (status === "in_progress" && updatedRequest) {
+      try {
+        // Get the next pending request (after the current one by created_at)
+        const { data: nextInQueue } = await supabase
+          .from("meeting_requests")
+          .select("*")
+          .eq("status", "pending")
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle()
+
+        if (nextInQueue) {
+          // Notify the next group they're up next
+          await supabase.from("notifications").insert({
+            type: "meeting_queue",
+            title: "You're Next in the Meeting Queue",
+            message: `Your group is next in line for a meeting with the director. Please be prepared.`,
+            student_id: nextInQueue.student_id,
+            student_name: nextInQueue.student_name,
+            student_email: nextInQueue.student_email,
+            related_id: nextInQueue.id,
+            target_audience: "students",
+            is_read: false,
+            created_at: new Date().toISOString(),
+          })
+        }
+      } catch (notifError) {
+        console.error("Error creating queue notification:", notifError)
+      }
+    }
+
+    // If meeting completed with debrief notes, create activity record for My Team
+    if (status === "completed" && debriefNotes && updatedRequest) {
+      try {
+        // Create a notification/activity for the student team
+        await supabase.from("notifications").insert({
+          type: "meeting_debrief",
+          title: "Meeting Debrief Notes Available",
+          message: debriefNotes.substring(0, 200) + (debriefNotes.length > 200 ? "..." : ""),
+          student_id: updatedRequest.student_id,
+          student_name: updatedRequest.student_name,
+          student_email: updatedRequest.student_email,
+          client_id: updatedRequest.client_id,
+          related_id: updatedRequest.id,
+          target_audience: "students",
+          is_read: false,
+          created_at: new Date().toISOString(),
+        })
+      } catch (activityError) {
+        console.error("Error creating debrief activity:", activityError)
+      }
+    }
+
+    return NextResponse.json({ success: true, request: updatedRequest })
   } catch (error) {
+    console.error("Error in meeting-requests PATCH:", error)
     return NextResponse.json({ error: "Failed to update meeting request" }, { status: 500 })
   }
 }
