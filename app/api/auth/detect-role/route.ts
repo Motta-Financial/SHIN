@@ -60,10 +60,11 @@ export async function POST(request: Request) {
       })
     }
 
-    // Check students
+    // Check students - use students_current view to get ONLY the current semester's student record
+    // This is critical because a student may exist in multiple semesters with different IDs
     const { data: students, error: studentError } = await supabaseAdmin
-      .from("students")
-      .select("id, email, full_name, clinic")
+      .from("students_current")
+      .select("id, email, full_name, clinic, clinic_id")
 
     if (studentError) {
       console.error("detect-role - Student query error:", studentError)
