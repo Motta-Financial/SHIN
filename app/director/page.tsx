@@ -140,16 +140,17 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
         : "/api/supabase/v-complete-mapping"
 
     // Fetch all students to get total student count
-    const allStudentsRes = await fetch("/api/supabase/students") // Assuming an endpoint exists for all students
+    const allStudentsRes = await fetchWithRetry("/api/supabase/students")
     const allStudentsData = await allStudentsRes.json()
     const totalStudents = allStudentsData.students ? allStudentsData.students.length : 0
 
-    const [debriefsRes, mappingRes] = await Promise.all([
-      fetchWithRetry("/api/supabase/debriefs"),
-      fetchWithRetry(mappingUrl),
-    ])
-
+    // Fetch sequentially with delays to avoid rate limiting
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    const debriefsRes = await fetchWithRetry("/api/supabase/debriefs")
     const debriefsData = await debriefsRes.json()
+    
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    const mappingRes = await fetchWithRetry(mappingUrl)
     const mappingData = await mappingRes.json()
 
     const mappings = mappingData.data || mappingData.records || mappingData.mappings || []
