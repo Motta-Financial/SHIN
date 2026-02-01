@@ -54,9 +54,9 @@ async function fetchUserRole(): Promise<UserRoleData> {
 
     const userEmail = user.email || ""
 
-    // Check directors table
+    // Check directors table - use directors_current view for current semester
     const { data: directorData } = await supabase
-      .from("directors")
+      .from("directors_current")
       .select("id, email, role, full_name, clinic_id")
       .ilike("email", userEmail)
       .maybeSingle()
@@ -78,9 +78,10 @@ async function fetchUserRole(): Promise<UserRoleData> {
       }
     }
 
-    // Check students table
+    // Check students table - use students_current view to get ONLY the current semester's record
+    // This is critical because a student may exist in multiple semesters with different IDs
     const { data: studentData } = await supabase
-      .from("students")
+      .from("students_current")
       .select("id, email, full_name, clinic_id, clinic")
       .ilike("email", userEmail)
       .maybeSingle()
