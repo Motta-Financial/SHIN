@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 
     // Create notifications for all students
     const notifications = students.map(student => ({
-      type: "announcement",
+      type: "attendance_open",
       title: "Attendance Open",
       message: `Attendance for Week ${weekNumber} (${classDate}) is now open. Please submit your attendance during class.`,
       student_id: student.id,

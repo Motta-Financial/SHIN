@@ -417,27 +417,36 @@ export function Triage({
         // Icon and color based on notification type
         const studentIconMap: Record<string, React.ReactNode> = {
           attendance_ready: <CalendarCheck className="h-4 w-4" />,
+          attendance_open: <CalendarCheck className="h-4 w-4" />,
           attendance_approved: <CheckCircle2 className="h-4 w-4" />,
           agenda_published: <Calendar className="h-4 w-4" />,
-          announcement: <Calendar className="h-4 w-4" />, // Same as agenda_published for backwards compatibility
+          announcement: <Calendar className="h-4 w-4" />,
           meeting_response: <Users className="h-4 w-4" />,
           debrief: <FileText className="h-4 w-4" />,
+          debrief_submitted: <FileText className="h-4 w-4" />,
+          debrief_question: <HelpCircle className="h-4 w-4" />,
         }
         const studentBgMap: Record<string, string> = {
           attendance_ready: "bg-orange-100 text-orange-700",
+          attendance_open: "bg-orange-100 text-orange-700",
           attendance_approved: "bg-teal-100 text-teal-700",
           agenda_published: "bg-amber-100 text-amber-700",
-          announcement: "bg-amber-100 text-amber-700", // Same as agenda_published
+          announcement: "bg-amber-100 text-amber-700",
           meeting_response: "bg-purple-100 text-purple-700",
           debrief: "bg-blue-100 text-blue-700",
+          debrief_submitted: "bg-blue-100 text-blue-700",
+          debrief_question: "bg-indigo-100 text-indigo-700",
         }
         const studentCategoryMap: Record<string, string> = {
           attendance_ready: "Attendance",
+          attendance_open: "Attendance",
           attendance_approved: "Attendance",
           agenda_published: "Class",
-          announcement: "Class", // Same as agenda_published
+          announcement: "Class",
           meeting_response: "Meetings",
           debrief: "Debriefs",
+          debrief_submitted: "Debriefs",
+          debrief_question: "Debriefs",
         }
         
         items.push({
@@ -462,18 +471,28 @@ export function Triage({
           document_upload: <FileText className="h-4 w-4" />,
           question: <HelpCircle className="h-4 w-4" />,
           meeting_request: <Users className="h-4 w-4" />,
+          debrief_submitted: <FileText className="h-4 w-4" />,
+          debrief_question: <HelpCircle className="h-4 w-4" />,
         }
         const bgMap: Record<string, string> = {
           document_upload: "bg-blue-100 text-blue-700",
           question: "bg-orange-100 text-orange-700",
           meeting_request: "bg-purple-100 text-purple-700",
+          debrief_submitted: "bg-green-100 text-green-700",
+          debrief_question: "bg-amber-100 text-amber-700",
+        }
+        const categoryMap: Record<string, string> = {
+          document_upload: "Documents",
+          question: "Questions",
+          meeting_request: "Meetings",
+          debrief_submitted: "Debriefs",
+          debrief_question: "Questions",
         }
 
         items.push({
           id: `notification-${notif.id}`,
           type: "notification",
-          category:
-            notif.type === "meeting_request" ? "Meetings" : notif.type === "question" ? "Questions" : "Documents",
+          category: categoryMap[notif.type] || "Notifications",
           priority: notif.is_read ? "low" : "medium",
           title: notif.title,
           description: notif.message,

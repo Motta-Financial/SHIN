@@ -102,10 +102,10 @@ export async function POST(request: Request) {
       
       // Get all active students for this semester using the students_current view
       // The view already filters by current semester via app_settings
+      // No need for status filter - view only returns current semester students
       const { data: students, error: studentsError } = await supabase
         .from("students_current")
         .select("id, full_name, email, clinic_id")
-        .eq("status", "active")
       
       console.log("[v0] Found students for notifications:", students?.length || 0, "error:", studentsError?.message || "none")
       

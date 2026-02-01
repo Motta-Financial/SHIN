@@ -6,11 +6,13 @@
  * 
  * NOTIFICATION TYPES (as defined by database constraint):
  * - 'document_upload' - When a student uploads a document
- * - 'question' - When a student asks a question (via debrief)
+ * - 'question' - When a student asks a question
  * - 'meeting_request' - When a student requests a meeting
- * - 'announcement' - General announcements (agenda published, attendance open, etc.)
- * - 'debrief' - Debrief-related notifications
- * - 'attendance' - Attendance-related notifications
+ * - 'announcement' - General announcements
+ * - 'agenda_published' - When a class agenda is published
+ * - 'attendance_open' - When attendance is opened for a week
+ * - 'debrief_submitted' - When a student submits a debrief
+ * - 'debrief_question' - When a debrief contains a question for directors
  * 
  * TARGET AUDIENCES:
  * - 'students' - Notifications for students
@@ -47,8 +49,10 @@ export type NotificationType =
   | 'question'
   | 'meeting_request'
   | 'announcement'
-  | 'debrief'
-  | 'attendance'
+  | 'agenda_published'
+  | 'attendance_open'
+  | 'debrief_submitted'
+  | 'debrief_question'
 
 export type TargetAudience = 'students' | 'directors'
 

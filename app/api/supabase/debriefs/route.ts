@@ -265,7 +265,7 @@ export async function POST(request: Request) {
           if (clientDirectors && clientDirectors.length > 0) {
             for (const cd of clientDirectors) {
               notifications.push({
-                type: "debrief",
+                type: "debrief_question",
                 title: `Client Question from ${studentName}`,
                 message: `[${studentData?.client_name || "Client"}] ${body.questions}`,
                 student_id: insertData.student_id,
@@ -289,7 +289,7 @@ export async function POST(request: Request) {
           if (clinicDirectors && clinicDirectors.length > 0) {
             for (const cd of clinicDirectors) {
               notifications.push({
-                type: "debrief",
+                type: "debrief_question",
                 title: `Clinic Question from ${studentName}`,
                 message: `[${clinic}] ${body.questions}`,
                 student_id: insertData.student_id,
@@ -319,7 +319,7 @@ export async function POST(request: Request) {
             const alreadyNotified = notifications.some(n => n.director_id === cd.director_id)
             if (!alreadyNotified) {
               notifications.push({
-                type: "debrief",
+                type: "debrief_submitted",
                 title: `${studentName} submitted a debrief`,
                 message: `Debrief for week ending ${weekEnding} - ${body.hoursWorked || 0} hours logged`,
                 student_id: insertData.student_id,
