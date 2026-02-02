@@ -67,16 +67,14 @@ export function DebriefsContent() {
   const [selectedDebrief, setSelectedDebrief] = useState<Debrief | null>(null)
   const itemsPerPage = 15
 
-  // Fetch debriefs
+  // Fetch debriefs from debriefs_current view (automatically filtered by current semester)
   useEffect(() => {
     async function fetchDebriefs() {
       try {
-        // Use includeAll=true to get all debriefs for directors
-        const response = await fetch(`/api/supabase/debriefs?includeAll=true`)
+        const response = await fetch(`/api/supabase/debriefs`)
         const data = await response.json()
-        console.log("[v0] DebriefsContent - Fetched debriefs:", data.debriefs?.length || 0)
         if (data.debriefs) {
-          // Map to expected format
+          // Map to expected format (API returns camelCase, component expects snake_case)
           const mappedDebriefs = data.debriefs.map((d: any) => ({
             id: d.id,
             student_id: d.studentId || d.student_id,
