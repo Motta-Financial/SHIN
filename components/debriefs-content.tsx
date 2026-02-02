@@ -73,6 +73,7 @@ export function DebriefsContent() {
       try {
         const response = await fetch(`/api/supabase/debriefs`)
         const data = await response.json()
+        console.log("[v0] DebriefsContent - API response:", { count: data.debriefs?.length, error: data.error })
         if (data.debriefs) {
           // Map to expected format (API returns camelCase, component expects snake_case)
           const mappedDebriefs = data.debriefs.map((d: any) => ({

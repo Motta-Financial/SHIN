@@ -26,16 +26,19 @@ async function getAvailableWeeks(): Promise<string[]> {
 
 export default function StudentProgressPage() {
   const [availableWeeks, setAvailableWeeks] = useState<string[]>([])
-  const [selectedWeeks, setSelectedWeeks] = useState<string[]>(["2026-01-18"])
+  const [selectedWeeks, setSelectedWeeks] = useState<string[]>([])
   const [selectedClinics, setSelectedClinics] = useState<string[]>([])
   const [selectedClients, setSelectedClients] = useState<string[]>([])
+  const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
     getAvailableWeeks().then((weeks) => {
       setAvailableWeeks(weeks)
-      if (weeks.length > 0 && !weeks.includes(selectedWeeks[0])) {
-        setSelectedWeeks([weeks[0]])
+      // Set initial selected week to include ALL weeks to show all data
+      if (weeks.length > 0) {
+        setSelectedWeeks(weeks)
       }
+      setIsInitialized(true)
     })
   }, [])
 
@@ -64,7 +67,11 @@ export default function StudentProgressPage() {
             <span className="text-xs text-muted-foreground">Track student performance and activity</span>
           </div>
 
-          {selectedWeeks.length > 0 && (
+          {!isInitialized ? (
+            <div className="flex items-center justify-center h-[200px]">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : selectedWeeks.length > 0 ? (
             <>
               <Suspense fallback={<div>Loading student hours...</div>}>
                 <StudentHours selectedWeeks={selectedWeeks} selectedClinic={selectedClinic} />
@@ -82,6 +89,10 @@ export default function StudentProgressPage() {
                 <DetailedDebriefs selectedWeeks={selectedWeeks} selectedClinic={selectedClinic} />
               </Suspense>
             </>
+          ) : (
+            <div className="text-center text-muted-foreground py-8">
+              No weeks available. Please check the semester configuration.
+            </div>
           )}
         </main>
       </div>
