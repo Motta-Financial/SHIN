@@ -27,13 +27,27 @@ export async function GET(request: Request) {
 
     let activeSemesterId = semesterId
     if (!activeSemesterId && !includeAll && !studentId && !studentEmail) {
-      const { data: activeSemester } = await supabase
-        .from("semester_config")
-        .select("id")
-        .eq("is_active", true)
-        .single()
-      activeSemesterId = activeSemester?.id
+      // Try app_settings first for current semester
+      const { data: appSettings } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "current_semester_id")
+        .maybeSingle()
+      
+      if (appSettings?.value) {
+        activeSemesterId = appSettings.value
+      } else {
+        // Fallback to semester_config
+        const { data: activeSemester } = await supabase
+          .from("semester_config")
+          .select("id")
+          .eq("is_active", true)
+          .single()
+        activeSemesterId = activeSemester?.id
+      }
     }
+    
+    console.log("[v0] Debriefs API - includeAll:", includeAll, "activeSemesterId:", activeSemesterId, "studentId:", studentId)
 
     let query = supabase
       .from("debriefs")
@@ -60,8 +74,23 @@ export async function GET(request: Request) {
       query = query.eq("student_email", studentEmail)
     }
 
-    if (activeSemesterId && !studentId && !studentEmail) {
+    // Only filter by semester if NOT includeAll and NOT filtering by student
+    if (activeSemesterId && !includeAll && !studentId && !studentEmail) {
       query = query.eq("semester_id", activeSemesterId)
+    }
+    
+    // When includeAll is true, get debriefs from current semester for directors view
+    if (includeAll) {
+      // Get current semester from app_settings
+      const { data: appSettings } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "current_semester_id")
+        .maybeSingle()
+      
+      if (appSettings?.value) {
+        query = query.eq("semester_id", appSettings.value)
+      }
     }
 
     const { data: debriefs, error } = await query

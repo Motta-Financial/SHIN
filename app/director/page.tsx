@@ -1200,18 +1200,11 @@ export default function DirectorDashboard() {
                               <div className="flex justify-between text-sm mb-1">
                                 <span className="text-muted-foreground">Hours Logged</span>
                                 <span className="font-medium">
-                                  {quickStats.totalHours} / {overviewData.weeklyProgress.hoursTarget || "—"}
+                                  {quickStats.totalHours}
                                 </span>
                               </div>
                               <Progress
-                                value={
-                                  overviewData.weeklyProgress.hoursTarget > 0
-                                    ? Math.min(
-                                        (quickStats.totalHours / overviewData.weeklyProgress.hoursTarget) * 100,
-                                        100,
-                                      )
-                                    : 0
-                                }
+                                value={quickStats.totalHours > 0 ? 100 : 0}
                                 className="h-2"
                               />
                             </div>
@@ -1219,19 +1212,11 @@ export default function DirectorDashboard() {
                               <div className="flex justify-between text-sm mb-1">
                                 <span className="text-muted-foreground">Debriefs Submitted</span>
                                 <span className="font-medium">
-                                  {quickStats.debriefsSubmitted} / {overviewData.weeklyProgress.clinicDebriefsExpected || "—"}
+                                  {quickStats.debriefsSubmitted}
                                 </span>
                               </div>
                               <Progress
-                                value={
-                                  overviewData.weeklyProgress.clinicDebriefsExpected > 0
-                                    ? Math.min(
-                                        (quickStats.debriefsSubmitted / overviewData.weeklyProgress.clinicDebriefsExpected) *
-                                          100,
-                                        100,
-                                      )
-                                    : 0
-                                }
+                                value={quickStats.debriefsSubmitted > 0 ? 100 : 0}
                                 className="h-2"
                               />
                             </div>
