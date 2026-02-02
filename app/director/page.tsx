@@ -1106,15 +1106,15 @@ export default function DirectorDashboard() {
                         <p className="text-3xl font-bold text-gray-900 mt-1">{quickStats.totalHours}</p>
                         <div className="mt-1.5 space-y-0.5 text-xs">
                           <div className="flex justify-between">
-                            <span className="text-gray-500">Target</span>
+                            <span className="text-gray-500">This semester</span>
                             <span className="text-gray-700 font-medium">
-                              {overviewData.weeklyProgress.hoursTarget || 0}
+                              {quickStats.activeStudents} students
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-500">Remaining</span>
+                            <span className="text-gray-500">Avg per student</span>
                             <span className="font-medium" style={{ color: "#878568" }}>
-                              {Math.max(0, (overviewData.weeklyProgress.hoursTarget || 0) - quickStats.totalHours)}
+                              {quickStats.activeStudents > 0 ? (quickStats.totalHours / quickStats.activeStudents).toFixed(1) : 0}h
                             </span>
                           </div>
                         </div>
