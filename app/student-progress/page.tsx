@@ -33,12 +33,10 @@ export default function StudentProgressPage() {
 
   useEffect(() => {
     getAvailableWeeks().then((weeks) => {
-      console.log("[v0] StudentProgressPage - Available weeks:", weeks)
       setAvailableWeeks(weeks)
       // Set initial selected week to include ALL weeks to show all data
       if (weeks.length > 0) {
         setSelectedWeeks(weeks)
-        console.log("[v0] StudentProgressPage - Setting selectedWeeks to all:", weeks)
       }
       setIsInitialized(true)
     })

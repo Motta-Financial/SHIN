@@ -48,7 +48,6 @@ export function StudentHours({ selectedWeeks, selectedClinic }: StudentHoursProp
   useEffect(() => {
     async function fetchHoursData() {
       try {
-        console.log("[v0] StudentHours - selectedWeeks:", selectedWeeks)
         const debriefsRes = await fetch("/api/supabase/debriefs")
 
         if (!debriefsRes.ok) {
@@ -58,10 +57,6 @@ export function StudentHours({ selectedWeeks, selectedClinic }: StudentHoursProp
         const debriefsData = await debriefsRes.json()
 
         const debriefs = debriefsData.debriefs || []
-        console.log("[v0] StudentHours - Fetched debriefs count:", debriefs.length)
-        if (debriefs.length > 0) {
-          console.log("[v0] StudentHours - First debrief weekEnding:", debriefs[0].weekEnding || debriefs[0].week_ending)
-        }
 
         const studentMap = new Map<string, StudentSummary>()
 
@@ -91,9 +86,18 @@ export function StudentHours({ selectedWeeks, selectedClinic }: StudentHoursProp
 
           const matchesClinic = filterClinicName === "all" || normalizedStudentClinic === normalizedFilterClinic
 
-          const matchesWeek = selectedWeeks.length === 0 || selectedWeeks.some((sw) => normalizeDate(sw) === recordWeek)
-
-          console.log("[v0] StudentHours - Checking debrief:", { recordWeek, matchesWeek, matchesClinic, studentName })
+          // selectedWeeks contains week_start dates, but debrief has week_ending
+          // Calculate week_start from week_ending (subtract 6 days to get Sunday from Saturday)
+          const weekEndingDate = new Date(recordWeek + "T00:00:00")
+          const weekStartDate = new Date(weekEndingDate)
+          weekStartDate.setDate(weekStartDate.getDate() - 6)
+          const weekStartStr = weekStartDate.toISOString().split("T")[0]
+          
+          const matchesWeek = selectedWeeks.length === 0 || selectedWeeks.some((sw) => {
+            const normalizedSw = normalizeDate(sw)
+            // Match either the week_start or week_ending
+            return normalizedSw === recordWeek || normalizedSw === weekStartStr
+          })
 
           if (!matchesWeek || !matchesClinic) {
             return
