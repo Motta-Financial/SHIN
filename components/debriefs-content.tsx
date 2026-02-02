@@ -67,14 +67,32 @@ export function DebriefsContent() {
   const [selectedDebrief, setSelectedDebrief] = useState<Debrief | null>(null)
   const itemsPerPage = 15
 
-  // Fetch debriefs
+  // Fetch debriefs from debriefs_current view (automatically filtered by current semester)
   useEffect(() => {
     async function fetchDebriefs() {
       try {
         const response = await fetch(`/api/supabase/debriefs`)
         const data = await response.json()
-        if (data.success && data.debriefs) {
-          setDebriefs(data.debriefs)
+        if (data.debriefs) {
+          // Map to expected format (API returns camelCase, component expects snake_case)
+          const mappedDebriefs = data.debriefs.map((d: any) => ({
+            id: d.id,
+            student_id: d.studentId || d.student_id,
+            student_email: d.studentEmail || d.student_email,
+            client_name: d.clientName || d.client_name,
+            clinic: d.clinic,
+            hours_worked: String(d.hoursWorked || d.hours_worked || 0),
+            work_summary: d.workSummary || d.work_summary,
+            questions: d.questions,
+            week_ending: d.weekEnding || d.week_ending,
+            date_submitted: d.createdAt || d.created_at,
+            status: d.status,
+            week_number: d.weekNumber || d.week_number,
+            client_id: d.clientId || d.client_id,
+            clinic_id: d.clinicId || d.clinic_id,
+            semester_id: d.semesterId || d.semester_id,
+          }))
+          setDebriefs(mappedDebriefs)
         }
       } catch (error) {
         console.error("Error fetching debriefs:", error)

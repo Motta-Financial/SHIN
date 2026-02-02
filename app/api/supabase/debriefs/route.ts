@@ -7,13 +7,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const studentId = searchParams.get("studentId")
     const studentEmail = searchParams.get("studentEmail")
-    const semesterId = searchParams.get("semesterId")
-    const includeAll = searchParams.get("includeAll") === "true"
 
-    const cacheKey = `debriefs:${studentId || ""}:${studentEmail || ""}:${semesterId || ""}:${includeAll}`
+    const cacheKey = `debriefs_current:${studentId || ""}:${studentEmail || ""}`
     const cached = getCachedData(cacheKey)
     if (cached) {
-      console.log("[v0] Debriefs API - Returning cached response")
       return NextResponse.json(cached)
     }
 
@@ -25,18 +22,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ debriefs: [], error: "Database not configured" })
     }
 
-    let activeSemesterId = semesterId
-    if (!activeSemesterId && !includeAll && !studentId && !studentEmail) {
-      const { data: activeSemester } = await supabase
-        .from("semester_config")
-        .select("id")
-        .eq("is_active", true)
-        .single()
-      activeSemesterId = activeSemester?.id
-    }
-
+    // Use debriefs_current view which automatically filters by current semester
+    // This ensures directors see all debriefs from the current semester
     let query = supabase
-      .from("debriefs")
+      .from("debriefs_current")
       .select(`
         id,
         student_id,
@@ -54,14 +43,11 @@ export async function GET(request: Request) {
       `)
       .order("week_ending", { ascending: false })
 
+    // Only filter by student if provided (for student-specific queries)
     if (studentId) {
       query = query.eq("student_id", studentId)
     } else if (studentEmail) {
       query = query.eq("student_email", studentEmail)
-    }
-
-    if (activeSemesterId && !studentId && !studentEmail) {
-      query = query.eq("semester_id", activeSemesterId)
     }
 
     const { data: debriefs, error } = await query
@@ -123,7 +109,6 @@ export async function GET(request: Request) {
     const response = { debriefs: formattedDebriefs }
 
     setCachedData(cacheKey, response)
-    console.log("[v0] Debriefs API - Fetched and cached debriefs count:", formattedDebriefs.length)
 
     return NextResponse.json(response)
   } catch (error) {

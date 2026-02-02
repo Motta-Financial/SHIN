@@ -1104,25 +1104,12 @@ export default function DirectorDashboard() {
                           <Clock className="h-4 w-4" style={{ color: "#878568" }} />
                         </div>
                         <p className="text-3xl font-bold text-gray-900 mt-1">{quickStats.totalHours}</p>
-                        <div className="mt-1.5 space-y-0.5 text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Target</span>
-                            <span className="text-gray-700 font-medium">
-                              {overviewData.weeklyProgress.hoursTarget || 0}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Remaining</span>
-                            <span className="font-medium" style={{ color: "#878568" }}>
-                              {Math.max(0, (overviewData.weeklyProgress.hoursTarget || 0) - quickStats.totalHours)}
-                            </span>
-                          </div>
-                        </div>
+                        <p className="text-xs text-gray-500 mt-1">Hours submitted this semester</p>
                         <div className="mt-1.5 h-0.5 w-8 rounded-full" style={{ backgroundColor: "#878568" }} />
                       </CardContent>
                     </Card>
 
-                    {/* Debriefs Card - Shows PROGRAM-WIDE stats (all students in SEED) */}
+                    {/* Debriefs Card */}
                     <Card
                       className="group w-[160px] bg-white border border-gray-200 shadow-sm cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
                       onClick={() => setDebriefsDialogOpen(true)}
@@ -1132,24 +1119,8 @@ export default function DirectorDashboard() {
                           <p className="text-sm text-gray-700 font-semibold">Debriefs</p>
                           <FileText className="h-4 w-4" style={{ color: "#6A6352" }} />
                         </div>
-                        <div className="flex items-baseline gap-1 mt-1">
-                          <span className="text-3xl font-bold text-gray-900">{quickStats.totalDebriefsSubmitted}</span>
-                          <span className="text-lg text-gray-400">
-                            /{quickStats.totalStudents || 0}
-                          </span>
-                        </div>
-                        <div className="mt-1.5 space-y-0.5 text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Submitted</span>
-                            <span className="text-gray-700 font-medium">{quickStats.totalDebriefsSubmitted}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-500">Missing</span>
-                            <span className="text-red-500 font-medium">
-                              {Math.max(0, (quickStats.totalStudents || 0) - quickStats.totalDebriefsSubmitted)}
-                            </span>
-                          </div>
-                        </div>
+                        <p className="text-3xl font-bold text-gray-900 mt-1">{quickStats.totalDebriefsSubmitted}</p>
+                        <p className="text-xs text-gray-500 mt-1">Submitted this semester</p>
                         <div className="mt-1.5 h-0.5 w-8 rounded-full" style={{ backgroundColor: "#6A6352" }} />
                       </CardContent>
                     </Card>
@@ -1229,18 +1200,11 @@ export default function DirectorDashboard() {
                               <div className="flex justify-between text-sm mb-1">
                                 <span className="text-muted-foreground">Hours Logged</span>
                                 <span className="font-medium">
-                                  {quickStats.totalHours} / {overviewData.weeklyProgress.hoursTarget || "—"}
+                                  {quickStats.totalHours}
                                 </span>
                               </div>
                               <Progress
-                                value={
-                                  overviewData.weeklyProgress.hoursTarget > 0
-                                    ? Math.min(
-                                        (quickStats.totalHours / overviewData.weeklyProgress.hoursTarget) * 100,
-                                        100,
-                                      )
-                                    : 0
-                                }
+                                value={quickStats.totalHours > 0 ? 100 : 0}
                                 className="h-2"
                               />
                             </div>
@@ -1248,19 +1212,11 @@ export default function DirectorDashboard() {
                               <div className="flex justify-between text-sm mb-1">
                                 <span className="text-muted-foreground">Debriefs Submitted</span>
                                 <span className="font-medium">
-                                  {quickStats.debriefsSubmitted} / {overviewData.weeklyProgress.clinicDebriefsExpected || "—"}
+                                  {quickStats.debriefsSubmitted}
                                 </span>
                               </div>
                               <Progress
-                                value={
-                                  overviewData.weeklyProgress.clinicDebriefsExpected > 0
-                                    ? Math.min(
-                                        (quickStats.debriefsSubmitted / overviewData.weeklyProgress.clinicDebriefsExpected) *
-                                          100,
-                                        100,
-                                      )
-                                    : 0
-                                }
+                                value={quickStats.debriefsSubmitted > 0 ? 100 : 0}
                                 className="h-2"
                               />
                             </div>
