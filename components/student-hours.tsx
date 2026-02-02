@@ -48,6 +48,7 @@ export function StudentHours({ selectedWeeks, selectedClinic }: StudentHoursProp
   useEffect(() => {
     async function fetchHoursData() {
       try {
+        console.log("[v0] StudentHours - selectedWeeks:", selectedWeeks)
         const debriefsRes = await fetch("/api/supabase/debriefs")
 
         if (!debriefsRes.ok) {
@@ -57,6 +58,10 @@ export function StudentHours({ selectedWeeks, selectedClinic }: StudentHoursProp
         const debriefsData = await debriefsRes.json()
 
         const debriefs = debriefsData.debriefs || []
+        console.log("[v0] StudentHours - Fetched debriefs count:", debriefs.length)
+        if (debriefs.length > 0) {
+          console.log("[v0] StudentHours - First debrief weekEnding:", debriefs[0].weekEnding || debriefs[0].week_ending)
+        }
 
         const studentMap = new Map<string, StudentSummary>()
 
@@ -87,6 +92,8 @@ export function StudentHours({ selectedWeeks, selectedClinic }: StudentHoursProp
           const matchesClinic = filterClinicName === "all" || normalizedStudentClinic === normalizedFilterClinic
 
           const matchesWeek = selectedWeeks.length === 0 || selectedWeeks.some((sw) => normalizeDate(sw) === recordWeek)
+
+          console.log("[v0] StudentHours - Checking debrief:", { recordWeek, matchesWeek, matchesClinic, studentName })
 
           if (!matchesWeek || !matchesClinic) {
             return
