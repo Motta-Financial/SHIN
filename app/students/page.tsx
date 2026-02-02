@@ -1313,8 +1313,9 @@ export default function StudentPortal() {
   const totalHours = debriefs.reduce((sum, d) => sum + d.hoursWorked, 0)
   // Only count attendance records where is_present is true
   const totalAttendance = attendanceRecords.filter((r) => r.is_present).length
-  const completedDebriefs = debriefs.filter((d) => d.status === "reviewed").length
-  const pendingDebriefs = debriefs.filter((d) => d.status === "pending").length
+  // Count submitted and reviewed debriefs as completed
+  const completedDebriefs = debriefs.filter((d) => d.status === "submitted" || d.status === "reviewed").length
+  const pendingDebriefs = debriefs.filter((d) => d.status === "pending" || d.status === "draft").length
 
   const getWeekEndingDate = () => {
     const today = new Date()
