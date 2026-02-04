@@ -837,9 +837,12 @@ export default function DirectorDashboard() {
   }
 
   const getDisplayName = () => {
-    if (role === "admin" && fullName) {
+    // Use fullName from useUserRole for both admins and directors
+    // This comes directly from the authenticated user's database record
+    if (fullName) {
       return fullName.split(" ")[0]
     }
+    // Fallback to currentDirector for demo mode or if fullName is not set
     if (currentDirector?.name) {
       return currentDirector.name.split(" ")[0]
     }
