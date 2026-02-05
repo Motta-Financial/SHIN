@@ -1107,7 +1107,7 @@ export default function DirectorDashboard() {
                           <Clock className="h-4 w-4" style={{ color: "#878568" }} />
                         </div>
                         <p className="text-3xl font-bold text-gray-900 mt-1">{quickStats.totalHours}</p>
-                        <p className="text-xs text-gray-500 mt-1">Hours submitted this semester</p>
+                        <p className="text-xs text-gray-500 mt-1">Hours submitted this week</p>
                         <div className="mt-1.5 h-0.5 w-8 rounded-full" style={{ backgroundColor: "#878568" }} />
                       </CardContent>
                     </Card>
@@ -1123,7 +1123,7 @@ export default function DirectorDashboard() {
                           <FileText className="h-4 w-4" style={{ color: "#6A6352" }} />
                         </div>
                         <p className="text-3xl font-bold text-gray-900 mt-1">{quickStats.totalDebriefsSubmitted}</p>
-                        <p className="text-xs text-gray-500 mt-1">Submitted this semester</p>
+                        <p className="text-xs text-gray-500 mt-1">Submitted this week</p>
                         <div className="mt-1.5 h-0.5 w-8 rounded-full" style={{ backgroundColor: "#6A6352" }} />
                       </CardContent>
                     </Card>
