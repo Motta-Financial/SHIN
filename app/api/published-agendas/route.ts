@@ -98,8 +98,6 @@ export async function POST(request: Request) {
         semesterId = settingsData?.value
       }
       
-      console.log("[v0] Publishing agenda - semester_id:", semesterId)
-      
       // Get all active students for this semester using the students_current view
       // The view already filters by current semester via app_settings
       // No need for status filter - view only returns current semester students
@@ -107,10 +105,8 @@ export async function POST(request: Request) {
         .from("students_current")
         .select("id, full_name, email, clinic_id")
       
-      console.log("[v0] Found students for notifications:", students?.length || 0, "error:", studentsError?.message || "none")
-      
       if (studentsError) {
-        console.error("[v0] Error fetching students for notification:", studentsError.message, studentsError.code)
+        console.error("Error fetching students for notification:", studentsError.message)
       } else if (students && students.length > 0) {
         // Create individual notifications for each student
         // Use "agenda_published" type which is recognized by Triage component
@@ -133,16 +129,12 @@ export async function POST(request: Request) {
           .select()
         
         if (insertError) {
-          console.error("[v0] Error inserting student notifications:", insertError.message, insertError.code, insertError.details)
-        } else {
-          console.log(`[v0] Successfully created ${studentNotifications.length} agenda notifications for students`)
+          console.error("Error inserting student notifications:", insertError.message)
         }
-      } else {
-        console.log("[v0] No students found for agenda notifications")
       }
     } catch (notifError) {
       // Don't fail the agenda publish if notification fails
-      console.error("[v0] Error creating agenda notification:", notifError)
+      console.error("Error creating agenda notification:", notifError)
     }
 
     return NextResponse.json({ success: true, agenda: data })
