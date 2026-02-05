@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
         .from("debriefs")
         .select("*")
         .in("student_id", teamStudentIds)
-        .eq("client_name", clientName)
+        .eq("semester_id", currentSemesterId)
         .order("created_at", { ascending: false })
 
       if (teamDebriefs) {

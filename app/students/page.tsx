@@ -833,17 +833,22 @@ export default function StudentPortal() {
       setLoadingTeamSummary(true)
       setTeamSummaryError(null)
       try {
-        // Fetch team data first
-        const teamRes = await fetchWithRetry(`/api/teams?clientId=${currentStudent.clientId}`)
+        // Fetch team data from team-workspace API (the single source of truth for team data)
+        const teamRes = await fetchWithRetry(`/api/team-workspace?studentId=${currentStudentId}&includeDebriefs=true`)
         if (!teamRes.ok) throw new Error(`HTTP error! status: ${teamRes.status}`)
-        const teamData = await safeJsonParse(teamRes, { team: null })
-        setTeamData(teamData.team)
+        const teamData = await safeJsonParse(teamRes, {})
+        setTeamData(teamData)
 
-        // Then fetch the summary for the student's team
-        const summaryRes = await fetchWithRetry(`/api/teams/summary?studentId=${currentStudentId}`)
-        if (!summaryRes.ok) throw new Error(`HTTP error! status: ${summaryRes.status}`)
-        const summaryData = await safeJsonParse(summaryRes, { summary: "" })
-        setTeamSummary(summaryData.summary)
+        // Then try to fetch the cached summary (non-critical, don't fail the whole flow)
+        try {
+          const summaryRes = await fetchWithRetry(`/api/teams/summary?studentId=${currentStudentId}`)
+          if (summaryRes.ok) {
+            const summaryData = await safeJsonParse(summaryRes, { summary: "" })
+            setTeamSummary(summaryData.summary)
+          }
+        } catch {
+          // Summary is optional - team data already loaded above
+        }
       } catch (error: any) {
         console.error("Error fetching team data or summary:", error)
         setTeamSummaryError(error.message || "Failed to load team information.")
@@ -2046,8 +2051,9 @@ export default function StudentPortal() {
                           {teamData?.debriefs?.filter((d: any) => {
                             const now = new Date()
                             const startOfWeek = new Date(now)
-                            startOfWeek.setDate(now.getDay())
-                            const debriefDate = new Date(d.created_at || d.date)
+                            startOfWeek.setDate(now.getDate() - now.getDay())
+                            startOfWeek.setHours(0, 0, 0, 0)
+                            const debriefDate = new Date(d.createdAt || d.created_at || d.date)
                             return debriefDate >= startOfWeek
                           }).length || 0}{" "}
                           submitted

@@ -227,21 +227,7 @@ export function MyTeamContent() {
         const response = await fetch(`/api/team-workspace?studentId=${studentId}&includeDebriefs=true`)
         const data = await response.json()
 
-        console.log("[v0] Team workspace response - debriefs count:", data.debriefs?.length || 0)
-        console.log(
-          "[v0] Team workspace debriefs:",
-          JSON.stringify(
-            data.debriefs?.slice(0, 3).map((d: any) => ({
-              id: d.id,
-              studentName: d.studentName,
-              workSummary: d.workSummary?.substring(0, 50),
-              clientName: d.clientName,
-            })),
-            null,
-            2,
-          ),
-        )
-        console.log("[v0] Team workspace response - deliverables count:", data.deliverables?.length || 0)
+
 
         if (data.success) {
           setEngagement({
