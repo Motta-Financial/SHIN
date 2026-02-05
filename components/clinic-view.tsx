@@ -31,9 +31,15 @@ import DocumentUpload from "@/components/shared/DocumentUpload"
 import { useRouter } from "next/navigation"
 import { useCurrentSemester } from "@/hooks/use-current-semester"
 
+interface WeekScheduleInfo {
+  weekStart: string
+  weekEnd: string
+}
+
 interface ClinicViewProps {
   selectedClinic: string
   selectedWeeks: string[]
+  weekSchedule?: WeekScheduleInfo[]
 }
 
 interface CompleteMapping {
@@ -86,7 +92,7 @@ interface CourseMaterial {
   created_at: string
 }
 
-export default function ClinicView({ selectedClinic, selectedWeeks }: ClinicViewProps) {
+export default function ClinicView({ selectedClinic, selectedWeeks, weekSchedule = [] }: ClinicViewProps) {
   const [clinicData, setClinicData] = useState<ClinicData | null>(null)
   const [schedule, setSchedule] = useState<ScheduleWeek[]>([])
   const [materials, setMaterials] = useState<CourseMaterial[]>([])
@@ -117,10 +123,27 @@ export default function ClinicView({ selectedClinic, selectedWeeks }: ClinicView
     if (selectedWeekValues.length === 0) return true
     if (!weekEnding) return false
 
-    const normalizedWeekEnding = normalizeDate(weekEnding)
-    return selectedWeekValues.some((selectedWeek) => {
-      const normalizedSelected = normalizeDate(selectedWeek)
-      return normalizedWeekEnding === normalizedSelected
+    // Range-based matching: selectedWeekValues are week_start dates
+    // We check if weekEnding falls within the week's date range
+    return selectedWeekValues.some((weekStartValue) => {
+      // Use schedule data if available for precise range
+      const scheduleEntry = weekSchedule.find((s) => s.weekStart === weekStartValue)
+      if (scheduleEntry) {
+        const start = new Date(scheduleEntry.weekStart)
+        const end = new Date(scheduleEntry.weekEnd)
+        start.setHours(0, 0, 0, 0)
+        end.setHours(23, 59, 59, 999)
+        const debriefDate = new Date(weekEnding)
+        return debriefDate >= start && debriefDate <= end
+      }
+      // Fallback: assume 7-day week from start
+      const start = new Date(weekStartValue)
+      const end = new Date(weekStartValue)
+      end.setDate(end.getDate() + 6)
+      start.setHours(0, 0, 0, 0)
+      end.setHours(23, 59, 59, 999)
+      const debriefDate = new Date(weekEnding)
+      return debriefDate >= start && debriefDate <= end
     })
   }
 
@@ -1199,5 +1222,5 @@ export default function ClinicView({ selectedClinic, selectedWeeks }: ClinicView
   )
 }
 
-export { ClinicView }
+
 // export default ClinicView // Removed to fix duplicate default export error

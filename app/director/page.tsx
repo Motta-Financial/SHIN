@@ -7,7 +7,7 @@ import { getErrorMessage, isAuthError, isPermissionError } from "@/lib/error-han
 import { useCurrentSemester } from "@/hooks/use-current-semester"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { WeeklyProgramSummary } from "@/components/weekly-program-summary"
-import { ClinicView } from "@/components/clinic-view"
+import ClinicView from "@/components/clinic-view"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { OnboardingAgreements } from "@/components/onboarding-agreements"
@@ -454,20 +454,26 @@ export default function DirectorDashboard() {
                 })
               : debriefs
 
-          const pending = filteredDebriefs.filter((d: any) => d.status === "pending" || !d.status).length
-          const reviewed = filteredDebriefs.filter((d: any) => d.status === "reviewed").length
+          const pending = filteredDebriefs.filter((d: any) => {
+            const status = d.status || d.Status
+            return status === "pending" || status === "submitted" || !status
+          }).length
+          const reviewed = filteredDebriefs.filter((d: any) => {
+            const status = d.status || d.Status
+            return status === "reviewed"
+          }).length
 
-          // Group by client
+          // Group by client (handle both camelCase and snake_case)
           const byClient: Record<string, number> = {}
           filteredDebriefs.forEach((d: any) => {
-            const client = d.client_name || "Unknown"
+            const client = d.clientName || d.client_name || "Unknown"
             byClient[client] = (byClient[client] || 0) + 1
           })
 
-          // Group by week
+          // Group by week (handle both camelCase and snake_case)
           const byWeek: Record<number, number> = {}
           filteredDebriefs.forEach((d: any) => {
-            const week = d.week_number || 0
+            const week = d.weekNumber || d.week_number || 0
             byWeek[week] = (byWeek[week] || 0) + 1
           })
 
@@ -475,8 +481,8 @@ export default function DirectorDashboard() {
           const recentDebriefs = filteredDebriefs
             .sort(
               (a: any, b: any) =>
-                new Date(b.date_submitted || b.created_at).getTime() -
-                new Date(a.date_submitted || a.created_at).getTime(),
+                new Date(b.createdAt || b.created_at || b.date_submitted).getTime() -
+                new Date(a.createdAt || a.created_at || a.date_submitted).getTime(),
             )
             .slice(0, 5)
 
@@ -704,15 +710,31 @@ export default function DirectorDashboard() {
           console.error("Error fetching meeting requests:", meetingError)
         }
 
+        // Extract student questions from debriefs data
+        const studentQuestions: Array<{ student: string; question: string; time: string; answered: boolean }> = []
+        if (debriefsData.recentDebriefs && debriefsData.recentDebriefs.length > 0) {
+          debriefsData.recentDebriefs.forEach((d: any) => {
+            const questions = d.questions || d.Questions
+            if (questions && questions.trim().length > 0) {
+              studentQuestions.push({
+                student: d.studentName || d.studentEmail?.split("@")[0] || d.student_email?.split("@")[0] || "Student",
+                question: questions,
+                time: d.createdAt || d.created_at || "",
+                answered: !!d.director_feedback || !!d.directorFeedback,
+              })
+            }
+          })
+        }
+
         setOverviewData({
           urgentItems,
           attendanceSummary: {
-            present: presentRecords.length, // Count of records marked as "Present"
-            absent: absentRecords.length, // Count of records marked as "Absent"
-            rate: Math.min(attendanceRate, 100), // Cap at 100%
+            present: presentRecords.length,
+            absent: absentRecords.length,
+            rate: Math.min(attendanceRate, 100),
           },
           recentClientActivity: recentActivity,
-          studentQuestions: [], // Placeholder, needs dedicated fetch
+          studentQuestions,
           weeklyProgress,
           notifications: realNotifications.length > 0 ? realNotifications : [{ type: "info", title: "No new notifications", time: "now" }],
         })
@@ -1339,11 +1361,12 @@ export default function DirectorDashboard() {
               {/* Detailed Performance Section */}
               <div className="grid gap-6">
                 <Suspense fallback={<div>Loading summary...</div>}>
-                  <WeeklyProgramSummary
-                    selectedClinic={selectedDirectorId} // This prop might need adjustment based on its usage in WeeklyProgramSummary
-                    selectedWeeks={selectedWeeks}
-                    directorId={selectedDirectorId} // This prop might need adjustment based on its usage in WeeklyProgramSummary
-                  />
+<WeeklyProgramSummary
+  selectedClinic={selectedDirectorId}
+  selectedWeeks={selectedWeeks}
+  directorId={selectedDirectorId}
+  weekSchedule={weekSchedule}
+  />
                 </Suspense>
               </div>
             </TabsContent>
@@ -1379,7 +1402,7 @@ export default function DirectorDashboard() {
                   </CardContent>
                 </Card>
               )}
-              <ClinicView selectedClinic={getClinicIdForView()} selectedWeeks={selectedWeeks} />
+              <ClinicView selectedClinic={getClinicIdForView()} selectedWeeks={selectedWeeks} weekSchedule={weekSchedule} />
             </TabsContent>
 
             <TabsContent value="debriefs" className="space-y-6">
@@ -1460,10 +1483,10 @@ export default function DirectorDashboard() {
                               </div>
                               <div>
                                 <p className="text-sm font-medium">
-                                  {debrief.student_email?.split("@")[0] || "Student"}
+                                  {debrief.studentName || (debrief.studentEmail || debrief.student_email)?.split("@")[0] || "Student"}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                  {debrief.client_name || "Client"} • Week {debrief.week_number}
+                                  {debrief.clientName || debrief.client_name || "Client"} • Week {debrief.weekNumber || debrief.week_number}
                                 </p>
                               </div>
                             </div>
@@ -1474,7 +1497,7 @@ export default function DirectorDashboard() {
                               >
                                 {debrief.status || "pending"}
                               </Badge>
-                              <span className="text-xs text-muted-foreground">{debrief.hours_worked}h</span>
+                              <span className="text-xs text-muted-foreground">{debrief.hoursWorked || debrief.hours_worked}h</span>
                             </div>
                           </div>
                         ))}
