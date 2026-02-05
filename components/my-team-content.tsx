@@ -32,12 +32,12 @@ import {
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
-import { createBrowserClient } from "@supabase/ssr"
+import { createClient } from "@/lib/supabase/client"
 import { useUserRole, canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
 import type { ClientEngagement, Deliverable, TeamNote } from "@/types"
 
 function getSupabaseClient() {
-  return createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+  return createClient()
 }
 
 function getDeliverableTypeLabel(type: string | undefined): string {
