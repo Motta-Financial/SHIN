@@ -206,6 +206,7 @@ export async function POST(request: Request) {
       work_summary: body.workSummary,
       questions: body.questions,
       week_ending: body.weekEnding || new Date().toISOString().split("T")[0],
+      week_number: body.weekNumber || null,
       semester_id: semesterId,
       status: "submitted",
     }
@@ -258,6 +259,7 @@ export async function POST(request: Request) {
                 student_email: insertData.student_email,
                 clinic_id: clinicId,
                 director_id: cd.director_id,
+                target_audience: "directors",
                 is_read: false,
                 related_id: data.id,
                 created_at: new Date().toISOString(),
@@ -282,6 +284,7 @@ export async function POST(request: Request) {
                 student_email: insertData.student_email,
                 clinic_id: clinicId,
                 director_id: cd.director_id,
+                target_audience: "directors",
                 is_read: false,
                 related_id: data.id,
                 created_at: new Date().toISOString(),
@@ -291,7 +294,8 @@ export async function POST(request: Request) {
         }
       }
 
-      // Always notify the clinic director of the debrief submission (separate from questions)
+      // Always notify the clinic director of the debrief submission
+      // Send debrief_submitted notification to all clinic directors regardless of question notifications
       if (clinicId) {
         const { data: clinicDirectors } = await supabase
           .from("clinic_directors")
@@ -300,18 +304,21 @@ export async function POST(request: Request) {
 
         if (clinicDirectors && clinicDirectors.length > 0) {
           for (const cd of clinicDirectors) {
-            // Only add debrief submission notification if not already notified via question
-            const alreadyNotified = notifications.some(n => n.director_id === cd.director_id)
-            if (!alreadyNotified) {
+            // Check if this director already has a debrief_submitted notification (avoid duplicates of same type)
+            const alreadyHasSubmittedNotif = notifications.some(
+              n => n.director_id === cd.director_id && n.type === "debrief_submitted"
+            )
+            if (!alreadyHasSubmittedNotif) {
               notifications.push({
                 type: "debrief_submitted",
                 title: `${studentName} submitted a debrief`,
-                message: `Debrief for week ending ${weekEnding} - ${body.hoursWorked || 0} hours logged`,
+                message: `Week ${body.weekNumber || "?"} debrief (ending ${weekEnding}) - ${body.hoursWorked || 0} hours logged${hasQuestion ? " | Has question" : ""}`,
                 student_id: insertData.student_id,
                 student_name: studentName,
                 student_email: insertData.student_email,
                 clinic_id: clinicId,
                 director_id: cd.director_id,
+                target_audience: "directors",
                 is_read: false,
                 related_id: data.id,
                 created_at: new Date().toISOString(),
