@@ -210,7 +210,11 @@ export default function ClinicView({ selectedClinic, selectedWeeks, weekSchedule
       const debriefsRes = await fetch("/api/supabase/debriefs")
       if (debriefsRes.ok) {
         const debriefsData = await debriefsRes.json()
-        setDebriefs(debriefsData.debriefs || [])
+        const allDebriefs = debriefsData.debriefs || []
+        console.log("[v0] ClinicView debriefs fetched:", allDebriefs.length, "sample:", allDebriefs.slice(0, 2).map((d: any) => ({ id: d.id, studentId: d.studentId, weekEnding: d.weekEnding, hoursWorked: d.hoursWorked })))
+        console.log("[v0] ClinicView students:", filteredStudents.slice(0, 3).map((s: any) => ({ student_id: s.student_id, student_name: s.student_name })))
+        console.log("[v0] ClinicView selectedWeeks:", selectedWeeks)
+        setDebriefs(allDebriefs)
       }
 
       const { data: scheduleData } = await supabase
@@ -252,11 +256,16 @@ export default function ClinicView({ selectedClinic, selectedWeeks, weekSchedule
     if (!clinicData || !debriefs.length) return []
 
     const studentIds = new Set(clinicData.students.map((s) => s.student_id))
+    console.log("[v0] filteredDebriefs - studentIds count:", studentIds.size, "debriefs count:", debriefs.length)
+    console.log("[v0] filteredDebriefs - sample studentIds:", Array.from(studentIds).slice(0, 3))
+    console.log("[v0] filteredDebriefs - sample debrief studentIds:", debriefs.slice(0, 3).map((d) => d.student_id || d.studentId))
 
-    return debriefs.filter((d) => {
+    const result = debriefs.filter((d) => {
       const studentId = d.student_id || d.studentId
       return studentIds.has(studentId)
     })
+    console.log("[v0] filteredDebriefs - result count:", result.length)
+    return result
   }, [clinicData, debriefs])
 
   const activityMetrics = useMemo(() => {
@@ -269,9 +278,15 @@ export default function ClinicView({ selectedClinic, selectedWeeks, weekSchedule
       }
     }
 
-    const weekFilteredDebriefs = filteredDebriefs.filter((d) =>
-      matchesSelectedWeek(d.week_ending || d.weekEnding, selectedWeeks),
-    )
+    const weekFilteredDebriefs = filteredDebriefs.filter((d) => {
+      const weekEnding = d.week_ending || d.weekEnding
+      const matches = matchesSelectedWeek(weekEnding, selectedWeeks)
+      if (!matches && filteredDebriefs.indexOf(d) < 3) {
+        console.log("[v0] activityMetrics - debrief NOT matching week:", weekEnding, "selectedWeeks:", selectedWeeks, "weekSchedule:", weekSchedule.slice(0, 3).map(s => ({ start: s.weekStart, end: s.weekEnd })))
+      }
+      return matches
+    })
+    console.log("[v0] activityMetrics - weekFilteredDebriefs:", weekFilteredDebriefs.length, "from", filteredDebriefs.length)
 
     let totalHours = 0
     const activeStudentIds = new Set<string>()
@@ -1223,4 +1238,4 @@ export default function ClinicView({ selectedClinic, selectedWeeks, weekSchedule
 }
 
 
-// export default ClinicView // Removed to fix duplicate default export error
+export { ClinicView }

@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     try {
       supabase = createServiceClient()
     } catch (credError) {
-      console.log("[v0] Supabase service client error:", credError)
+      console.error("Supabase service client error:", credError)
       return NextResponse.json({ debriefs: [], error: "Database not configured" })
     }
 
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
     const { data: debriefs, error } = await query
 
     if (error) {
-      console.log("[v0] Supabase debriefs error:", error.message)
+      console.error("Supabase debriefs error:", error.message)
       return NextResponse.json({ debriefs: [] })
     }
 
@@ -63,7 +63,7 @@ export async function GET(request: Request) {
       .select("id, email, full_name, clinic_id, clinic")
 
     if (studentsError) {
-      console.log("[v0] Error fetching students_current:", studentsError.message)
+      console.error("Error fetching students_current:", studentsError.message)
     }
 
     const studentMap = new Map<string, any>()
@@ -112,7 +112,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(response)
   } catch (error) {
-    console.log("[v0] Error fetching debriefs:", error)
+    console.error("Error fetching debriefs:", error)
     return NextResponse.json({ debriefs: [] })
   }
 }

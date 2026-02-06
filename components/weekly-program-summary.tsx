@@ -176,6 +176,10 @@ export function WeeklyProgramSummary({
         setClientTeamMembers(teamMap)
 
         const allDebriefs = debriefData.debriefs || []
+        console.log("[v0] WeeklyProgramSummary - total debriefs:", allDebriefs.length, "normalizedWeeks:", normalizedWeeks, "weekSchedule:", weekSchedule.slice(0, 3).map(s => ({ start: s.weekStart, end: s.weekEnd })))
+        if (allDebriefs.length > 0) {
+          console.log("[v0] WeeklyProgramSummary - sample debrief weekEnding:", allDebriefs[0].weekEnding || allDebriefs[0].week_ending, "clientName:", allDebriefs[0].clientName || allDebriefs[0].client_name)
+        }
         const filteredRecords = allDebriefs.filter((record: any) => {
           const weekEnding = record.week_ending || record.weekEnding
           const clientName = record.client_name || record.clientName
@@ -214,6 +218,7 @@ export function WeeklyProgramSummary({
           return matchesWeek && matchesDirector
         })
 
+        console.log("[v0] WeeklyProgramSummary - filteredRecords:", filteredRecords.length)
         const entries: WorkEntry[] = filteredRecords.map((record: any) => ({
           student: "",
           client: record.client_name || record.clientName || "Unknown",
@@ -251,7 +256,7 @@ export function WeeklyProgramSummary({
     }
 
     fetchData()
-  }, [selectedWeek, selectedWeeks, selectedClinic, directorId, normalizedWeeks])
+  }, [selectedWeek, selectedWeeks, selectedClinic, directorId, normalizedWeeks, weekSchedule])
 
   function getWeekEnding(date: Date): string {
     const day = date.getDay()
