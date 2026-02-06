@@ -8,7 +8,7 @@ import { getClinicColor } from "@/lib/clinic-colors"
 
 interface Activity {
   id: string
-  type: "debrief" | "attendance" | "meeting_request" | "agenda_published" | "attendance_approved" | "attendance_ready"
+  type: "debrief" | "debrief_submitted" | "debrief_question" | "attendance" | "meeting_request" | "agenda_published" | "announcement" | "attendance_approved" | "attendance_ready" | "attendance_open"
   student: string
   title: string
   message: string
@@ -26,16 +26,21 @@ interface RecentActivityProps {
 const getActivityIcon = (type: string) => {
   switch (type) {
     case "debrief":
+    case "debrief_submitted":
       return FileText
+    case "debrief_question":
+      return Clock
     case "attendance":
       return CalendarCheck
     case "meeting_request":
       return Users
     case "agenda_published":
+    case "announcement":
       return Calendar
     case "attendance_approved":
       return CheckCircle
     case "attendance_ready":
+    case "attendance_open":
       return Bell
     default:
       return Clock
@@ -45,16 +50,21 @@ const getActivityIcon = (type: string) => {
 const getActivityColor = (type: string) => {
   switch (type) {
     case "debrief":
+    case "debrief_submitted":
       return "bg-blue-500/20 border-blue-300 text-blue-700"
+    case "debrief_question":
+      return "bg-orange-500/20 border-orange-300 text-orange-700"
     case "attendance":
       return "bg-green-500/20 border-green-300 text-green-700"
     case "meeting_request":
       return "bg-purple-500/20 border-purple-300 text-purple-700"
     case "agenda_published":
+    case "announcement":
       return "bg-amber-500/20 border-amber-300 text-amber-700"
     case "attendance_approved":
       return "bg-teal-500/20 border-teal-300 text-teal-700"
     case "attendance_ready":
+    case "attendance_open":
       return "bg-orange-500/20 border-orange-300 text-orange-700"
     default:
       return "bg-gray-500/20 border-gray-300 text-gray-700"

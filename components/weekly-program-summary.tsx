@@ -14,11 +14,17 @@ interface WorkEntry {
   dateSubmitted: string
 }
 
+interface WeekScheduleInfo {
+  weekStart: string
+  weekEnd: string
+}
+
 interface WeeklyProgramSummaryProps {
   selectedWeek?: string
   selectedWeeks?: string[]
   selectedClinic: string
   directorId?: string
+  weekSchedule?: WeekScheduleInfo[]
 }
 
 // Helper functions for sequential fetching with retry
@@ -67,6 +73,7 @@ export function WeeklyProgramSummary({
   selectedWeeks = [],
   selectedClinic,
   directorId,
+  weekSchedule = [],
 }: WeeklyProgramSummaryProps) {
   const [workEntries, setWorkEntries] = useState<WorkEntry[]>([])
   const [clientSummaries, setClientSummaries] = useState<Map<string, string>>(new Map())
@@ -169,15 +176,38 @@ export function WeeklyProgramSummary({
         setClientTeamMembers(teamMap)
 
         const allDebriefs = debriefData.debriefs || []
+        console.log("[v0] WeeklyProgramSummary - total debriefs:", allDebriefs.length, "normalizedWeeks:", normalizedWeeks, "weekSchedule:", weekSchedule.slice(0, 3).map(s => ({ start: s.weekStart, end: s.weekEnd })))
+        if (allDebriefs.length > 0) {
+          console.log("[v0] WeeklyProgramSummary - sample debrief weekEnding:", allDebriefs[0].weekEnding || allDebriefs[0].week_ending, "clientName:", allDebriefs[0].clientName || allDebriefs[0].client_name)
+        }
         const filteredRecords = allDebriefs.filter((record: any) => {
           const weekEnding = record.week_ending || record.weekEnding
           const clientName = record.client_name || record.clientName
 
           if (!weekEnding) return false
 
-          const normalizeDate = (d: string) => (d ? new Date(d).toISOString().split("T")[0] : "")
+          // Range-based week matching: selectedWeeks contains week_start dates
+          // We need to check if the debrief's week_ending falls within any selected week's range
           const matchesWeek =
-            normalizedWeeks.length === 0 || normalizedWeeks.some((w) => normalizeDate(weekEnding) === normalizeDate(w))
+            normalizedWeeks.length === 0 ||
+            normalizedWeeks.some((weekStartValue) => {
+              // Find the schedule entry for this week to get the actual range
+              const scheduleEntry = weekSchedule.find((s) => s.weekStart === weekStartValue)
+              if (scheduleEntry) {
+                const start = new Date(scheduleEntry.weekStart)
+                const end = new Date(scheduleEntry.weekEnd)
+                start.setHours(0, 0, 0, 0)
+                end.setHours(23, 59, 59, 999)
+                const debriefDate = new Date(weekEnding)
+                return debriefDate >= start && debriefDate <= end
+              }
+              // Fallback: if no schedule, assume week is 7 days from start
+              const start = new Date(weekStartValue)
+              const end = new Date(weekStartValue)
+              end.setDate(end.getDate() + 6)
+              const debriefDate = new Date(weekEnding)
+              return debriefDate >= start && debriefDate <= end
+            })
 
           const matchesDirector =
             !directorId ||
@@ -188,6 +218,7 @@ export function WeeklyProgramSummary({
           return matchesWeek && matchesDirector
         })
 
+        console.log("[v0] WeeklyProgramSummary - filteredRecords:", filteredRecords.length)
         const entries: WorkEntry[] = filteredRecords.map((record: any) => ({
           student: "",
           client: record.client_name || record.clientName || "Unknown",
@@ -225,7 +256,7 @@ export function WeeklyProgramSummary({
     }
 
     fetchData()
-  }, [selectedWeek, selectedWeeks, selectedClinic, directorId, normalizedWeeks])
+  }, [selectedWeek, selectedWeeks, selectedClinic, directorId, normalizedWeeks, weekSchedule])
 
   function getWeekEnding(date: Date): string {
     const day = date.getDay()

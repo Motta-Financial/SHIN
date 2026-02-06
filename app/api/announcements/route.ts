@@ -102,6 +102,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: announcementError.message }, { status: 500 })
     }
 
+    // Create notifications for students when announcement targets them
+    if (!targetAudience || targetAudience === "students") {
+      try {
+        // Get all active students for the current semester
+        const { data: students } = await supabaseAdmin
+          .from("students_current")
+          .select("id, full_name, email, clinic_id")
+
+        if (students && students.length > 0) {
+          // Filter by clinic if announcement is clinic-specific
+          const targetStudents = clinicId
+            ? students.filter((s) => s.clinic_id === clinicId)
+            : students
+
+          if (targetStudents.length > 0) {
+            const notifications = targetStudents.map((student) => ({
+              type: "announcement",
+              title: priority === "high" ? `[Important] ${title}` : title,
+              message: content.substring(0, 200) + (content.length > 200 ? "..." : ""),
+              student_id: student.id,
+              student_name: student.full_name,
+              student_email: student.email,
+              clinic_id: student.clinic_id,
+              target_audience: "students",
+              related_id: announcement.id,
+              is_read: false,
+              created_at: new Date().toISOString(),
+            }))
+
+            await supabaseAdmin.from("notifications").insert(notifications)
+          }
+        }
+      } catch (notifError) {
+        // Don't fail the announcement if notifications fail
+        console.error("Error creating announcement notifications:", notifError)
+      }
+    }
+
     // Return the created announcement
     const result = {
       id: announcement.id,

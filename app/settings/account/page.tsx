@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createBrowserClient } from "@supabase/ssr"
+import { createClient as createSupabaseClient } from "@/lib/supabase/client"
 import { useState, useEffect, useRef } from "react"
 import { MainNavigation } from "@/components/main-navigation"
 import { getErrorMessage, isAuthError } from "@/lib/error-handler"
@@ -93,7 +93,7 @@ export default function AccountManagementPage() {
       }
 
       try {
-        const supabase = createClient()
+        const supabase = createSupabaseClient()
 
         const { data: directorData, error: directorError } = await supabase
           .from("directors_current")
@@ -206,10 +206,10 @@ export default function AccountManagementPage() {
           phone: "",
           bio: "",
         })
-} catch (err) {
-  console.error("[v0] Error fetching profile:", err)
-  setError(getErrorMessage(err))
-  } finally {
+      } catch (err) {
+        console.error("[v0] Error fetching profile:", err)
+        setError(getErrorMessage(err))
+      } finally {
         setIsLoading(false)
       }
     }
@@ -252,11 +252,11 @@ export default function AccountManagementPage() {
       setSuccessMessage("Profile updated successfully!")
 
       setTimeout(() => setSuccessMessage(null), 3000)
-} catch (err: any) {
-  console.error("[v0] Error saving profile:", err)
-  setError(getErrorMessage(err))
-  } finally {
-  setIsSaving(false)
+    } catch (err: any) {
+      console.error("[v0] Error saving profile:", err)
+      setError(getErrorMessage(err))
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -298,11 +298,11 @@ export default function AccountManagementPage() {
       setSuccessMessage("Profile photo updated!")
 
       setTimeout(() => setSuccessMessage(null), 3000)
-} catch (err: any) {
-  console.error("[v0] Error uploading photo:", err)
-  setError(getErrorMessage(err))
-  } finally {
-  setIsUploading(false)
+    } catch (err: any) {
+      console.error("[v0] Error uploading photo:", err)
+      setError(getErrorMessage(err))
+    } finally {
+      setIsUploading(false)
     }
   }
 
@@ -323,11 +323,8 @@ export default function AccountManagementPage() {
     setIsChangingPassword(true)
 
     try {
-      // Create browser Supabase client for direct auth operations
-      const supabase = createBrowserClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      )
+      // Use shared browser Supabase client for direct auth operations
+      const supabase = createClient()
 
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
       console.log("[v0] Password change - Session check:", {
@@ -387,11 +384,11 @@ export default function AccountManagementPage() {
       setShowPasswordSection(false)
 
       setTimeout(() => setPasswordSuccess(null), 5000)
-} catch (err: any) {
-  console.error("[v0] Error changing password:", err)
-  setPasswordError(getErrorMessage(err))
-  } finally {
-  setIsChangingPassword(false)
+    } catch (err: any) {
+      console.error("[v0] Error changing password:", err)
+      setPasswordError(getErrorMessage(err))
+    } finally {
+      setIsChangingPassword(false)
     }
   }
 

@@ -9,7 +9,7 @@ import { Bell, FileText, HelpCircle, Check, X, Users, Calendar, Inbox, ChevronRi
 import { formatDistanceToNow } from "date-fns"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-type NotificationType = "document_upload" | "question" | "meeting_request" | "announcement" | "debrief" | "attendance"
+type NotificationType = "document_upload" | "question" | "meeting_request" | "announcement" | "debrief" | "attendance" | "debrief_submitted" | "debrief_question"
 
 type Notification = {
   id: string
@@ -27,7 +27,7 @@ type Notification = {
   created_at: string
 }
 
-type TabCategory = "all" | "documents" | "questions" | "meetings" | "announcements"
+type TabCategory = "all" | "documents" | "questions" | "meetings" | "debriefs" | "announcements"
 
 interface DirectorNotificationsProps {
   selectedClinic: string
@@ -178,11 +178,15 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
       case "document_upload":
         return <FileText className="h-4 w-4" />
       case "question":
+      case "debrief_question":
         return <HelpCircle className="h-4 w-4" />
       case "meeting_request":
         return <Users className="h-4 w-4" />
       case "announcement":
         return <Calendar className="h-4 w-4" />
+      case "debrief_submitted":
+      case "debrief":
+        return <FileText className="h-4 w-4" />
       default:
         return <Bell className="h-4 w-4" />
     }
@@ -193,11 +197,15 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
       case "document_upload":
         return "bg-blue-100 text-blue-700 border-l-4 border-l-blue-500"
       case "question":
+      case "debrief_question":
         return "bg-orange-100 text-orange-700 border-l-4 border-l-orange-500"
       case "meeting_request":
         return "bg-purple-100 text-purple-700 border-l-4 border-l-purple-500"
       case "announcement":
         return "bg-amber-100 text-amber-700 border-l-4 border-l-amber-500"
+      case "debrief_submitted":
+      case "debrief":
+        return "bg-green-100 text-green-700 border-l-4 border-l-green-500"
       default:
         return "bg-gray-100 text-gray-700 border-l-4 border-l-gray-500"
     }
@@ -208,11 +216,15 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
       case "document_upload":
         return "bg-blue-100 text-blue-700"
       case "question":
+      case "debrief_question":
         return "bg-orange-100 text-orange-700"
       case "meeting_request":
         return "bg-purple-100 text-purple-700"
       case "announcement":
         return "bg-amber-100 text-amber-700"
+      case "debrief_submitted":
+      case "debrief":
+        return "bg-green-100 text-green-700"
       default:
         return "bg-gray-100 text-gray-700"
     }
@@ -224,10 +236,15 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
         return "Documents"
       case "question":
         return "Questions"
+      case "debrief_question":
+        return "Questions"
       case "meeting_request":
         return "Meetings"
       case "announcement":
         return "Announcements"
+      case "debrief_submitted":
+      case "debrief":
+        return "Debriefs"
       default:
         return "Other"
     }
@@ -237,16 +254,18 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
   const filterByCategory = (category: TabCategory) => {
     if (category === "all") return notifications
     if (category === "documents") return notifications.filter((n) => n.type === "document_upload")
-    if (category === "questions") return notifications.filter((n) => n.type === "question")
+    if (category === "questions") return notifications.filter((n) => n.type === "question" || n.type === "debrief_question")
     if (category === "meetings") return notifications.filter((n) => n.type === "meeting_request")
+    if (category === "debriefs") return notifications.filter((n) => n.type === "debrief_submitted" || n.type === "debrief")
     if (category === "announcements") return notifications.filter((n) => n.type === "announcement")
     return notifications
   }
 
   // Count by category
   const documentCount = notifications.filter((n) => n.type === "document_upload").length
-  const questionCount = notifications.filter((n) => n.type === "question").length
+  const questionCount = notifications.filter((n) => n.type === "question" || n.type === "debrief_question").length
   const meetingCount = notifications.filter((n) => n.type === "meeting_request").length
+  const debriefCount = notifications.filter((n) => n.type === "debrief_submitted" || n.type === "debrief").length
   const announcementCount = notifications.filter((n) => n.type === "announcement").length
 
   const unreadCount = notifications.filter((n) => !n.is_read).length
@@ -340,7 +359,7 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
         </CardHeader>
         <CardContent className="space-y-4">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabCategory)} className="w-full">
-            <TabsList className="w-full grid grid-cols-5 bg-stone-200/50">
+            <TabsList className="w-full grid grid-cols-6 bg-stone-200/50">
               <TabsTrigger value="all" className="text-xs data-[state=active]:bg-white">
                 All
                 {notifications.length > 0 && (
@@ -367,12 +386,18 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
                   <Badge className="ml-1 h-4 px-1 text-xs bg-purple-500 text-white">{meetingCount}</Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="announcements" className="text-xs data-[state=active]:bg-white">
-                Updates
-                {announcementCount > 0 && (
-                  <Badge className="ml-1 h-4 px-1 text-xs bg-amber-500 text-white">{announcementCount}</Badge>
-                )}
-              </TabsTrigger>
+ <TabsTrigger value="debriefs" className="text-xs data-[state=active]:bg-white">
+  Debriefs
+  {debriefCount > 0 && (
+  <Badge className="ml-1 h-4 px-1 text-xs bg-green-500 text-white">{debriefCount}</Badge>
+  )}
+  </TabsTrigger>
+  <TabsTrigger value="announcements" className="text-xs data-[state=active]:bg-white">
+  Updates
+  {announcementCount > 0 && (
+  <Badge className="ml-1 h-4 px-1 text-xs bg-amber-500 text-white">{announcementCount}</Badge>
+  )}
+  </TabsTrigger>
             </TabsList>
           </Tabs>
 

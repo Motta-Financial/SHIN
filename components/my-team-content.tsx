@@ -32,12 +32,12 @@ import {
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
-import { createBrowserClient } from "@supabase/ssr"
+import { createClient } from "@/lib/supabase/client"
 import { useUserRole, canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
 import type { ClientEngagement, Deliverable, TeamNote } from "@/types"
 
 function getSupabaseClient() {
-  return createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+  return createClient()
 }
 
 function getDeliverableTypeLabel(type: string | undefined): string {
@@ -227,21 +227,7 @@ export function MyTeamContent() {
         const response = await fetch(`/api/team-workspace?studentId=${studentId}&includeDebriefs=true`)
         const data = await response.json()
 
-        console.log("[v0] Team workspace response - debriefs count:", data.debriefs?.length || 0)
-        console.log(
-          "[v0] Team workspace debriefs:",
-          JSON.stringify(
-            data.debriefs?.slice(0, 3).map((d: any) => ({
-              id: d.id,
-              studentName: d.studentName,
-              workSummary: d.workSummary?.substring(0, 50),
-              clientName: d.clientName,
-            })),
-            null,
-            2,
-          ),
-        )
-        console.log("[v0] Team workspace response - deliverables count:", data.deliverables?.length || 0)
+
 
         if (data.success) {
           setEngagement({

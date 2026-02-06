@@ -46,12 +46,10 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) {
-      console.error("[v0] Student-notifications API - Error:", error.message, error.code)
+      console.error("Student-notifications API error:", error.message)
       return NextResponse.json({ notifications: [] })
     }
 
-    console.log("[v0] Student-notifications API - Found notifications for student", studentId, ":", data?.length || 0)
-    
     const response = { notifications: data || [] }
 
     return NextResponse.json(response)

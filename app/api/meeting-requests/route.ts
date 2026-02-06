@@ -129,6 +129,7 @@ export async function POST(request: NextRequest) {
             student_email: studentEmail,
             clinic_id: clinicData.id,
             director_id: cd.director_id,
+            target_audience: "directors",
             related_id: data.id,
             is_read: false,
             created_at: new Date().toISOString(),

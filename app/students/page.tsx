@@ -833,17 +833,22 @@ export default function StudentPortal() {
       setLoadingTeamSummary(true)
       setTeamSummaryError(null)
       try {
-        // Fetch team data first
-        const teamRes = await fetchWithRetry(`/api/teams?clientId=${currentStudent.clientId}`)
+        // Fetch team data from team-workspace API (the single source of truth for team data)
+        const teamRes = await fetchWithRetry(`/api/team-workspace?studentId=${currentStudentId}&includeDebriefs=true`)
         if (!teamRes.ok) throw new Error(`HTTP error! status: ${teamRes.status}`)
-        const teamData = await safeJsonParse(teamRes, { team: null })
-        setTeamData(teamData.team)
+        const teamData = await safeJsonParse(teamRes, {})
+        setTeamData(teamData)
 
-        // Then fetch the summary for the student's team
-        const summaryRes = await fetchWithRetry(`/api/teams/summary?studentId=${currentStudentId}`)
-        if (!summaryRes.ok) throw new Error(`HTTP error! status: ${summaryRes.status}`)
-        const summaryData = await safeJsonParse(summaryRes, { summary: "" })
-        setTeamSummary(summaryData.summary)
+        // Then try to fetch the cached summary (non-critical, don't fail the whole flow)
+        try {
+          const summaryRes = await fetchWithRetry(`/api/teams/summary?studentId=${currentStudentId}`)
+          if (summaryRes.ok) {
+            const summaryData = await safeJsonParse(summaryRes, { summary: "" })
+            setTeamSummary(summaryData.summary)
+          }
+        } catch {
+          // Summary is optional - team data already loaded above
+        }
       } catch (error: any) {
         console.error("Error fetching team data or summary:", error)
         setTeamSummaryError(error.message || "Failed to load team information.")
@@ -2046,8 +2051,9 @@ export default function StudentPortal() {
                           {teamData?.debriefs?.filter((d: any) => {
                             const now = new Date()
                             const startOfWeek = new Date(now)
-                            startOfWeek.setDate(now.getDay())
-                            const debriefDate = new Date(d.created_at || d.date)
+                            startOfWeek.setDate(now.getDate() - now.getDay())
+                            startOfWeek.setHours(0, 0, 0, 0)
+                            const debriefDate = new Date(d.createdAt || d.created_at || d.date)
                             return debriefDate >= startOfWeek
                           }).length || 0}{" "}
                           submitted
@@ -2198,7 +2204,27 @@ export default function StudentPortal() {
                           variant="outline"
                           size="sm"
                           className="h-auto py-2 flex flex-col items-center gap-1 bg-blue-50/50 border-blue-200 hover:bg-blue-100 text-xs"
-                          onClick={() => setShowDebriefDialog(true)}
+                          onClick={() => {
+                            // Auto-select the current week for debrief
+                            const currentWeek = semesterSchedule.find((w) => {
+                              const start = new Date(w.week_start)
+                              const end = new Date(w.week_end)
+                              const now = new Date()
+                              return start <= now && end >= now && !w.is_break
+                            })
+                            if (currentWeek) {
+                              setSelectedWeekForDebrief(currentWeek.id)
+                              const existingDebrief = debriefs.find(
+                                (d) => d.weekNumber === Number(currentWeek.week_number),
+                              )
+                              setDebriefForm({
+                                hoursWorked: existingDebrief?.hoursWorked?.toString() || "",
+                                workSummary: existingDebrief?.workSummary || "",
+                                questions: existingDebrief?.questions || "",
+                              })
+                            }
+                            setShowDebriefDialog(true)
+                          }}
                         >
                           <FileText className="h-4 w-4 text-blue-600" />
                           <span className="font-medium">Debrief</span>
@@ -2470,107 +2496,40 @@ export default function StudentPortal() {
                                         )}
 
                                         {/* Debrief Status/Button */}
-                                        <Dialog open={showDebriefDialog} onOpenChange={setShowDebriefDialog}>
-                                          <DialogTrigger asChild>
-                                            <Button
-                                              variant="outline"
-                                              size="sm"
-                                              className={`text-xs h-8 ${hasDebrief ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100" : isPast ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100" : ""}`}
-                                              onClick={() => {
-                                                setSelectedWeekForDebrief(week.id)
-                                                setDebriefForm({
-                                                  hoursWorked: weekDebrief?.hoursWorked?.toString() || "",
-                                                  workSummary: weekDebrief?.workSummary || "",
-                                                  questions: weekDebrief?.questions || "",
-                                                })
-                                              }}
-                                              disabled={!isCurrent && isPast && hasDebrief}
-                                            >
-                                              {hasDebrief ? (
-                                                weekDebrief?.status === "reviewed" ? (
-                                                  <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
-                                                ) : (
-                                                  <Clock className="h-4 w-4 mr-2 text-amber-600" />
-                                                )
-                                              ) : isPast ? (
-                                                <AlertCircle className="h-4 w-4 mr-2 text-red-500" />
-                                              ) : (
-                                                <FileText className="h-4 w-4 mr-2 text-blue-600" />
-                                              )}
-                                              {hasDebrief
-                                                ? weekDebrief?.status === "reviewed"
-                                                  ? "Debrief Reviewed"
-                                                  : "Debrief Pending"
-                                                : isPast
-                                                  ? "Missing Debrief"
-                                                  : "Submit Debrief"}
-                                            </Button>
-                                          </DialogTrigger>
-                                          <DialogContent className="sm:max-w-[500px]">
-                                            <DialogHeader>
-                                              <DialogTitle>Weekly Debrief</DialogTitle>
-                                              <DialogDescription>
-                                                Please complete your debrief for Week {week.week_number}.
-                                              </DialogDescription>
-                                            </DialogHeader>
-                                            <div className="grid gap-4 py-4">
-                                              <div className="grid grid-cols-4 items-center gap-4">
-                                                <Label htmlFor="hoursWorked" className="text-right">
-                                                  Hours Worked
-                                                </Label>
-                                                <Input
-                                                  id="hoursWorked"
-                                                  type="number"
-                                                  className="col-span-3"
-                                                  value={debriefForm.hoursWorked}
-                                                  onChange={(e) =>
-                                                    setDebriefForm({ ...debriefForm, hoursWorked: e.target.value })
-                                                  }
-                                                  placeholder="e.g., 5.5"
-                                                  min="0"
-                                                  step="0.5"
-                                                />
-                                              </div>
-                                              <div className="grid grid-cols-4 items-center gap-4">
-                                                <Label htmlFor="workSummary" className="text-right">
-                                                  Work Summary
-                                                </Label>
-                                                <Textarea
-                                                  id="workSummary"
-                                                  className="col-span-3 h-32 resize-none"
-                                                  value={debriefForm.workSummary}
-                                                  onChange={(e) =>
-                                                    setDebriefForm({ ...debriefForm, workSummary: e.target.value })
-                                                  }
-                                                  placeholder="Summarize your work this week..."
-                                                />
-                                              </div>
-                                              <div className="grid grid-cols-4 items-center gap-4">
-                                                <Label htmlFor="questions" className="text-right">
-                                                  Questions
-                                                </Label>
-                                                <Textarea
-                                                  id="questions"
-                                                  className="col-span-3 h-24 resize-none"
-                                                  value={debriefForm.questions}
-                                                  onChange={(e) =>
-                                                    setDebriefForm({ ...debriefForm, questions: e.target.value })
-                                                  }
-                                                  placeholder="Any questions for the instructor?"
-                                                />
-                                              </div>
-                                            </div>
-                                            <DialogFooter>
-                                              <Button
-                                                type="submit"
-                                                onClick={handleSubmitDebrief}
-                                                disabled={submittingDebrief}
-                                              >
-                                                {submittingDebrief ? "Submitting..." : "Submit Debrief"}
-                                              </Button>
-                                            </DialogFooter>
-                                          </DialogContent>
-                                        </Dialog>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className={`text-xs h-8 ${hasDebrief ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100" : isPast ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100" : ""}`}
+                                          onClick={() => {
+                                            setSelectedWeekForDebrief(week.id)
+                                            setDebriefForm({
+                                              hoursWorked: weekDebrief?.hoursWorked?.toString() || "",
+                                              workSummary: weekDebrief?.workSummary || "",
+                                              questions: weekDebrief?.questions || "",
+                                            })
+                                            setShowDebriefDialog(true)
+                                          }}
+                                          disabled={!isCurrent && isPast && hasDebrief}
+                                        >
+                                          {hasDebrief ? (
+                                            weekDebrief?.status === "reviewed" ? (
+                                              <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
+                                            ) : (
+                                              <Clock className="h-4 w-4 mr-2 text-amber-600" />
+                                            )
+                                          ) : isPast ? (
+                                            <AlertCircle className="h-4 w-4 mr-2 text-red-500" />
+                                          ) : (
+                                            <FileText className="h-4 w-4 mr-2 text-blue-600" />
+                                          )}
+                                          {hasDebrief
+                                            ? weekDebrief?.status === "reviewed"
+                                              ? "Debrief Reviewed"
+                                              : "Debrief Pending"
+                                            : isPast
+                                              ? "Missing Debrief"
+                                              : "Submit Debrief"}
+                                        </Button>
                                       </>
                                     )}
 
@@ -2764,6 +2723,65 @@ export default function StudentPortal() {
           </Tabs>
         </div>
       </div>
+
+      {/* Standalone Debrief Dialog - rendered once outside the loop */}
+      <Dialog open={showDebriefDialog} onOpenChange={setShowDebriefDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Weekly Debrief</DialogTitle>
+            <DialogDescription>
+              Please complete your debrief for Week{" "}
+              {semesterSchedule.find((w) => w.id === selectedWeekForDebrief)?.week_number || ""}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="debrief-hoursWorked" className="text-right">
+                Hours Worked
+              </Label>
+              <Input
+                id="debrief-hoursWorked"
+                type="number"
+                className="col-span-3"
+                value={debriefForm.hoursWorked}
+                onChange={(e) => setDebriefForm({ ...debriefForm, hoursWorked: e.target.value })}
+                placeholder="e.g., 5.5"
+                min="0"
+                step="0.5"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="debrief-workSummary" className="text-right">
+                Work Summary
+              </Label>
+              <Textarea
+                id="debrief-workSummary"
+                className="col-span-3 h-32 resize-none"
+                value={debriefForm.workSummary}
+                onChange={(e) => setDebriefForm({ ...debriefForm, workSummary: e.target.value })}
+                placeholder="Summarize your work this week..."
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="debrief-questions" className="text-right">
+                Questions
+              </Label>
+              <Textarea
+                id="debrief-questions"
+                className="col-span-3 h-24 resize-none"
+                value={debriefForm.questions}
+                onChange={(e) => setDebriefForm({ ...debriefForm, questions: e.target.value })}
+                placeholder="Any questions for the instructor?"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="submit" onClick={handleSubmitDebrief} disabled={submittingDebrief}>
+              {submittingDebrief ? "Submitting..." : "Submit Debrief"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
