@@ -125,6 +125,63 @@ export async function POST(request: Request) {
       })
     }
 
+    // Fallback: check base tables directly (in case *_current views have semester issues)
+    const { data: directorBase } = await queryWithRetry(() =>
+      supabaseAdmin
+        .from("directors")
+        .select("id, email, role, full_name, clinic_id")
+        .ilike("email", normalizedEmail)
+        .limit(1)
+        .maybeSingle()
+    )
+    if (directorBase) {
+      return NextResponse.json({
+        role: "director",
+        userId: directorBase.id,
+        userRole: directorBase.role,
+        userName: directorBase.full_name,
+        clinicId: directorBase.clinic_id,
+        redirect: "/director",
+      })
+    }
+
+    const { data: studentBase } = await queryWithRetry(() =>
+      supabaseAdmin
+        .from("students")
+        .select("id, email, full_name, clinic, clinic_id, client_id")
+        .ilike("email", normalizedEmail)
+        .limit(1)
+        .maybeSingle()
+    )
+    if (studentBase) {
+      return NextResponse.json({
+        role: "student",
+        userId: studentBase.id,
+        userName: studentBase.full_name,
+        clinic: studentBase.clinic,
+        clinicId: studentBase.clinic_id,
+        clientId: studentBase.client_id,
+        redirect: "/students",
+      })
+    }
+
+    const { data: clientBase } = await queryWithRetry(() =>
+      supabaseAdmin
+        .from("clients")
+        .select("id, name, email")
+        .ilike("email", normalizedEmail)
+        .limit(1)
+        .maybeSingle()
+    )
+    if (clientBase) {
+      return NextResponse.json({
+        role: "client",
+        userId: clientBase.id,
+        userName: clientBase.name,
+        redirect: "/client-portal",
+      })
+    }
+
     return NextResponse.json(
       {
         role: null,
