@@ -51,6 +51,7 @@ export function OrgChart() {
   const [clients, setClients] = useState<Client[]>([])
   const [selectedClinic, setSelectedClinic] = useState<string>("all")
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [expandedClinics, setExpandedClinics] = useState<Set<string>>(new Set())
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set())
 
@@ -90,17 +91,13 @@ export function OrgChart() {
 
   const fetchOrgData = async () => {
     setLoading(true)
+    setError(null)
     try {
       const response = await fetchWithRetry("/api/org-chart")
       if (!response.ok) {
         throw new Error("Failed to fetch org chart data")
       }
       const data = await response.json()
-
-      console.log("[v0] Fetched clinics:", data.clinics?.length)
-      console.log("[v0] Fetched directors:", data.directors?.length)
-      console.log("[v0] Fetched students:", data.students?.length)
-      console.log("[v0] Fetched clients:", data.clients?.length)
 
       setClinics(data.clinics || [])
       setDirectors(data.directors || [])
@@ -109,8 +106,9 @@ export function OrgChart() {
 
       // Expand all clinics by default
       setExpandedClinics(new Set((data.clinics || []).map((c: Clinic) => c.id)))
-    } catch (error) {
-      console.error("[v0] Error fetching org data:", error)
+    } catch (err) {
+      console.error("[v0] Error fetching org data:", err)
+      setError(err instanceof Error ? err.message : "Failed to load org chart data")
     } finally {
       setLoading(false)
     }
@@ -199,6 +197,35 @@ export function OrgChart() {
     )
   }
 
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Building2 className="h-5 w-5" />
+            SEED Organizational Chart
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+              <span className="text-destructive text-xl font-bold">!</span>
+            </div>
+            <h3 className="font-semibold text-lg mb-1">Error Loading Data</h3>
+            <p className="text-sm text-muted-foreground mb-4">{error}</p>
+            <button
+              type="button"
+              onClick={() => fetchOrgData()}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -235,6 +262,17 @@ export function OrgChart() {
 
         {/* Clinics */}
         <div className="grid gap-4">
+          {filteredClinics.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Building2 className="h-10 w-10 text-muted-foreground/50 mb-3" />
+              <p className="text-sm text-muted-foreground">No clinics found</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">
+                {clinics.length === 0
+                  ? "No clinic data is available yet."
+                  : "Try changing the clinic filter above."}
+              </p>
+            </div>
+          )}
           {filteredClinics.map((clinic) => {
             const clinicData = getClinicData(clinic)
             const totalStudents = students.filter((s) => s.clinic_id === clinic.id).length

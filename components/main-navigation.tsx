@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
@@ -24,6 +24,7 @@ import { useUserRole } from "@/hooks/use-user-role"
 
 export function MainNavigation() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { role } = useUserRole()
 
   // For role-neutral routes (like /settings), use the authenticated user's role
@@ -130,19 +131,22 @@ export function MainNavigation() {
             const hasQuery = item.href.includes("?")
             let isActive: boolean
 
-            const currentSearch = typeof window !== "undefined" ? window.location.search : ""
+            const currentTab = searchParams.get("tab") || ""
 
             if (hasQuery) {
               // Query-param nav items (e.g. /client-portal?tab=team):
-              // Only active when both path AND query string match exactly
-              const expectedQuery = item.href.split("?")[1]
-              isActive = pathname === hrefBase && currentSearch === `?${expectedQuery}`
+              // Only active when both path AND query param match
+              const expectedParams = new URLSearchParams(item.href.split("?")[1])
+              const expectedTab = expectedParams.get("tab") || ""
+              isActive = pathname === hrefBase && currentTab === expectedTab
             } else {
               // Check if other sibling items use query params on the same base path
-              const siblingsUseQuery = navItems.some((ni) => ni !== item && ni.href.includes("?") && ni.href.split("?")[0] === hrefBase)
+              const siblingsUseQuery = navItems.some(
+                (ni) => ni !== item && ni.href.includes("?") && ni.href.split("?")[0] === hrefBase,
+              )
               if (siblingsUseQuery) {
                 // Only active when path matches AND no tab query param is present
-                isActive = pathname === item.href && (!currentSearch || currentSearch === "" || currentSearch === "?")
+                isActive = pathname === item.href && !currentTab
               } else {
                 // Standard nav items: exact match or prefix match (but not for root "/")
                 isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(hrefBase + "/"))

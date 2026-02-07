@@ -12,10 +12,10 @@ export default function RosterPage() {
       </aside>
 
       <div className="pl-52 pt-14">
-        <main className="p-4 space-y-4">
-          <div className="flex items-center gap-2">
+        <main className="p-6 space-y-6">
+          <div className="flex items-center gap-3">
             <Badge className="bg-primary text-primary-foreground">Roster</Badge>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-sm text-muted-foreground">
               View SEED program organizational structure and team assignments
             </span>
           </div>
