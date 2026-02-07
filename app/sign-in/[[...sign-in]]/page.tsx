@@ -45,29 +45,19 @@ export default function SignInPage() {
         return
       }
 
-      // Detect role directly from sign-in page while we still have the session in memory.
-      // We cannot rely on cookies persisting across client-side navigation in the v0 runtime,
-      // so we call detect-role here and redirect with a full page navigation.
+      // Detect role and redirect - single attempt, no retries for speed
       const userEmail = data.user.email
       try {
+        const roleRes = await fetch("/api/auth/detect-role", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: userEmail }),
+        })
+        const roleText = await roleRes.text()
         let roleData: any = null
-        // Retry detect-role up to 3 times to handle Supabase rate limits
-        for (let attempt = 0; attempt < 3; attempt++) {
-          if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 2000))
-          const roleRes = await fetch("/api/auth/detect-role", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: userEmail }),
-          })
-          try {
-            roleData = await roleRes.json()
-            if (roleData.role) break
-          } catch {
-            if (attempt < 2) continue
-          }
-        }
+        try { roleData = JSON.parse(roleText) } catch {}
 
-        // Cache the role data in sessionStorage so useUserRole can skip Supabase queries
+        // Cache the role data in sessionStorage so useUserRole reads it instantly
         if (roleData?.role) {
           try {
             sessionStorage.setItem("shin_role_cache", JSON.stringify({
@@ -85,18 +75,19 @@ export default function SignInPage() {
           } catch {}
         }
 
+        // Use router.push for instant client-side navigation (no blank screen)
+        // The sessionStorage cache ensures useUserRole resolves immediately
         if (roleData?.role === "director") {
-          window.location.href = "/director"
+          router.push("/director")
         } else if (roleData?.role === "student") {
-          window.location.href = "/students"
+          router.push("/students")
         } else if (roleData?.role === "client") {
-          window.location.href = "/client-portal"
+          router.push("/client-portal")
         } else {
-          window.location.href = "/auth/loading"
+          router.push("/auth/loading")
         }
       } catch {
-        // Fallback: use full page navigation to auth/loading which will trigger middleware cookie sync
-        window.location.href = "/auth/loading"
+        router.push("/auth/loading")
       }
     } catch (err) {
       console.error("SignIn - Error:", err)

@@ -10,8 +10,9 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/sign-in") ||
     pathname.startsWith("/auth/")
 
+  const { NextResponse: NR } = await import("next/server")
   const response = skipSessionRefresh
-    ? new (await import("next/server")).NextResponse()
+    ? NR.next({ request: { headers: request.headers } })
     : await updateSession(request)
 
   // Add security headers

@@ -108,18 +108,6 @@ async function fetchWithRetry(url: string, maxRetries = 2): Promise<Response> {
   return emptyJson()
 }
 
-async function fetchSequentially(urls: string[]): Promise<Response[]> {
-  const results: Response[] = []
-  for (let i = 0; i < urls.length; i++) {
-    if (i > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 600))
-    }
-    const res = await fetchWithRetry(urls[i], 2)
-    results.push(res)
-  }
-  return results
-}
-
 async function safeJsonParse<T>(response: Response, defaultValue: T): Promise<T> {
   try {
     const text = await response.text()
@@ -521,12 +509,8 @@ export default function StudentPortal() {
       return
     }
 
-    // Authenticated but role is null - role lookup failed (rate limit etc.)
-    // Redirect to auth/loading which has its own robust role detection
-    if (role === null) {
-      router.push("/auth/loading")
-      return
-    }
+  // Don't redirect when role is null - it may still be resolving or rate-limited
+  // The user IS authenticated, so keep them here
 
     // Authenticated with a role that can't access student portal (e.g., client)
     if (!canAccessPortal(role, "student")) {

@@ -356,14 +356,10 @@ export default function DirectorDashboard() {
   useEffect(() => {
   if (roleLoading) return
   if (!isDemoMode && !isAuthenticated) {
-  router.push("/login")
+  router.push("/sign-in")
   return
   }
-  // Authenticated but role lookup failed - use auth/loading for robust detection
-  if (isAuthenticated && role === null && !isDemoMode) {
-  router.push("/auth/loading")
-  return
-  }
+  // Only redirect if role is definitively wrong (not null - null means still resolving or rate-limited)
   if (isAuthenticated && role && !canAccessPortal(role, "director")) {
   router.push(getDefaultPortal(role))
   }

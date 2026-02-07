@@ -24,7 +24,7 @@ let globalAuthCache: UserRoleData | null = null
 let globalAuthPromise: Promise<UserRoleData> | null = null
 let cacheTimestamp = 0
 let lastAuthEmail: string | null = null // Track the email to detect user changes
-const CACHE_TTL = 30000
+const CACHE_TTL = 300000 // 5 minutes - prevents rate limit issues from constant re-fetching
 
 async function fetchUserRoleOnce(supabase: ReturnType<typeof createClient>, user: { id: string; email?: string }): Promise<UserRoleData> {
   const userEmail = user.email || ""
@@ -148,8 +148,8 @@ async function fetchUserRole(): Promise<UserRoleData> {
       const cached = sessionStorage.getItem("shin_role_cache")
       if (cached) {
         const parsed = JSON.parse(cached)
-        // Only use cache if it's fresh (< 60 seconds) and matches the current user
-        if (parsed.authUserId === user.id && Date.now() - parsed.timestamp < 60000 && parsed.role) {
+        // Use cache for the entire session (5 minutes) to avoid Supabase rate limits
+        if (parsed.authUserId === user.id && Date.now() - parsed.timestamp < 300000 && parsed.role) {
           return {
             role: parsed.role as UserRole,
             userId: parsed.userId,
