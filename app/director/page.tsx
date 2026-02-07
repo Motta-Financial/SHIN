@@ -137,42 +137,29 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
       return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } })
     }
 
-    const mappingUrl =
-      selectedDirectorId && selectedDirectorId !== "all"
-        ? `/api/supabase/v-complete-mapping?directorId=${selectedDirectorId}`
-        : "/api/supabase/v-complete-mapping"
+    // Use *_current views (source of truth) instead of v_complete_mapping
+    const studentsUrl = selectedDirectorId && selectedDirectorId !== "all"
+      ? `/api/supabase/students?directorId=${selectedDirectorId}`
+      : "/api/supabase/students"
 
-    // Fetch all students to get total student count
-    const allStudentsRes = await fetchWithRetry("/api/supabase/students")
+    const [allStudentsRes, debriefsRes, clientsRes] = await Promise.all([
+      fetchWithRetry(studentsUrl),
+      fetchWithRetry("/api/supabase/debriefs"),
+      fetchWithRetry("/api/supabase/clients"),
+    ])
+
     const allStudentsData = await allStudentsRes.json()
-    const totalStudents = allStudentsData.students ? allStudentsData.students.length : 0
-
-    // Fetch sequentially with delays to avoid rate limiting
-    await new Promise((resolve) => setTimeout(resolve, 200))
-    const debriefsRes = await fetchWithRetry("/api/supabase/debriefs")
     const debriefsData = await debriefsRes.json()
-    
-    await new Promise((resolve) => setTimeout(resolve, 200))
-    const mappingRes = await fetchWithRetry(mappingUrl)
-    const mappingData = await mappingRes.json()
+    const clientsData = await clientsRes.json()
 
-    const mappings = mappingData.data || mappingData.records || mappingData.mappings || []
+    const students = allStudentsData.students || []
+    const totalStudents = students.length
+    const allClients = clientsData.clients || clientsData.records || []
 
-    const directorStudentIds = new Set<string>()
-    const directorClientNames = new Set<string>()
+    const directorStudentIds = new Set<string>(students.map((s: any) => s.id))
+    const directorClientNames = new Set<string>(allClients.map((c: any) => c.name).filter(Boolean))
 
-    // When a specific director is selected, get their clinic's students
-    // When "all" is selected, still track all students in mappings for clinic-level stats
-    mappings.forEach((m: any) => {
-      if (m.student_id) directorStudentIds.add(m.student_id)
-      if (m.client_name) directorClientNames.add(m.client_name)
-    })
-
-    // Count students specific to this director's clinic (unique student IDs from mappings)
-    // For "all directors", this will be all mapped students; for specific director, it's their clinic's students
-    const clinicStudentCount = selectedDirectorId && selectedDirectorId !== "all" 
-      ? directorStudentIds.size 
-      : totalStudents // Use total students when viewing all directors
+    const clinicStudentCount = totalStudents
 
     let totalHours = 0
     const activeStudents = new Set<string>()
