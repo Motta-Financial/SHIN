@@ -19,13 +19,22 @@ export default function AuthLoadingPage() {
       try {
         const supabase = createClient()
 
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+        // Try multiple times to find the session - cookies may take a moment to sync
+        let user = null
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) {
+            await new Promise((r) => setTimeout(r, 1000))
+          }
 
-        let user = sessionData.session?.user
+          const { data: sessionData } = await supabase.auth.getSession()
+          user = sessionData.session?.user
 
-        if (!user) {
-          const { data: userData } = await supabase.auth.getUser()
-          user = userData.user
+          if (!user) {
+            const { data: userData } = await supabase.auth.getUser()
+            user = userData.user
+          }
+
+          if (user) break
         }
 
         if (!user) {
@@ -37,21 +46,40 @@ export default function AuthLoadingPage() {
         clearAuthCache()
 
         const userEmail = user.email
+        
 
-        const response = await fetch("/api/auth/detect-role", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: userEmail }),
-          credentials: "include",
-        })
+        let data: any = null
+        let response: Response | null = null
+        
+        // Retry detect-role up to 3 times in case of rate limiting
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) {
+            setStatus("Retrying... please wait")
+            await new Promise((r) => setTimeout(r, attempt * 3000))
+          }
+          
+          response = await fetch("/api/auth/detect-role", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: userEmail }),
+            credentials: "include",
+          })
 
-        const responseText = await response.text()
+          const responseText = await response.text()
 
-        let data: any
-        try {
-          data = JSON.parse(responseText)
-        } catch (parseError) {
-          console.error("AuthLoading - Failed to parse response")
+          try {
+            data = JSON.parse(responseText)
+            break // Success - exit retry loop
+          } catch (parseError) {
+            // Rate limited or server error - body isn't JSON
+            if (attempt < 2) continue
+            setStatus("Server is busy. Please try again.")
+            setTimeout(() => router.push("/sign-in"), 2000)
+            return
+          }
+        }
+        
+        if (!data || !response) {
           setStatus("Server error. Please try again.")
           setTimeout(() => router.push("/sign-in"), 2000)
           return

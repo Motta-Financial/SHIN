@@ -39,6 +39,10 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) {
+      const msg = error.message || ""
+      if (msg.includes("Too Many R") || msg.includes("rate limit")) {
+        return NextResponse.json({ requests: [] }, { status: 429 })
+      }
       console.error("Error fetching meeting requests:", error.message)
       return NextResponse.json({ requests: [] })
     }
@@ -64,7 +68,11 @@ export async function GET(request: NextRequest) {
     }))
 
     return NextResponse.json({ requests: formattedRequests })
-  } catch (error) {
+  } catch (error: any) {
+    const msg = error?.message || ""
+    if (msg.includes("Too Many R") || msg.includes("Unexpected token") || msg.includes("rate limit")) {
+      return NextResponse.json({ requests: [] }, { status: 429 })
+    }
     console.error("Error in meeting-requests API:", error)
     return NextResponse.json({ requests: [] })
   }

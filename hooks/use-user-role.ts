@@ -26,124 +26,106 @@ let cacheTimestamp = 0
 let lastAuthEmail: string | null = null // Track the email to detect user changes
 const CACHE_TTL = 30000
 
-async function fetchUserRole(): Promise<UserRoleData> {
-  const supabase = createClient()
+async function fetchUserRoleOnce(supabase: ReturnType<typeof createClient>, user: { id: string; email?: string }): Promise<UserRoleData> {
+  const userEmail = user.email || ""
 
-  try {
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser()
+  // Check all three role tables with a small delay between each to avoid rate limits
+  const { data: directorData } = await supabase
+    .from("directors_current")
+    .select("id, email, role, full_name, clinic_id")
+    .ilike("email", userEmail)
+    .maybeSingle()
 
-    if (error || !user) {
-      return {
-        role: null,
-        userId: null,
-        authUserId: null,
-        email: null,
-        fullName: null,
-        clinicId: null,
-        clinicName: null,
-        studentId: null,
-        directorId: null,
-        clientId: null,
-        isLoading: false,
-        isAuthenticated: false,
-      }
-    }
-
-    const userEmail = user.email || ""
-
-    // Check directors table - use directors_current view for current semester
-    const { data: directorData } = await supabase
-      .from("directors_current")
-      .select("id, email, role, full_name, clinic_id")
-      .ilike("email", userEmail)
-      .maybeSingle()
-
-    if (directorData) {
-      return {
-        role: "director",
-        userId: directorData.id,
-        authUserId: user.id,
-        email: user.email || null,
-        fullName: directorData.full_name || null,
-        clinicId: directorData.clinic_id || null,
-        clinicName: null,
-        studentId: null,
-        directorId: directorData.id,
-        clientId: null,
-        isLoading: false,
-        isAuthenticated: true,
-      }
-    }
-
-    // Check students table - use students_current view to get ONLY the current semester's record
-    // This is critical because a student may exist in multiple semesters with different IDs
-    const { data: studentData } = await supabase
-      .from("students_current")
-      .select("id, email, full_name, clinic_id, clinic")
-      .ilike("email", userEmail)
-      .maybeSingle()
-
-    if (studentData) {
-      return {
-        role: "student",
-        userId: studentData.id,
-        authUserId: user.id,
-        email: user.email || null,
-        fullName: studentData.full_name || null,
-        clinicId: studentData.clinic_id || null,
-        clinicName: null,
-        studentId: studentData.id,
-        directorId: null,
-        clientId: null,
-        isLoading: false,
-        isAuthenticated: true,
-      }
-    }
-
-    // Check clients table - use clients_current view for current semester
-    const { data: clientData } = await supabase
-      .from("clients_current")
-      .select("id, name, email")
-      .ilike("email", userEmail)
-      .maybeSingle()
-
-    if (clientData) {
-      return {
-        role: "client",
-        userId: clientData.id,
-        authUserId: user.id,
-        email: user.email || null,
-        fullName: clientData.name || null,
-        clinicId: null,
-        clinicName: null,
-        studentId: null,
-        directorId: null,
-        clientId: clientData.id,
-        isLoading: false,
-        isAuthenticated: true,
-      }
-    }
-
-    // No role found
+  if (directorData) {
     return {
-      role: null,
-      userId: user.id,
+      role: "director",
+      userId: directorData.id,
       authUserId: user.id,
       email: user.email || null,
-      fullName: null,
-      clinicId: null,
+      fullName: directorData.full_name || null,
+      clinicId: directorData.clinic_id || null,
       clinicName: null,
       studentId: null,
-      directorId: null,
+      directorId: directorData.id,
       clientId: null,
       isLoading: false,
       isAuthenticated: true,
     }
-  } catch (error) {
-    console.error("[v0] useUserRole - Error:", error)
+  }
+
+  const { data: studentData } = await supabase
+    .from("students_current")
+    .select("id, email, full_name, clinic_id, clinic, client_id")
+    .ilike("email", userEmail)
+    .maybeSingle()
+
+  if (studentData) {
+    return {
+      role: "student",
+      userId: studentData.id,
+      authUserId: user.id,
+      email: user.email || null,
+      fullName: studentData.full_name || null,
+      clinicId: studentData.clinic_id || null,
+      clinicName: null,
+      studentId: studentData.id,
+      directorId: null,
+      clientId: studentData.client_id || null,
+      isLoading: false,
+      isAuthenticated: true,
+    }
+  }
+
+  const { data: clientData } = await supabase
+    .from("clients_current")
+    .select("id, name, email")
+    .ilike("email", userEmail)
+    .maybeSingle()
+
+  if (clientData) {
+    return {
+      role: "client",
+      userId: clientData.id,
+      authUserId: user.id,
+      email: user.email || null,
+      fullName: clientData.name || null,
+      clinicId: null,
+      clinicName: null,
+      studentId: null,
+      directorId: null,
+      clientId: clientData.id,
+      isLoading: false,
+      isAuthenticated: true,
+    }
+  }
+
+  // No role found
+  return {
+    role: null,
+    userId: user.id,
+    authUserId: user.id,
+    email: user.email || null,
+    fullName: null,
+    clinicId: null,
+    clinicName: null,
+    studentId: null,
+    directorId: null,
+    clientId: null,
+    isLoading: false,
+    isAuthenticated: true,
+  }
+}
+
+async function fetchUserRole(): Promise<UserRoleData> {
+  const supabase = createClient()
+
+  // First, check if user is authenticated (this rarely rate-limits)
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
     return {
       role: null,
       userId: null,
@@ -158,6 +140,52 @@ async function fetchUserRole(): Promise<UserRoleData> {
       isLoading: false,
       isAuthenticated: false,
     }
+  }
+
+  // User IS authenticated. Now try to resolve their role with retries.
+  // Even if role lookup fails, isAuthenticated stays true.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await fetchUserRoleOnce(supabase, user)
+    } catch (error: any) {
+      const msg = (error?.message || "").toLowerCase()
+      const isRateLimit = msg.includes("too many") || msg.includes("rate limit") || msg.includes("unexpected token")
+      if (isRateLimit && attempt < 2) {
+        await new Promise((r) => setTimeout(r, Math.pow(2, attempt + 1) * 2000))
+        continue
+      }
+      console.error("useUserRole - Role lookup failed:", error)
+      // Return authenticated but with null role - prevents redirect to sign-in
+      return {
+        role: null,
+        userId: user.id,
+        authUserId: user.id,
+        email: user.email || null,
+        fullName: null,
+        clinicId: null,
+        clinicName: null,
+        studentId: null,
+        directorId: null,
+        clientId: null,
+        isLoading: false,
+        isAuthenticated: true,
+      }
+    }
+  }
+  // Fallback: authenticated but role unknown
+  return {
+    role: null,
+    userId: user.id,
+    authUserId: user.id,
+    email: user.email || null,
+    fullName: null,
+    clinicId: null,
+    clinicName: null,
+    studentId: null,
+    directorId: null,
+    clientId: null,
+    isLoading: false,
+    isAuthenticated: true,
   }
 }
 
@@ -184,6 +212,11 @@ export function useUserRole(): UserRoleData {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       const sessionEmail = session?.user?.email || null
+
+      // TOKEN_REFRESHED with same user - just use existing cache, don't refetch
+      if (event === "TOKEN_REFRESHED" && lastAuthEmail === sessionEmail && globalAuthCache) {
+        return
+      }
 
       // If auth state changed (sign in, sign out, or different user), clear cache and refetch
       if (

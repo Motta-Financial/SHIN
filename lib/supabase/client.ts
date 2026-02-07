@@ -108,9 +108,6 @@ export function createClient() {
   // Handle auth state changes and start proactive session refresh
   if (typeof window !== "undefined") {
     client.auth.onAuthStateChange((event, session) => {
-      if (event === "TOKEN_REFRESHED" && !session) {
-        clearAuthData()
-      }
       if (event === "SIGNED_OUT") {
         clearAuthData()
         // Stop the refresh interval when signed out
@@ -119,16 +116,13 @@ export function createClient() {
           refreshInterval = undefined
         }
       }
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+      if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session) {
         // Ensure refresh loop is running when a session is active
-        if (session && !refreshInterval) {
+        if (!refreshInterval) {
           startSessionRefresh(client!)
         }
       }
     })
-
-    // Start the proactive session refresh loop immediately
-    startSessionRefresh(client)
   }
 
   return client

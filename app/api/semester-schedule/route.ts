@@ -15,9 +15,15 @@ function isRateLimitError(error: unknown): boolean {
     return (
       err.status === 429 ||
       err.code === "429" ||
-      err.message?.toLowerCase().includes("too many") ||
-      err.message?.toLowerCase().includes("rate limit")
+      (typeof err.message === "string" && (
+        err.message.toLowerCase().includes("too many") ||
+        err.message.toLowerCase().includes("rate limit") ||
+        err.message.includes("Too Many R")
+      ))
     )
+  }
+  if (typeof error === "string") {
+    return error.toLowerCase().includes("too many") || error.toLowerCase().includes("rate limit")
   }
   return false
 }
@@ -50,25 +56,21 @@ export async function GET(request: Request) {
 
     if (!activeSemesterId && !includeAll) {
       if (semester) {
-        const { data: semesterConfig, error: semesterError } = await supabase
+        const { data: semesterConfig } = await supabase
           .from("semester_config")
           .select("id, semester")
           .eq("semester", semester)
           .maybeSingle()
-        console.log("[v0] semester-schedule API - Looking for semester:", semester, "Found:", semesterConfig, "Error:", semesterError)
         activeSemesterId = semesterConfig?.id || null
       } else {
-        const { data: activeSemester, error: activeError } = await supabase
+        const { data: activeSemester } = await supabase
           .from("semester_config")
           .select("id")
           .eq("is_active", true)
           .maybeSingle()
-        console.log("[v0] semester-schedule API - Looking for active semester. Found:", activeSemester, "Error:", activeError)
         activeSemesterId = activeSemester?.id || null
       }
     }
-    
-    console.log("[v0] semester-schedule API - Using activeSemesterId:", activeSemesterId)
 
     const selectFields = includeClassSessions
       ? `*, class_sessions!semester_schedule_class_session_id_fkey(id, class_number, class_label, class_date, class_start_time, class_end_time)`
@@ -81,8 +83,6 @@ export async function GET(request: Request) {
     }
 
     const { data, error } = await query
-    
-    console.log("[v0] semester-schedule API - Query result count:", data?.length, "Error:", error)
 
     if (error) throw error
 

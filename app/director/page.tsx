@@ -180,11 +180,6 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
     let totalDebriefsSubmitted = 0 // Program-wide debriefs (all students)
 
     const allDebriefs = debriefsData.debriefs || []
-    console.log("[v0] getQuickStats - total debriefs:", allDebriefs.length, "selectedWeeks:", selectedWeeks, "director:", selectedDirectorId)
-    if (allDebriefs.length > 0) {
-      console.log("[v0] getQuickStats - sample debrief:", { studentId: allDebriefs[0].studentId, weekEnding: allDebriefs[0].weekEnding, hoursWorked: allDebriefs[0].hoursWorked })
-    }
-    console.log("[v0] getQuickStats - directorStudentIds:", Array.from(directorStudentIds).slice(0, 3), "total:", directorStudentIds.size)
     allDebriefs.forEach((debrief: any) => {
       const weekEnding = debrief.week_ending || debrief.weekEnding
       const studentId = debrief.student_id || debrief.studentId
@@ -359,14 +354,19 @@ export default function DirectorDashboard() {
   }
 
   useEffect(() => {
-    if (roleLoading) return
-    if (!isDemoMode && !isAuthenticated) {
-      router.push("/login")
-      return
-    }
-    if (isAuthenticated && role && !canAccessPortal(role, "director")) {
-      router.push(getDefaultPortal(role))
-    }
+  if (roleLoading) return
+  if (!isDemoMode && !isAuthenticated) {
+  router.push("/login")
+  return
+  }
+  // Authenticated but role lookup failed - use auth/loading for robust detection
+  if (isAuthenticated && role === null && !isDemoMode) {
+  router.push("/auth/loading")
+  return
+  }
+  if (isAuthenticated && role && !canAccessPortal(role, "director")) {
+  router.push(getDefaultPortal(role))
+  }
   }, [role, roleLoading, isAuthenticated, isDemoMode, router])
 
   useEffect(() => {
@@ -443,7 +443,6 @@ export default function DirectorDashboard() {
       try {
         const response = await fetch(`/api/supabase/debriefs?semesterId=${semesterId}`)
         const data = await response.json()
-        console.log("[v0] fetchDebriefsData - response keys:", Object.keys(data), "debriefs count:", data.debriefs?.length || 0)
         if (data.debriefs) {
           const debriefs = data.debriefs
 

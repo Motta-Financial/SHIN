@@ -109,7 +109,7 @@ export default function ClientPortalPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { isDemoMode } = useDemoMode()
-  const { role, email: userEmail, isLoading: roleLoading, isAuthenticated } = useUserRole()
+  const { role, email: userEmail, isLoading: roleLoading, isAuthenticated, clientId: authClientId, studentId: authStudentId } = useUserRole()
 
   const tabFromUrl = searchParams.get("tab") || "overview"
   const [activeTab, setActiveTab] = useState(tabFromUrl)
@@ -149,32 +149,24 @@ export default function ClientPortalPage() {
 
   useEffect(() => {
     if (!roleLoading && !isDemoMode) {
-      console.log("[v0] ClientPortal - Auth state:", { role, isAuthenticated, roleLoading, isDemoMode })
-
       // Directors and admins can always access
-      if (role === "director" || role === "admin") {
-        console.log("[v0] ClientPortal - Director/Admin access granted")
-        return
-      }
+      if (role === "director" || role === "admin") return
       // Students can access client portal
-      if (role === "student") {
-        console.log("[v0] ClientPortal - Student access granted")
-        return
-      }
+      if (role === "student") return
       // Clients can access their own portal
-      if (role === "client") {
-        console.log("[v0] ClientPortal - Client access granted")
-        return
-      }
+      if (role === "client") return
       // Not authenticated - redirect to login
       if (!isAuthenticated) {
-        console.log("[v0] ClientPortal - Not authenticated, redirecting to login")
         router.push("/login")
+        return
+      }
+      // Authenticated but role is null (rate limit etc.) - use auth/loading
+      if (role === null) {
+        router.push("/auth/loading")
         return
       }
       // Authenticated but wrong role - redirect to their portal
       if (!canAccessPortal(role, "client")) {
-        console.log("[v0] ClientPortal - Wrong role, redirecting to:", getDefaultPortal(role))
         router.push(getDefaultPortal(role))
         return
       }
@@ -210,13 +202,25 @@ export default function ClientPortalPage() {
           }
           const data = await res.json()
           if (data.clients && data.clients.length > 0) {
-            setAvailableClients(
-              data.clients.map((c: any) => ({
-                id: c.id,
-                name: c.name,
-              })),
-            )
-            setSelectedClientId(data.clients[0].id)
+            const clientList = data.clients.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+            }))
+
+            // For students, pre-select their assigned client if available
+            if (role === "student" && authClientId) {
+              // Move the student's assigned client to the top of the list
+              const assignedIndex = clientList.findIndex((c: any) => c.id === authClientId)
+              if (assignedIndex > 0) {
+                const [assigned] = clientList.splice(assignedIndex, 1)
+                clientList.unshift(assigned)
+              }
+              setAvailableClients(clientList)
+              setSelectedClientId(authClientId)
+            } else {
+              setAvailableClients(clientList)
+              setSelectedClientId(data.clients[0].id)
+            }
           }
         }
 } catch (error) {
@@ -230,7 +234,7 @@ export default function ClientPortalPage() {
     if (!roleLoading) {
       fetchAvailableClients()
     }
-  }, [role, userEmail, roleLoading, isDemoMode])
+  }, [role, userEmail, roleLoading, isDemoMode, authClientId])
 
   const fetchClientData = useCallback(async () => {
     if (!selectedClientId) return

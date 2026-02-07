@@ -31,12 +31,20 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) {
+      const msg = error.message || ""
+      if (msg.includes("Too Many R") || msg.includes("rate limit")) {
+        return NextResponse.json({ success: false, error: "Rate limited", materials: [] }, { status: 429 })
+      }
       console.error("Error fetching course materials:", error)
       return NextResponse.json({ success: false, error: error.message, materials: [] }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, materials: data || [] })
-  } catch (error) {
+  } catch (error: any) {
+    const msg = error?.message || ""
+    if (msg.includes("Too Many R") || msg.includes("Unexpected token") || msg.includes("rate limit")) {
+      return NextResponse.json({ success: false, error: "Rate limited", materials: [] }, { status: 429 })
+    }
     console.error("Error in course materials GET:", error)
     return NextResponse.json({ success: false, error: "Failed to fetch materials", materials: [] }, { status: 500 })
   }

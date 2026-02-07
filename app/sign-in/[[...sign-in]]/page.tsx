@@ -39,17 +39,37 @@ export default function SignInPage() {
         return
       }
 
-      if (!data.user) {
+      if (!data.user || !data.session) {
         setError("Authentication failed. Please try again.")
         setIsLoading(false)
         return
       }
 
-      // This ensures cookies are written before navigation
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      // Detect role directly from sign-in page while we still have the session in memory.
+      // We cannot rely on cookies persisting across client-side navigation in the v0 runtime,
+      // so we call detect-role here and redirect with a full page navigation.
+      const userEmail = data.user.email
+      try {
+        const roleRes = await fetch("/api/auth/detect-role", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: userEmail }),
+        })
+        const roleData = await roleRes.json()
 
-      // Navigate to auth loading page which will detect role and redirect
-      router.push("/auth/loading")
+        if (roleData.role === "director") {
+          window.location.href = "/director"
+        } else if (roleData.role === "student") {
+          window.location.href = "/students"
+        } else if (roleData.role === "client") {
+          window.location.href = "/client-portal"
+        } else {
+          window.location.href = "/auth/loading"
+        }
+      } catch {
+        // Fallback: use full page navigation to auth/loading which will trigger middleware cookie sync
+        window.location.href = "/auth/loading"
+      }
     } catch (err) {
       console.error("SignIn - Error:", err)
       const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred"

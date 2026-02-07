@@ -39,7 +39,11 @@ export async function GET(request: Request) {
     const { data, error } = await query
 
     if (error) {
-      console.log("[v0] Supabase attendance error:", error.message)
+      const msg = error.message || ""
+      if (msg.includes("Too Many R") || msg.includes("rate limit")) {
+        return NextResponse.json({ attendance: [] }, { status: 429 })
+      }
+      console.log("[v0] Supabase attendance error:", msg)
       return NextResponse.json({ attendance: [] })
     }
 
@@ -59,7 +63,11 @@ export async function GET(request: Request) {
     }))
 
     return NextResponse.json({ attendance: formattedAttendance })
-  } catch (error) {
+  } catch (error: any) {
+    const msg = error?.message || ""
+    if (msg.includes("Too Many R") || msg.includes("Unexpected token") || msg.includes("rate limit")) {
+      return NextResponse.json({ attendance: [] }, { status: 429 })
+    }
     console.log("[v0] Error fetching attendance:", error)
     return NextResponse.json({ attendance: [] })
   }

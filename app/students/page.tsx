@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { MainNavigation } from "@/components/main-navigation"
 import { getErrorMessage, isAuthError, isPermissionError } from "@/lib/error-handler"
@@ -56,58 +56,66 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useDemoStudent, DEMO_STUDENTS } from "@/components/demo-student-selector"
 import { useUserRole, canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
 
-async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
+function isRateLimitText(text: string): boolean {
+  if (!text) return false
+  const lower = text.toLowerCase()
+  return lower.startsWith("too many r") || lower.includes("rate limit") || lower.includes("too many requests")
+}
+
+async function fetchWithRetry(url: string, maxRetries = 2): Promise<Response> {
+  const emptyJson = () =>
+    new Response(JSON.stringify({}), { status: 503, headers: { "Content-Type": "application/json" } })
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const response = await fetch(url)
 
       // Check for rate limiting via status code
       if (response.status === 429) {
-        const waitTime = Math.pow(2, attempt + 1) * 1000
-        console.log(`[v0] Rate limited (429) on ${url}, waiting ${waitTime}ms (attempt ${attempt + 1}/${maxRetries})`)
-        await new Promise((r) => setTimeout(r, waitTime))
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, Math.pow(2, attempt + 1) * 2000))
+          continue
+        }
+        return emptyJson()
+      }
+
+      // Read the body text ONCE, then check for rate limit content.
+      // We reconstruct a new Response so downstream code can still read it.
+      const bodyText = await response.text()
+
+      if (isRateLimitText(bodyText) || (bodyText.includes("Too Many R") && bodyText.includes("SyntaxError"))) {
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, Math.pow(2, attempt + 1) * 2000))
+          continue
+        }
+        return emptyJson()
+      }
+
+      // Return a fresh Response with the body text so it can be read again downstream
+      return new Response(bodyText, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      })
+    } catch (error: any) {
+      console.log("[v0] fetchWithRetry error for", url, "attempt", attempt, ":", error?.message)
+      if (attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, Math.pow(2, attempt + 1) * 1000))
         continue
       }
-
-      // For non-OK responses, clone before checking body to avoid consuming stream
-      if (!response.ok) {
-        const clonedResponse = response.clone()
-        try {
-          const text = await clonedResponse.text()
-          if (text.startsWith("Too Many R") || text.includes("rate limit")) {
-            const waitTime = Math.pow(2, attempt + 1) * 1000
-            console.log(`[v0] Rate limited (text) on ${url}, waiting ${waitTime}ms`)
-            await new Promise((r) => setTimeout(r, waitTime))
-            continue
-          }
-        } catch {
-          // Ignore text parsing errors
-        }
-      }
-
-      return response
-    } catch (error) {
-      if (attempt < maxRetries - 1) {
-        const waitTime = Math.pow(2, attempt) * 1000
-        console.log(`[v0] Fetch error on ${url}, retrying in ${waitTime}ms`)
-        await new Promise((r) => setTimeout(r, waitTime))
-      } else {
-        throw error
-      }
+      return emptyJson()
     }
   }
-  // Final attempt
-  return fetch(url)
+  return emptyJson()
 }
 
 async function fetchSequentially(urls: string[]): Promise<Response[]> {
-  // Fetch with small delays between requests to avoid rate limiting
   const results: Response[] = []
-  for (const url of urls) {
-    if (results.length > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 150))
+  for (let i = 0; i < urls.length; i++) {
+    if (i > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 600))
     }
-    const res = await fetchWithRetry(url)
+    const res = await fetchWithRetry(urls[i], 2)
     results.push(res)
   }
   return results
@@ -116,13 +124,11 @@ async function fetchSequentially(urls: string[]): Promise<Response[]> {
 async function safeJsonParse<T>(response: Response, defaultValue: T): Promise<T> {
   try {
     const text = await response.text()
-    if (!text || text.startsWith("<!DOCTYPE") || text.startsWith("Too Many R")) {
-      console.log("[v0] Invalid response body, returning default value")
+    if (!text || text.startsWith("<!DOCTYPE") || text.startsWith("Too Many R") || text.startsWith("too many")) {
       return defaultValue
     }
     return JSON.parse(text) as T
-  } catch (error) {
-    console.error("[v0] JSON parse error:", error)
+  } catch {
     return defaultValue
   }
 }
@@ -488,15 +494,6 @@ export default function StudentPortal() {
   const isAdminOrDirector = role === "admin" || role === "director"
   const allowDemoMode = isDemoMode && isAdminOrDirector
 
-  console.log("[v0] StudentPortal - Auth state:", {
-    role,
-    isAuthenticated,
-    roleLoading,
-    isDemoMode,
-    allowDemoMode,
-    authStudentId,
-  })
-
   const demoStudentId = useDemoStudent(DEMO_STUDENTS[0].id)
   // For directors/admins, don't initialize with demo student - let the fetch set a real student
   const [selectedStudentId, setSelectedStudentId] = useState<string>(authStudentId || "")
@@ -509,50 +506,35 @@ export default function StudentPortal() {
 
   useEffect(() => {
     // Still loading - don't redirect yet
-    if (roleLoading) {
-      console.log("[v0] StudentPortal - Still loading role, waiting...")
-      return
-    }
+    if (roleLoading) return
 
-    if (allowDemoMode) {
-      console.log("[v0] StudentPortal - Demo mode access granted for admin/director")
-      return
-    }
+    if (allowDemoMode) return
 
     // Directors and admins can always access
-    if (role === "director" || role === "admin") {
-      console.log("[v0] StudentPortal - Director/Admin access granted")
-      return
-    }
+    if (role === "director" || role === "admin") return
 
     // Students can access their own portal
-    if (role === "student") {
-      console.log("[v0] StudentPortal - Student access granted")
-      return
-    }
+    if (role === "student") return
 
     // Not authenticated at all - redirect to login
     if (!isAuthenticated) {
-      console.log("[v0] StudentPortal - Not authenticated, redirecting to login")
-      router.push("/sign-in") // Changed from /login to /sign-in
+      router.push("/sign-in")
       return
     }
 
-    // Authenticated but role is null - this means user is not in the system
-    // Redirect to sign-in with an error state
+    // Authenticated but role is null - role lookup failed (rate limit etc.)
+    // Redirect to auth/loading which has its own robust role detection
     if (role === null) {
-      console.log("[v0] StudentPortal - Authenticated but no role found, redirecting to sign-in")
-      router.push("/sign-in")
+      router.push("/auth/loading")
       return
     }
 
     // Authenticated with a role that can't access student portal (e.g., client)
     if (!canAccessPortal(role, "student")) {
-      console.log("[v0] StudentPortal - Wrong role, redirecting to:", getDefaultPortal(role))
       router.push(getDefaultPortal(role))
       return
     }
-  }, [role, roleLoading, isAuthenticated, allowDemoMode, router]) // Removed isDemoMode dependency
+  }, [role, roleLoading, isAuthenticated, allowDemoMode, router])
 
   useEffect(() => {
     const fetchAvailableStudents = async () => {
@@ -590,10 +572,7 @@ export default function StudentPortal() {
   }
   } else if (role === "student") {
         if (authStudentId) {
-          console.log("[v0] StudentPortal - Using student ID from auth:", authStudentId)
           setSelectedStudentId(authStudentId)
-        } else {
-          console.error("[v0] StudentPortal - Student role detected but no student ID available")
         }
       }
     }
@@ -601,7 +580,7 @@ export default function StudentPortal() {
     if (!roleLoading) {
       fetchAvailableStudents()
     }
-  }, [role, userEmail, authStudentId, roleLoading, isAdminOrDirector, selectedStudentId]) // Removed isDemoMode dependencies, added selectedStudentId for initial selection
+  }, [role, userEmail, authStudentId, roleLoading, isAdminOrDirector])
 
   const canSwitchStudents = isAdminOrDirector
 
@@ -689,27 +668,43 @@ export default function StudentPortal() {
     }))
   }
 
+  // Ref to track which student we've already fetched data for, preventing duplicate fetches
+  const lastFetchedStudentRef = useRef<string | null>(null)
+
   useEffect(() => {
+    let cancelled = false
+
     async function fetchData() {
       const currentStudentId = role === "student" ? authStudentId : selectedStudentId
+      console.log("[v0] fetchData called - role:", role, "authStudentId:", authStudentId, "currentStudentId:", currentStudentId)
       if (!currentStudentId) return
+      // Don't fetch while role is still settling to avoid duplicate calls
+      if (!role) return
+
+      // Prevent duplicate fetches for the same student
+      if (lastFetchedStudentRef.current === currentStudentId) return
+      lastFetchedStudentRef.current = currentStudentId
 
       setLoading(true)
       try {
-        const urls = [
-          `/api/supabase/roster?studentId=${currentStudentId}`,
-          `/api/supabase/debriefs?studentId=${currentStudentId}`,
-          `/api/supabase/attendance?studentId=${currentStudentId}`,
-          `/api/meeting-requests?studentId=${currentStudentId}`,
-          "/api/course-materials",
-          `/api/documents?studentId=${currentStudentId}`,
-          "/api/semester-schedule",
-        ]
-
+        // Fetch all data in parallel - much faster than sequential
         const [studentRes, debriefsRes, attendanceRes, meetingRes, materialsRes, docsRes, scheduleRes] =
-          await fetchSequentially(urls)
+          await Promise.all([
+            fetchWithRetry(`/api/supabase/roster?studentId=${currentStudentId}`),
+            fetchWithRetry(`/api/supabase/debriefs?studentId=${currentStudentId}`),
+            fetchWithRetry(`/api/supabase/attendance?studentId=${currentStudentId}`),
+            fetchWithRetry(`/api/meeting-requests?studentId=${currentStudentId}`),
+            fetchWithRetry("/api/course-materials"),
+            fetchWithRetry(`/api/documents?studentId=${currentStudentId}`),
+            fetchWithRetry("/api/semester-schedule"),
+          ])
 
+        // If this effect was cancelled (re-triggered), don't update state
+        if (cancelled) return
+
+        console.log("[v0] roster response status:", studentRes.status, "ok:", studentRes.ok)
         const studentData = await safeJsonParse(studentRes, { students: [] }) // Corrected parsing for single student
+        console.log("[v0] parsed studentData:", JSON.stringify(studentData).substring(0, 200))
         const debriefsData = await safeJsonParse(debriefsRes, { debriefs: [] })
         const attendanceData = await safeJsonParse(attendanceRes, { attendance: [] })
         const meetingData = await safeJsonParse(meetingRes, { requests: [] })
@@ -780,10 +775,7 @@ export default function StudentPortal() {
         // Fetch student notifications (announcements from directors)
         const fetchStudentNotifications = async () => {
           try {
-            if (!student?.id || !student?.clinicId) {
-              console.log("[v0] Student data not fully loaded for notifications, skipping fetch.")
-              return
-            }
+            if (!student?.id || !student?.clinicId) return
             const res = await fetchWithRetry(
               `/api/student-notifications?studentId=${student.id}&clinicId=${student.clinicId}`,
             )
@@ -809,8 +801,23 @@ export default function StudentPortal() {
           }
         }
         fetchStudentNotifications()
+
+        // Fetch agreements using the student email we already have (avoids extra roster call)
+        if (student?.email) {
+          try {
+            const agreementsRes = await fetchWithRetry(`/api/agreements?userEmail=${encodeURIComponent(student.email)}`)
+            const agreementsData = await safeJsonParse(agreementsRes, { agreements: [] })
+            if (agreementsData.agreements) {
+              setSignedAgreements(agreementsData.agreements.map((a: any) => a.agreement_type))
+            }
+          } catch (error) {
+            console.error("Error fetching agreements:", error)
+          }
+        }
 } catch (error) {
   console.error("Error fetching data:", error)
+  // Reset the ref so a retry is possible
+  lastFetchedStudentRef.current = null
   if (isAuthError(error)) {
     router.push("/sign-in")
   }
@@ -820,27 +827,32 @@ export default function StudentPortal() {
     }
 
     fetchData()
-  }, [selectedStudentId, authStudentId, role]) // Removed demoStudentId and isDemoMode dependencies
 
-  // CHANGE: Add useEffect to fetch team data and generate summary
+    return () => {
+      cancelled = true
+    }
+  }, [selectedStudentId, authStudentId, role])
+
+  // Fetch team data AFTER main data is loaded (deferred to avoid rate limiting)
   useEffect(() => {
     const fetchTeamData = async () => {
-      // Ensure we have the selected student ID and it's not in demo mode for fetching team data,
-      // or if it's a student role and they have a clientId.
       const currentStudentId = role === "student" ? authStudentId : selectedStudentId
       if (!currentStudentId || !currentStudent?.clientId) return
+
+      // Defer team data fetch to avoid flooding with the initial batch
+      await new Promise((resolve) => setTimeout(resolve, 2000))
 
       setLoadingTeamSummary(true)
       setTeamSummaryError(null)
       try {
-        // Fetch team data from team-workspace API (the single source of truth for team data)
         const teamRes = await fetchWithRetry(`/api/team-workspace?studentId=${currentStudentId}&includeDebriefs=true`)
         if (!teamRes.ok) throw new Error(`HTTP error! status: ${teamRes.status}`)
         const teamData = await safeJsonParse(teamRes, {})
         setTeamData(teamData)
 
-        // Then try to fetch the cached summary (non-critical, don't fail the whole flow)
+        // Then try to fetch the cached summary (non-critical)
         try {
+          await new Promise((resolve) => setTimeout(resolve, 350))
           const summaryRes = await fetchWithRetry(`/api/teams/summary?studentId=${currentStudentId}`)
           if (summaryRes.ok) {
             const summaryData = await safeJsonParse(summaryRes, { summary: "" })
@@ -858,31 +870,6 @@ export default function StudentPortal() {
     }
     fetchTeamData()
   }, [currentStudent?.clientId, selectedStudentId, authStudentId, role])
-
-  // Add useEffect to fetch signed agreements
-  useEffect(() => {
-    const fetchSignedAgreements = async () => {
-      const currentStudentId = role === "student" ? authStudentId : selectedStudentId
-      if (!currentStudentId) return
-      try {
-        // Fetch student details to get email
-        const studentRes = await fetchWithRetry(`/api/supabase/roster?studentId=${currentStudentId}`)
-        const studentData = await safeJsonParse(studentRes, { students: [] })
-        const studentEmail = studentData.students?.[0]?.email
-
-        if (!studentEmail) return
-
-        const response = await fetchWithRetry(`/api/agreements?userEmail=${encodeURIComponent(studentEmail)}`)
-        const data = await safeJsonParse(response, { agreements: [] })
-        if (data.agreements) {
-          setSignedAgreements(data.agreements.map((a: any) => a.agreement_type))
-        }
-      } catch (error) {
-        console.error("Error fetching agreements:", error)
-      }
-    }
-    fetchSignedAgreements()
-  }, [selectedStudentId, authStudentId, role]) // Removed demoStudentId and isDemoMode dependencies
 
   const handleSubmitQuestion = async () => {
     if (!questionText.trim() || !currentStudent) return
@@ -1011,15 +998,6 @@ export default function StudentPortal() {
       const selectedWeek = semesterSchedule.find((w) => w.id === selectedWeekForAttendance)
       if (!selectedWeek) return
 
-      console.log("[v0] Attendance submission - currentStudent:", {
-        id: currentStudent.id,
-        fullName: currentStudent.fullName,
-        email: currentStudent.email,
-        clinic: currentStudent.clinic,
-        clinicId: currentStudent.clinicId,
-        allFields: currentStudent,
-      })
-
       const attendancePayload = {
         studentId: currentStudent.id,
         studentName: currentStudent.fullName,
@@ -1031,15 +1009,11 @@ export default function StudentPortal() {
         password: attendancePassword,
       }
 
-      console.log("[v0] Attendance submission - payload:", attendancePayload)
-
       const response = await fetch("/api/supabase/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(attendancePayload),
       })
-
-      console.log("[v0] Attendance submission - response status:", response.status)
 
       if (response.ok) {
         // Refresh attendance records
@@ -1055,7 +1029,6 @@ export default function StudentPortal() {
         // For now, assume the Dialog component handles closing itself after successful submission.
       } else {
         const error = await response.json()
-        console.log("[v0] Attendance submission - error:", error)
         alert(error.error || "Invalid password or attendance already submitted")
       }
     } catch (error) {
@@ -1079,14 +1052,17 @@ export default function StudentPortal() {
         body: JSON.stringify({
           studentId: currentStudent.id,
           studentName: currentStudent.fullName,
+          studentEmail: currentStudent.email,
           clientId: currentStudent.clientId,
           clientName: currentStudent.clientName,
           clinic: currentStudent.clinic,
+          clinicId: currentStudent.clinicId,
           weekEnding: selectedWeek.week_end,
           weekNumber: selectedWeek.week_number,
           hoursWorked: Number.parseFloat(debriefForm.hoursWorked),
           workSummary: debriefForm.workSummary,
           questions: debriefForm.questions || null,
+          questionType: debriefForm.questions ? "clinic" : null,
           status: "pending",
         }),
       })
@@ -1453,13 +1429,17 @@ export default function StudentPortal() {
           <div className="p-4">
             <Card className="p-6 text-center">
               <h2 className="text-xl font-semibold mb-2">Student Not Found</h2>
-              <p className="text-muted-foreground">Unable to load your student profile.</p>
-              {/* Add a button to go back or to sign-in */}
-              {!isAuthenticated && (
-                <Button onClick={() => router.push("/sign-in")} className="mt-4">
-                  Go to Sign In
+              <p className="text-muted-foreground mb-4">Unable to load your student profile.</p>
+              <div className="flex gap-2 justify-center">
+                <Button onClick={() => window.location.reload()} variant="outline">
+                  Retry
                 </Button>
-              )}
+                {!isAuthenticated && (
+                  <Button onClick={() => router.push("/sign-in")}>
+                    Go to Sign In
+                  </Button>
+                )}
+              </div>
             </Card>
           </div>
         </div>

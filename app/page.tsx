@@ -71,32 +71,28 @@ export default function DirectorPortalDashboard() {
 
   useEffect(() => {
     if (roleLoading) {
-      console.log("[v0] Still loading role, waiting...")
       return
     }
 
     if (isDemoMode) {
-      console.log("[v0] Demo mode active, redirecting to /director")
       router.push("/director")
       return
     }
 
     if (!isAuthenticated) {
-      console.log("[v0] Not authenticated, redirecting to /login")
       router.push("/login")
       return
     }
 
-    console.log("[v0] Authenticated with role:", role, "- redirecting...")
     if (role === "admin" || role === "director") {
       router.push("/director")
     } else if (role === "student") {
       router.push("/students")
     } else if (role === "client") {
       router.push("/client-portal")
-    } else {
-      console.log("[v0] Unknown role, defaulting to /director")
-      router.push("/director")
+    } else if (role === null) {
+      // Authenticated but role lookup failed (rate limit etc.) - use auth/loading to detect
+      router.push("/auth/loading")
     }
   }, [role, roleLoading, isAuthenticated, isDemoMode, router])
 
