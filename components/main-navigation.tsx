@@ -1,5 +1,6 @@
 "use client"
 
+import { Suspense } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -23,6 +24,37 @@ import {
 import { useUserRole } from "@/hooks/use-user-role"
 
 export function MainNavigation() {
+  return (
+    <Suspense fallback={<MainNavigationFallback />}>
+      <MainNavigationInner />
+    </Suspense>
+  )
+}
+
+function MainNavigationFallback() {
+  return (
+    <div className="flex flex-col h-full bg-[#112250] shadow-xl border-r border-[#0d1a3d]">
+      <div className="p-4 border-b border-[#1a2d52] bg-[#152244]/50">
+        <div className="flex items-center gap-2.5 px-3 py-2.5">
+          <div className="h-8 w-8 rounded-lg bg-[#1a2d52] animate-pulse" />
+          <div className="h-4 w-16 rounded bg-[#1a2d52] animate-pulse" />
+        </div>
+      </div>
+      <nav className="flex-1 overflow-y-auto p-4">
+        <div className="space-y-1.5">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2.5 px-3 py-2.5">
+              <div className="h-8 w-8 rounded-lg bg-[#1a2d52] animate-pulse" />
+              <div className="h-4 w-20 rounded bg-[#1a2d52] animate-pulse" />
+            </div>
+          ))}
+        </div>
+      </nav>
+    </div>
+  )
+}
+
+function MainNavigationInner() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const { role } = useUserRole()
