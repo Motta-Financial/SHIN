@@ -475,7 +475,7 @@ export function Triage({
           icon: studentIconMap[notif.type] || <Bell className="h-4 w-4" />,
           iconBg: studentBgMap[notif.type] || "bg-purple-100 text-purple-700",
           timestamp: notif.created_at,
-          metadata: { from: notif.created_by },
+          metadata: { from: notif.created_by, originalId: notif.id },
         })
       })
     }
