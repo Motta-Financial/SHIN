@@ -102,37 +102,13 @@ function ProspectsContent() {
     fetchData()
   }, [])
 
-  const fetchWithRetry = async (url: string, retries = 3, delay = 2000): Promise<Response> => {
-    for (let i = 0; i < retries; i++) {
-      const response = await fetch(url)
-      if (response.status === 429) {
-        await new Promise((r) => setTimeout(r, delay))
-        delay *= 2
-        continue
-      }
-      const ct = response.headers.get("content-type")
-      if (!ct?.includes("application/json")) {
-        const text = await response.text()
-        if (text.includes("Too Many R")) {
-          await new Promise((r) => setTimeout(r, delay))
-          delay *= 2
-          continue
-        }
-      }
-      return response
-    }
-    throw new Error(`Failed after ${retries} retries for ${url}`)
-  }
-
   const fetchData = async () => {
     setLoading(true)
     try {
-      // Stagger requests to avoid rate limiting
-      const prospectsRes = await fetchWithRetry("/api/prospects")
-      await new Promise((r) => setTimeout(r, 300))
-      const interviewsRes = await fetchWithRetry("/api/prospect-interviews")
-      await new Promise((r) => setTimeout(r, 300))
-      const directorsRes = await fetchWithRetry("/api/directors")
+      const { fetchWithRateLimit } = await import("@/lib/fetch-with-rate-limit")
+      const prospectsRes = await fetchWithRateLimit("/api/prospects")
+      const interviewsRes = await fetchWithRateLimit("/api/prospect-interviews")
+      const directorsRes = await fetchWithRateLimit("/api/directors")
 
       if (!prospectsRes.ok) throw new Error("Failed to fetch prospects")
       if (!interviewsRes.ok) throw new Error("Failed to fetch interviews")
