@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
-import { getCachedData, setCachedData } from "@/lib/api-cache"
+import { getCachedData, setCachedData, LONG_TTL } from "@/lib/api-cache"
+import { supabaseQueryWithRetry } from "@/lib/supabase-retry"
 
 export const dynamic = "force-dynamic"
 
@@ -13,7 +14,6 @@ export async function GET(request: Request) {
     const cacheKey = `org-chart-${semesterId || "active"}-${includeAll}`
     const cached = getCachedData(cacheKey)
     if (cached) {
-      console.log("[v0] Org-chart API - Returning cached response")
       return NextResponse.json(cached)
     }
 
@@ -26,45 +26,64 @@ export async function GET(request: Request) {
 
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Get active semester if not specified and not including all
+    // Get active semester
     let activeSemesterId = semesterId
     if (!activeSemesterId && !includeAll) {
-      const { data: activeSemester } = await supabase
-        .from("semester_config")
-        .select("id")
-        .eq("is_active", true)
-        .maybeSingle()
+      const { data: activeSemester } = await supabaseQueryWithRetry(
+        () => supabase.from("semester_config").select("id").eq("is_active", true).maybeSingle(),
+        3,
+        "semester_config",
+      )
       activeSemesterId = activeSemester?.id || null
     }
 
-    // Fetch base entities - stagger in pairs to avoid rate limiting
-    const [clinicsRes, directorsRes] = await Promise.all([
-      supabase.from("clinics").select("*").order("name"),
-      supabase.from("directors_current").select("*").order("full_name"),
-    ])
+    // Fetch all 8 tables sequentially with retry to avoid rate limiting
+    const clinicsRes = await supabaseQueryWithRetry(
+      () => supabase.from("clinics").select("*").order("name"),
+      3, "clinics",
+    )
+    const directorsRes = await supabaseQueryWithRetry(
+      () => supabase.from("directors_current").select("*").order("full_name"),
+      3, "directors_current",
+    )
+    const studentsRes = await supabaseQueryWithRetry(
+      () => supabase.from("students_current").select("*").order("last_name"),
+      3, "students_current",
+    )
+    const clientsRes = await supabaseQueryWithRetry(
+      () => supabase.from("clients_current").select("*").order("name"),
+      3, "clients_current",
+    )
 
-    const [studentsRes, clientsRes] = await Promise.all([
-      supabase.from("students_current").select("*").order("last_name"),
-      supabase.from("clients_current").select("*").order("name"),
-    ])
-
-    for (const [name, res] of [["Clinics", clinicsRes], ["Directors", directorsRes], ["Students", studentsRes], ["Clients", clientsRes]] as const) {
+    for (const [name, res] of [
+      ["Clinics", clinicsRes],
+      ["Directors", directorsRes],
+      ["Students", studentsRes],
+      ["Clients", clientsRes],
+    ] as const) {
       if (res.error) {
         console.error(`[v0] ${name} error:`, res.error)
         return NextResponse.json({ error: res.error.message }, { status: 500 })
       }
     }
 
-    // Fetch junction tables - stagger in pairs
-    const [clinicDirectorsRes, clinicStudentsRes] = await Promise.all([
-      supabase.from("clinic_directors_current").select("*"),
-      supabase.from("clinic_students_current").select("*"),
-    ])
-
-    const [clinicClientsRes, clientAssignmentsRes] = await Promise.all([
-      supabase.from("clinic_clients_current").select("*"),
-      supabase.from("client_assignments").select("*"),
-    ])
+    // Junction tables - also sequential with retry
+    const clinicDirectorsRes = await supabaseQueryWithRetry(
+      () => supabase.from("clinic_directors_current").select("*"),
+      3, "clinic_directors_current",
+    )
+    const clinicStudentsRes = await supabaseQueryWithRetry(
+      () => supabase.from("clinic_students_current").select("*"),
+      3, "clinic_students_current",
+    )
+    const clinicClientsRes = await supabaseQueryWithRetry(
+      () => supabase.from("clinic_clients_current").select("*"),
+      3, "clinic_clients_current",
+    )
+    const clientAssignmentsRes = await supabaseQueryWithRetry(
+      () => supabase.from("client_assignments").select("*"),
+      3, "client_assignments",
+    )
 
     const result = {
       clinics: clinicsRes.data || [],
@@ -77,9 +96,8 @@ export async function GET(request: Request) {
       clientAssignments: clientAssignmentsRes.data || [],
     }
 
-    // Cache the result for 30 seconds
-    setCachedData(cacheKey, result)
-    console.log("[v0] Org-chart API - Fetched and cached data")
+    // Cache for 5 minutes - org chart data rarely changes
+    setCachedData(cacheKey, result, LONG_TTL)
 
     return NextResponse.json(result)
   } catch (error) {

@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
+import { supabaseQueryWithRetry } from "@/lib/supabase-retry"
 
 export const dynamic = "force-dynamic"
 
@@ -29,24 +30,24 @@ export async function GET(request: Request) {
 
     const supabase = await getSupabaseClient()
 
-    let query = supabase
-      .from("prospect_interviews")
-      .select("*")
-      .order("interview_date", { ascending: false, nullsFirst: false })
+    const { data, error } = await supabaseQueryWithRetry(() => {
+      let query = supabase
+        .from("prospect_interviews")
+        .select("*")
+        .order("interview_date", { ascending: false, nullsFirst: false })
 
-    if (prospectId) {
-      query = query.eq("prospect_id", prospectId)
-    }
+      if (prospectId) {
+        query = query.eq("prospect_id", prospectId)
+      }
+      if (interviewerId) {
+        query = query.eq("interviewer_id", interviewerId)
+      }
+      if (status) {
+        query = query.eq("interview_status", status)
+      }
 
-    if (interviewerId) {
-      query = query.eq("interviewer_id", interviewerId)
-    }
-
-    if (status) {
-      query = query.eq("interview_status", status)
-    }
-
-    const { data, error } = await query
+      return query
+    }, 4, "prospect_interviews")
 
     if (error) {
       console.error("Error fetching prospect interviews:", error)

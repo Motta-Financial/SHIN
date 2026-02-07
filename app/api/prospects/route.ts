@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
+import { supabaseQueryWithRetry } from "@/lib/supabase-retry"
 
 export const dynamic = "force-dynamic"
 
@@ -30,25 +31,24 @@ export async function GET(request: Request) {
 
     const supabase = await getSupabaseClient()
 
-    let query = supabase.from("prospects").select("*").order("name", { ascending: true })
+    const { data, error } = await supabaseQueryWithRetry(() => {
+      let query = supabase.from("prospects").select("*").order("name", { ascending: true })
 
-    if (directorId) {
-      query = query.or(`interviewer_id.eq.${directorId},director_in_charge_id.eq.${directorId}`)
-    }
+      if (directorId) {
+        query = query.or(`interviewer_id.eq.${directorId},director_in_charge_id.eq.${directorId}`)
+      }
+      if (status) {
+        query = query.eq("acceptance_status", status)
+      }
+      if (clinic) {
+        query = query.or(`clinic_of_interest.ilike.%${clinic}%,suggested_clinic.ilike.%${clinic}%`)
+      }
+      if (semesterId) {
+        query = query.eq("target_semester_id", semesterId)
+      }
 
-    if (status) {
-      query = query.eq("acceptance_status", status)
-    }
-
-    if (clinic) {
-      query = query.or(`clinic_of_interest.ilike.%${clinic}%,suggested_clinic.ilike.%${clinic}%`)
-    }
-
-    if (semesterId) {
-      query = query.eq("target_semester_id", semesterId)
-    }
-
-    const { data, error } = await query
+      return query
+    }, 4, "prospects")
 
     if (error) {
       console.error("Error fetching prospects:", error)

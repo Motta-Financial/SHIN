@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ClinicView } from "@/components/clinic-view"
+import ClinicView from "@/components/clinic-view"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { MainNavigation } from "@/components/main-navigation"
 import { Building2, Loader2 } from "lucide-react"
