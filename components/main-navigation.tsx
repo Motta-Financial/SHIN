@@ -123,11 +123,31 @@ export function MainNavigation() {
         </Link>
       </div>
 
-      <nav className="flex-1 overflow-y-auto p-4">
+      <nav className="flex-1 overflow-y-auto p-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[#3C507D] [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[#4a5f8d]" style={{ scrollbarColor: '#3C507D transparent', scrollbarWidth: 'thin' }}>
         <div className="space-y-1.5">
           {navItems.map((item) => {
-            const isActive =
-              pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href.split("?")[0]))
+            const hrefBase = item.href.split("?")[0]
+            const hasQuery = item.href.includes("?")
+            let isActive: boolean
+
+            const currentSearch = typeof window !== "undefined" ? window.location.search : ""
+
+            if (hasQuery) {
+              // Query-param nav items (e.g. /client-portal?tab=team):
+              // Only active when both path AND query string match exactly
+              const expectedQuery = item.href.split("?")[1]
+              isActive = pathname === hrefBase && currentSearch === `?${expectedQuery}`
+            } else {
+              // Check if other sibling items use query params on the same base path
+              const siblingsUseQuery = navItems.some((ni) => ni !== item && ni.href.includes("?") && ni.href.split("?")[0] === hrefBase)
+              if (siblingsUseQuery) {
+                // Only active when path matches AND no tab query param is present
+                isActive = pathname === item.href && (!currentSearch || currentSearch === "" || currentSearch === "?")
+              } else {
+                // Standard nav items: exact match or prefix match (but not for root "/")
+                isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(hrefBase + "/"))
+              }
+            }
 
             return (
               <div key={item.name}>

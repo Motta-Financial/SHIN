@@ -91,8 +91,6 @@ export function OrgChart() {
   const fetchOrgData = async () => {
     setLoading(true)
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-
       const response = await fetchWithRetry("/api/org-chart")
       if (!response.ok) {
         throw new Error("Failed to fetch org chart data")

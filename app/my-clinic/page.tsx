@@ -16,25 +16,18 @@ export default function MyClinicPage() {
   const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
-    if (!userLoading && !directorsLoading && directors.length > 0 && email) {
-      // Find the director matching the logged-in user's email
+    if (userLoading || directorsLoading) return
+
+    // Once loading is done, always mark as initialized
+    if (directors.length > 0 && email) {
       const matchingDirector = directors.find((d) => d.email?.toLowerCase() === email.toLowerCase())
-      console.log("[v0] MyClinic - Looking for director with email:", email)
-      console.log(
-        "[v0] MyClinic - Directors available:",
-        directors.map((d) => ({ id: d.id, email: d.email, clinic: d.clinic })),
-      )
-      console.log("[v0] MyClinic - Matching director found:", matchingDirector)
 
       if (matchingDirector) {
         setCurrentDirectorId(matchingDirector.id)
         setSelectedDirectorId(matchingDirector.id)
-        setIsInitialized(true)
-      } else {
-        // If no matching director (maybe admin viewing), still mark as initialized
-        setIsInitialized(true)
       }
     }
+    setIsInitialized(true)
   }, [userLoading, directorsLoading, directors, email])
 
   const isLoading = directorsLoading || userLoading || !isInitialized

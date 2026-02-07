@@ -142,11 +142,11 @@ export function DirectorDocumentsDashboard() {
   const uniqueClients = Array.from(new Set(documents.map((d) => d.client_name).filter(Boolean)))
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-foreground">Document Review Dashboard</h2>
-        <p className="text-muted-foreground">Review student submissions and provide feedback</p>
-      </div>
+  <div className="space-y-6 pt-6">
+  <div>
+  <h2 className="text-2xl font-bold text-foreground">Document Review Dashboard</h2>
+  <p className="text-muted-foreground">Review student submissions and provide feedback</p>
+  </div>
 
       {/* Filters */}
       <Card>
