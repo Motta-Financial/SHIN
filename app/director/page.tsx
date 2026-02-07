@@ -359,7 +359,6 @@ export default function DirectorDashboard() {
   router.push("/sign-in")
   return
   }
-  // Only redirect if role is definitively wrong (not null - null means still resolving or rate-limited)
   if (isAuthenticated && role && !canAccessPortal(role, "director")) {
   router.push(getDefaultPortal(role))
   }

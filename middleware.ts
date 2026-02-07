@@ -2,18 +2,27 @@ import type { NextRequest } from "next/server"
 import { updateSession } from "@/utils/supabase/middleware"
 
 export async function middleware(request: NextRequest) {
+  // Only refresh Supabase session for main page navigations (not API, auth, or sign-in).
+  // The Supabase client handles session refresh automatically on the client side,
+  // so middleware refresh is only needed to sync cookies for server components.
   const { pathname } = request.nextUrl
+  const isPageNavigation =
+    !pathname.startsWith("/api/") &&
+    !pathname.startsWith("/sign-in") &&
+    !pathname.startsWith("/auth/") &&
+    !pathname.startsWith("/_next/")
 
-  // Skip Supabase session refresh for API routes and auth pages to reduce rate limiting
-  const skipSessionRefresh =
-    pathname.startsWith("/api/") ||
-    pathname.startsWith("/sign-in") ||
-    pathname.startsWith("/auth/")
-
-  const { NextResponse: NR } = await import("next/server")
-  const response = skipSessionRefresh
-    ? NR.next({ request: { headers: request.headers } })
-    : await updateSession(request)
+  let response: NextResponse
+  if (isPageNavigation) {
+    try {
+      response = await updateSession(request)
+    } catch {
+      // If session refresh fails (rate limit, network), just pass through
+      response = NextResponse.next({ request: { headers: request.headers } })
+    }
+  } else {
+    response = NextResponse.next({ request: { headers: request.headers } })
+  }
 
   // Add security headers
   response.headers.set("X-Frame-Options", "DENY")

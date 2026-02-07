@@ -35,11 +35,14 @@ export async function updateSession(request: NextRequest) {
   try {
     const { error } = await supabase.auth.getUser()
 
-    // Skip auth error handling for rate limit errors - don't clear cookies
-    const errorMsg = error?.message?.toLowerCase() || ""
-    const isRateLimit = errorMsg.includes("too many") || errorMsg.includes("rate limit") || error?.status === 429
-    if (isRateLimit) {
-      return response
+    // Skip ALL error handling for rate limit errors - never clear cookies during rate limiting
+    if (error) {
+      const errorMsg = (error?.message || "").toLowerCase()
+      const statusCode = (error as any)?.status || 0
+      const isRateLimit = errorMsg.includes("too many") || errorMsg.includes("rate limit") || statusCode === 429
+      if (isRateLimit) {
+        return response
+      }
     }
 
     // Check for various auth errors that indicate invalid/stale session

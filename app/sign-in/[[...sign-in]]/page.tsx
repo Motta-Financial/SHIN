@@ -75,22 +75,24 @@ export default function SignInPage() {
           } catch {}
         }
 
-        // Use router.push for instant client-side navigation (no blank screen)
-        // The sessionStorage cache ensures useUserRole resolves immediately
+        // Use window.location.href for full-page navigation so middleware
+        // can sync cookies before the target page renders. The sign-in page
+        // stays visible (with spinner) until the browser navigates.
         if (roleData?.role === "director") {
-          router.push("/director")
+          window.location.href = "/director"
         } else if (roleData?.role === "student") {
-          router.push("/students")
+          window.location.href = "/students"
         } else if (roleData?.role === "client") {
-          router.push("/client-portal")
+          window.location.href = "/client-portal"
         } else {
-          router.push("/auth/loading")
+          window.location.href = "/auth/loading"
         }
+        // Keep isLoading=true so the sign-in page shows the spinner
+        // until the browser fully navigates away
       } catch {
-        router.push("/auth/loading")
+        window.location.href = "/auth/loading"
       }
     } catch (err) {
-      console.error("SignIn - Error:", err)
       const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred"
       setError(errorMessage)
       setIsLoading(false)

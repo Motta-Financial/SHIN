@@ -24,7 +24,7 @@ let globalAuthCache: UserRoleData | null = null
 let globalAuthPromise: Promise<UserRoleData> | null = null
 let cacheTimestamp = 0
 let lastAuthEmail: string | null = null // Track the email to detect user changes
-const CACHE_TTL = 300000 // 5 minutes - prevents rate limit issues from constant re-fetching
+const CACHE_TTL = 30000
 
 async function fetchUserRoleOnce(supabase: ReturnType<typeof createClient>, user: { id: string; email?: string }): Promise<UserRoleData> {
   const userEmail = user.email || ""
@@ -148,8 +148,8 @@ async function fetchUserRole(): Promise<UserRoleData> {
       const cached = sessionStorage.getItem("shin_role_cache")
       if (cached) {
         const parsed = JSON.parse(cached)
-        // Use cache for the entire session (5 minutes) to avoid Supabase rate limits
-        if (parsed.authUserId === user.id && Date.now() - parsed.timestamp < 300000 && parsed.role) {
+        // Only use cache if it's fresh (< 60 seconds) and matches the current user
+        if (parsed.authUserId === user.id && Date.now() - parsed.timestamp < 60000 && parsed.role) {
           return {
             role: parsed.role as UserRole,
             userId: parsed.userId,
@@ -240,47 +240,49 @@ export function useUserRole(): UserRoleData {
     } = supabase.auth.onAuthStateChange((event, session) => {
       const sessionEmail = session?.user?.email || null
 
-      // TOKEN_REFRESHED with same user - just use existing cache, don't refetch
-      if (event === "TOKEN_REFRESHED" && lastAuthEmail === sessionEmail && globalAuthCache) {
+      // TOKEN_REFRESHED with same user - keep existing cache, don't refetch
+      // This prevents rate-limit-induced cache clearing that causes auth flicker
+      if (event === "TOKEN_REFRESHED" && globalAuthCache) {
+        lastAuthEmail = sessionEmail
         return
       }
 
-      // If auth state changed (sign in, sign out, or different user), clear cache and refetch
-      if (
-        event === "SIGNED_IN" ||
-        event === "SIGNED_OUT" ||
-        event === "TOKEN_REFRESHED" ||
-        lastAuthEmail !== sessionEmail
-      ) {
-        // Clear the stale cache
+      if (event === "SIGNED_OUT") {
+        globalAuthCache = null
+        globalAuthPromise = null
+        cacheTimestamp = 0
+        lastAuthEmail = null
+        setData({
+          role: null,
+          userId: null,
+          authUserId: null,
+          email: null,
+          fullName: null,
+          clinicId: null,
+          clinicName: null,
+          studentId: null,
+          directorId: null,
+          clientId: null,
+          isLoading: false,
+          isAuthenticated: false,
+        })
+        return
+      }
+
+      if (event === "SIGNED_IN" || lastAuthEmail !== sessionEmail) {
+        // New sign-in or different user - clear cache and refetch
         globalAuthCache = null
         globalAuthPromise = null
         cacheTimestamp = 0
         lastAuthEmail = sessionEmail
 
         if (session?.user) {
-          // Fetch fresh role data
           globalAuthPromise = fetchUserRole()
           globalAuthPromise.then((result) => {
             globalAuthCache = result
             cacheTimestamp = Date.now()
             globalAuthPromise = null
             setData(result)
-          })
-        } else {
-          setData({
-            role: null,
-            userId: null,
-            authUserId: null,
-            email: null,
-            fullName: null,
-            clinicId: null,
-            clinicName: null,
-            studentId: null,
-            directorId: null,
-            clientId: null,
-            isLoading: false,
-            isAuthenticated: false,
           })
         }
       }

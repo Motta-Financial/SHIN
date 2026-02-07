@@ -160,6 +160,11 @@ export default function ClientPortalPage() {
         router.push("/login")
         return
       }
+      // Authenticated but role is null (rate limit etc.) - use auth/loading
+      if (role === null) {
+        router.push("/auth/loading")
+        return
+      }
       // Authenticated but wrong role - redirect to their portal
       if (!canAccessPortal(role, "client")) {
         router.push(getDefaultPortal(role))
