@@ -38,7 +38,8 @@ import {
   Inbox,
   Send,
   Building2,
-  CalendarCheck, // Added import for CalendarCheck
+  CalendarCheck,
+  X,
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
@@ -87,6 +88,7 @@ interface TriageProps {
   onNavigate?: (tab: string) => void
   onAgreementSigned?: (type: AgreementType) => void
   signedAgreements?: AgreementType[]
+  onDismissNotification?: (notificationId: string) => void
 }
 
 const fetchWithRetry = async (url: string, maxRetries = 3): Promise<Response> => {
@@ -167,9 +169,11 @@ export function Triage({
   onNavigate,
   onAgreementSigned,
   signedAgreements = [],
+  onDismissNotification,
 }: TriageProps) {
   const [activeTab, setActiveTab] = useState("all")
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
+  const [dismissedItems, setDismissedItems] = useState<Set<string>>(new Set())
   const [showAgreementDialog, setShowAgreementDialog] = useState(false)
   const [selectedAgreement, setSelectedAgreement] = useState<AgreementType | null>(null)
   const [signature, setSignature] = useState("")
