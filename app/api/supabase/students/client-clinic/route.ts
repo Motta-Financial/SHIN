@@ -1,43 +1,43 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
-import { getCurrentSemesterId } from "@/lib/semester"
 
 export async function GET() {
   try {
     const supabase = createServiceClient()
-    const currentSemesterId = await getCurrentSemesterId()
 
     const { data, error } = await supabase
-      .from("v_complete_mapping")
-      .select("*")
-      .eq("semester_id", currentSemesterId)
+      .from("students_current")
+      .select("id, full_name, email, clinic, clinic_id, client_id")
 
     if (error) {
-      console.log("[v0] Supabase v_complete_mapping error:", error.message)
       return NextResponse.json({ data: [] })
     }
 
-    // Transform data to match expected format and dedupe by student
-    const studentMap = new Map()
-    data?.forEach((row: any) => {
-      if (row.student_id && !studentMap.has(row.student_id)) {
-        studentMap.set(row.student_id, {
-          student_id: row.student_id,
-          student_name: row.student_name,
-          student_email: row.student_email,
-          clinic: row.student_clinic_name,
-          clinic_id: row.student_clinic_id,
-          client_name: row.client_name,
-          client_id: row.client_id,
-        })
+    // Fetch client names for mapping
+    const clientIds = [...new Set((data || []).map((s: any) => s.client_id).filter(Boolean))]
+    let clientMap = new Map<string, string>()
+    if (clientIds.length > 0) {
+      const { data: clients } = await supabase
+        .from("clients_current")
+        .select("id, name")
+        .in("id", clientIds)
+      for (const c of clients || []) {
+        clientMap.set(c.id, c.name)
       }
-    })
+    }
 
-    const students = Array.from(studentMap.values())
-    console.log("[v0] Fetched v_complete_mapping count:", students.length)
+    const students = (data || []).map((s: any) => ({
+      student_id: s.id,
+      student_name: s.full_name,
+      student_email: s.email,
+      clinic: s.clinic,
+      clinic_id: s.clinic_id,
+      client_name: clientMap.get(s.client_id) || null,
+      client_id: s.client_id,
+    }))
+
     return NextResponse.json({ data: students })
-  } catch (error) {
-    console.log("[v0] Error fetching v_complete_mapping:", error)
+  } catch {
     return NextResponse.json({ data: [] })
   }
 }

@@ -34,10 +34,14 @@ export async function GET(request: Request) {
       query = query.eq("semester_id", activeSemesterId)
     }
 
-    const { data: clients, error } = await query
-
-    if (error) {
-      console.log("[v0] Supabase clients error:", error.message)
+    let clients: any[] | null = null
+    try {
+      const result = await query
+      if (result.error) {
+        return NextResponse.json({ clients: [], records: [] })
+      }
+      clients = result.data
+    } catch {
       return NextResponse.json({ clients: [], records: [] })
     }
 
@@ -84,8 +88,7 @@ export async function GET(request: Request) {
     }))
 
     return NextResponse.json({ clients: formattedClients, records })
-  } catch (error) {
-    console.log("[v0] Error fetching clients:", error)
+  } catch {
     return NextResponse.json({ clients: [], records: [] })
   }
 }

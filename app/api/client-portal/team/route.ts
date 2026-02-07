@@ -35,55 +35,38 @@ export async function GET(request: Request) {
       )
     }
 
-    const currentSemesterId = await getCurrentSemesterId()
-    const { data: mappingData, error: mappingError } = await supabase
-      .from("v_complete_mapping")
-      .select("*")
+    // Use *_current views (source of truth for Spring 2026)
+    const { data: studentData } = await supabase
+      .from("students_current")
+      .select("id, full_name, email, clinic_id, clinic, is_team_leader")
       .eq("client_id", client.id)
-      .eq("semester_id", currentSemesterId)
 
-    if (mappingError) {
-      console.error("Error fetching from v_complete_mapping:", mappingError)
-    }
-
-    console.log(`[v0] Client Portal Team - Client: ${client.name}, Mapping records: ${mappingData?.length || 0}`)
-
-    // Format team members from v_complete_mapping
-    const teamMembers = (mappingData || []).map((m: any) => ({
-      id: m.student_id,
-      name: m.student_name || "Unknown",
-      email: m.student_email || "",
-      role: m.student_role || "Team Member",
-      clinic: m.student_clinic_name || "",
-      isTeamLeader: m.student_role === "Team Leader",
+    const teamMembers = (studentData || []).map((s: any) => ({
+      id: s.id,
+      name: s.full_name || "Unknown",
+      email: s.email || "",
+      role: s.is_team_leader ? "Team Leader" : "Consultant",
+      clinic: s.clinic || "",
+      isTeamLeader: s.is_team_leader || false,
       linkedinProfile: null,
       academicLevel: "",
       education: "",
     }))
 
-    // Get unique directors from the mapping data
+    // Get directors: primary director from client, clinic directors from student clinic_ids
     const directorMap = new Map()
 
-    // Add clinic directors
-    for (const m of mappingData || []) {
-      if (m.clinic_director_id && !directorMap.has(m.clinic_director_id)) {
-        directorMap.set(m.clinic_director_id, {
-          id: m.clinic_director_id,
-          name: m.clinic_director_name || "Unknown",
-          email: m.clinic_director_email || "",
-          clinicId: m.student_clinic_id,
-          jobTitle: "Clinic Director",
-          role: "Clinic Director",
-          isPrimary: false,
-        })
-      }
-
-      // Add client director (primary)
-      if (m.client_director_id && !directorMap.has(m.client_director_id)) {
-        directorMap.set(m.client_director_id, {
-          id: m.client_director_id,
-          name: m.client_director_name || "Unknown",
-          email: m.client_director_email || "",
+    if (client.primary_director_id) {
+      const { data: primaryDir } = await supabase
+        .from("directors_current")
+        .select("id, full_name, email")
+        .eq("id", client.primary_director_id)
+        .maybeSingle()
+      if (primaryDir) {
+        directorMap.set(primaryDir.id, {
+          id: primaryDir.id,
+          name: primaryDir.full_name || "Unknown",
+          email: primaryDir.email || "",
           clinicId: null,
           jobTitle: "Client Director",
           role: "Client Director",
@@ -92,9 +75,30 @@ export async function GET(request: Request) {
       }
     }
 
-    const directors = Array.from(directorMap.values())
+    // Get clinic directors for each unique clinic_id
+    const clinicIds = [...new Set((studentData || []).map((s: any) => s.clinic_id).filter(Boolean))]
+    if (clinicIds.length > 0) {
+      const { data: clinicDirs } = await supabase
+        .from("directors_current")
+        .select("id, full_name, email, clinic_id")
+        .in("clinic_id", clinicIds)
 
-    console.log(`[v0] Client Portal Team - Team members: ${teamMembers.length}, Directors: ${directors.length}`)
+      for (const d of clinicDirs || []) {
+        if (!directorMap.has(d.id)) {
+          directorMap.set(d.id, {
+            id: d.id,
+            name: d.full_name || "Unknown",
+            email: d.email || "",
+            clinicId: d.clinic_id,
+            jobTitle: "Clinic Director",
+            role: "Clinic Director",
+            isPrimary: false,
+          })
+        }
+      }
+    }
+
+    const directors = Array.from(directorMap.values())
 
     return NextResponse.json({
       success: true,

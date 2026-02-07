@@ -16,36 +16,61 @@ export async function GET(request: NextRequest) {
     const studentId = searchParams.get("studentId")
     const targetAudience = searchParams.get("target_audience")
 
-    let query = supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50)
+    // Retry wrapper for Supabase rate limits
+    async function queryWithRetry(buildQuery: () => any, maxRetries = 3): Promise<{ data: any[]; error: any }> {
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          const result = await buildQuery()
+          if (result.error) {
+            const msg = result.error?.message?.toLowerCase() || ""
+            if ((msg.includes("too many") || msg.includes("rate limit")) && attempt < maxRetries - 1) {
+              await new Promise((r) => setTimeout(r, (attempt + 1) * 1500))
+              continue
+            }
+          }
+          return result
+        } catch (err: any) {
+          const msg = err?.message?.toLowerCase() || ""
+          if ((msg.includes("too many") || msg.includes("unexpected token")) && attempt < maxRetries - 1) {
+            await new Promise((r) => setTimeout(r, (attempt + 1) * 1500))
+            continue
+          }
+          return { data: null, error: err }
+        }
+      }
+      return { data: null, error: "Max retries" }
+    }
 
     // If fetching for a specific student
     if (studentId && isValidUUID(studentId)) {
-      query = query.eq("student_id", studentId).eq("target_audience", "students")
-      const { data: notifications, error } = await query
+      const { data: notifications, error } = await queryWithRetry(() =>
+        supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50)
+          .eq("student_id", studentId).eq("target_audience", "students")
+      )
       if (error) {
-        console.error("Error fetching student notifications:", error.message)
         return NextResponse.json({ notifications: [] })
       }
       return NextResponse.json({ notifications: notifications || [] })
     }
 
-    // For director views - only show director-targeted notifications
-    // Filter by target_audience = 'directors' to avoid showing student notifications
-    if (directorId || (!studentId && !targetAudience)) {
-      query = query.eq("target_audience", "directors")
-    }
+    // Build query for director/general views
+    const { data: notifications, error } = await queryWithRetry(() => {
+      let q = supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50)
 
-    if (directorId && directorId !== "all" && directorId !== "undefined" && isValidUUID(directorId)) {
-      query = query.eq("director_id", directorId)
-    } else if (clinic && clinic !== "all" && clinic !== "undefined" && isValidUUID(clinic)) {
-      // If clinic is a UUID, filter by clinic_id
-      query = query.eq("clinic_id", clinic)
-    }
+      if (directorId || (!studentId && !targetAudience)) {
+        q = q.eq("target_audience", "directors")
+      }
 
-    const { data: notifications, error } = await query
+      if (directorId && directorId !== "all" && directorId !== "undefined" && isValidUUID(directorId)) {
+        q = q.eq("director_id", directorId)
+      } else if (clinic && clinic !== "all" && clinic !== "undefined" && isValidUUID(clinic)) {
+        q = q.eq("clinic_id", clinic)
+      }
+
+      return q
+    })
 
     if (error) {
-      console.error("Error fetching notifications:", error.message)
       return NextResponse.json({ notifications: [] })
     }
 
@@ -113,12 +138,23 @@ export async function POST(request: NextRequest) {
     // Create notification for each relevant director based on question type
     const notifications = []
     
+    // Get current semester ID for filtering director assignments
+    let currentSemesterId: string | null = null
+    const { data: appSettings } = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("key", "current_semester_id")
+      .maybeSingle()
+    currentSemesterId = appSettings?.value || null
+
     // For client questions, find directors assigned to the client
     if (questionType === "client" && body.clientId) {
-      const { data: clientDirectors } = await supabase
+      let clientDirQuery = supabase
         .from("client_directors")
         .select("director_id")
         .eq("client_id", body.clientId)
+      if (currentSemesterId) clientDirQuery = clientDirQuery.eq("semester_id", currentSemesterId)
+      const { data: clientDirectors } = await clientDirQuery
       
       if (clientDirectors && clientDirectors.length > 0) {
         for (const cd of clientDirectors) {
@@ -143,10 +179,12 @@ export async function POST(request: NextRequest) {
     
     // For clinic questions, find directors assigned to the clinic
     if (questionType === "clinic" && resolvedClinicId) {
-      const { data: clinicDirectors } = await supabase
+      let clinicDirQuery = supabase
         .from("clinic_directors")
         .select("director_id")
         .eq("clinic_id", resolvedClinicId)
+      if (currentSemesterId) clinicDirQuery = clinicDirQuery.eq("semester_id", currentSemesterId)
+      const { data: clinicDirectors } = await clinicDirQuery
       
       if (clinicDirectors && clinicDirectors.length > 0) {
         for (const cd of clinicDirectors) {

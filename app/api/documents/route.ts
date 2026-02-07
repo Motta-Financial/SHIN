@@ -57,19 +57,24 @@ export async function GET(request: Request) {
     const { data, error } = await query
 
     if (error) {
+      const msg = error.message || ""
+      if (msg.includes("Too Many R") || msg.includes("rate limit")) {
+        return NextResponse.json({ error: "Rate limited", documents: [] }, { status: 429 })
+      }
       console.error("[v0] Error fetching documents:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: error.message, documents: [] }, { status: 500 })
     }
 
     const result = { documents: data || [] }
-
-    setCachedData(cacheKey, result, 30000) // 30 second cache
-    console.log("[v0] Documents API - Fetched and cached documents count:", data?.length || 0)
-
+    setCachedData(cacheKey, result, 30000)
     return NextResponse.json(result)
-  } catch (error) {
+  } catch (error: any) {
+    const msg = error?.message || ""
+    if (msg.includes("Too Many R") || msg.includes("Unexpected token") || msg.includes("rate limit")) {
+      return NextResponse.json({ error: "Rate limited", documents: [] }, { status: 429 })
+    }
     console.error("[v0] Error in documents API:", error)
-    return NextResponse.json({ error: "Failed to fetch documents" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to fetch documents", documents: [] }, { status: 500 })
   }
 }
 

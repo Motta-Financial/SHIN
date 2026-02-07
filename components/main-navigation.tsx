@@ -20,10 +20,21 @@ import {
   MessageSquare,
   MessageSquareText,
 } from "lucide-react"
+import { useUserRole } from "@/hooks/use-user-role"
 
 export function MainNavigation() {
   const pathname = usePathname()
+  const { role } = useUserRole()
 
+  // For role-neutral routes (like /settings), use the authenticated user's role
+  // For portal-specific routes, use the pathname to determine context
+  const isClientRoute = pathname.startsWith("/client-portal")
+  const isStudentRoute =
+    pathname.startsWith("/students") ||
+    pathname.startsWith("/my-team") ||
+    pathname.startsWith("/student-class-course") ||
+    pathname.startsWith("/student-hours") ||
+    pathname.startsWith("/student-debriefs")
   const isDirectorRoute =
     pathname === "/" ||
     pathname === "/director" ||
@@ -38,13 +49,8 @@ export function MainNavigation() {
     pathname.startsWith("/admin") ||
     pathname.startsWith("/debriefs")
 
-  const isClientRoute = pathname.startsWith("/client-portal")
-  const isStudentRoute =
-    pathname.startsWith("/students") ||
-    pathname.startsWith("/my-team") ||
-    pathname.startsWith("/student-class-course") ||
-    pathname.startsWith("/student-hours") ||
-    pathname.startsWith("/student-debriefs")
+  // Determine if we're on a role-neutral page (e.g. /settings)
+  const isRoleNeutralRoute = !isDirectorRoute && !isClientRoute && !isStudentRoute
 
   // Director Portal Navigation
   const directorNavItems = [
@@ -76,7 +82,20 @@ export function MainNavigation() {
     { name: "Documents", href: "/client-portal?tab=documents", icon: FileText },
   ]
 
-  const navItems = isClientRoute ? clientNavItems : isStudentRoute ? studentNavItems : directorNavItems
+  // On role-neutral routes (like /settings/account), use the user's actual role
+  // On portal-specific routes, use the pathname context
+  let navItems
+  if (isRoleNeutralRoute) {
+    if (role === "student") {
+      navItems = studentNavItems
+    } else if (role === "client") {
+      navItems = clientNavItems
+    } else {
+      navItems = directorNavItems
+    }
+  } else {
+    navItems = isClientRoute ? clientNavItems : isStudentRoute ? studentNavItems : directorNavItems
+  }
 
   const isAccountActive = pathname.startsWith("/settings")
 

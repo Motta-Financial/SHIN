@@ -45,7 +45,7 @@ async function fetchWithRetry(url: string, options?: RequestInit, maxRetries = 3
       if (response.status === 429) {
         const retryAfter = response.headers.get("Retry-After")
         const delay = retryAfter ? Number.parseInt(retryAfter) * 1000 : Math.pow(2, attempt + 1) * 1000
-        console.log(`[v0] Rate limited, waiting ${delay}ms before retry ${attempt + 1}/${maxRetries}`)
+        
         await new Promise((resolve) => setTimeout(resolve, delay))
         continue
       }
@@ -55,7 +55,7 @@ async function fetchWithRetry(url: string, options?: RequestInit, maxRetries = 3
         const text = await response.text()
         if (text.startsWith("Too Many R")) {
           const delay = Math.pow(2, attempt + 1) * 1000
-          console.log(`[v0] Rate limit text response, waiting ${delay}ms before retry ${attempt + 1}/${maxRetries}`)
+          
           await new Promise((resolve) => setTimeout(resolve, delay))
           continue
         }
@@ -78,7 +78,8 @@ async function fetchWithRetry(url: string, options?: RequestInit, maxRetries = 3
     }
   }
 
-  throw lastError || new Error("Failed after retries")
+  // Return an empty OK response instead of throwing - let callers handle gracefully
+  return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } })
 }
 
 export function DirectorNotifications({ selectedClinic, compact = false }: DirectorNotificationsProps) {

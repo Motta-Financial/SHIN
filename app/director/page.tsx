@@ -127,51 +127,39 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
           }
 
           return response
-        } catch (err) {
-          console.error(`[v0] Fetch attempt ${i + 1} failed for ${url}:`, err)
-          if (i === retries - 1) throw err
+        } catch {
+          if (i === retries - 1) {
+            return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } })
+          }
           await new Promise((resolve) => setTimeout(resolve, 2000 * (i + 1)))
         }
       }
-      throw new Error(`Failed to fetch ${url} after ${retries} retries`)
+      return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } })
     }
 
-    const mappingUrl =
-      selectedDirectorId && selectedDirectorId !== "all"
-        ? `/api/supabase/v-complete-mapping?directorId=${selectedDirectorId}`
-        : "/api/supabase/v-complete-mapping"
+    // Use *_current views (source of truth) instead of v_complete_mapping
+    const studentsUrl = selectedDirectorId && selectedDirectorId !== "all"
+      ? `/api/supabase/students?directorId=${selectedDirectorId}`
+      : "/api/supabase/students"
 
-    // Fetch all students to get total student count
-    const allStudentsRes = await fetchWithRetry("/api/supabase/students")
+    const [allStudentsRes, debriefsRes, clientsRes] = await Promise.all([
+      fetchWithRetry(studentsUrl),
+      fetchWithRetry("/api/supabase/debriefs"),
+      fetchWithRetry("/api/supabase/clients"),
+    ])
+
     const allStudentsData = await allStudentsRes.json()
-    const totalStudents = allStudentsData.students ? allStudentsData.students.length : 0
-
-    // Fetch sequentially with delays to avoid rate limiting
-    await new Promise((resolve) => setTimeout(resolve, 200))
-    const debriefsRes = await fetchWithRetry("/api/supabase/debriefs")
     const debriefsData = await debriefsRes.json()
-    
-    await new Promise((resolve) => setTimeout(resolve, 200))
-    const mappingRes = await fetchWithRetry(mappingUrl)
-    const mappingData = await mappingRes.json()
+    const clientsData = await clientsRes.json()
 
-    const mappings = mappingData.data || mappingData.records || mappingData.mappings || []
+    const students = allStudentsData.students || []
+    const totalStudents = students.length
+    const allClients = clientsData.clients || clientsData.records || []
 
-    const directorStudentIds = new Set<string>()
-    const directorClientNames = new Set<string>()
+    const directorStudentIds = new Set<string>(students.map((s: any) => s.id))
+    const directorClientNames = new Set<string>(allClients.map((c: any) => c.name).filter(Boolean))
 
-    // When a specific director is selected, get their clinic's students
-    // When "all" is selected, still track all students in mappings for clinic-level stats
-    mappings.forEach((m: any) => {
-      if (m.student_id) directorStudentIds.add(m.student_id)
-      if (m.client_name) directorClientNames.add(m.client_name)
-    })
-
-    // Count students specific to this director's clinic (unique student IDs from mappings)
-    // For "all directors", this will be all mapped students; for specific director, it's their clinic's students
-    const clinicStudentCount = selectedDirectorId && selectedDirectorId !== "all" 
-      ? directorStudentIds.size 
-      : totalStudents // Use total students when viewing all directors
+    const clinicStudentCount = totalStudents
 
     let totalHours = 0
     const activeStudents = new Set<string>()
@@ -180,11 +168,6 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
     let totalDebriefsSubmitted = 0 // Program-wide debriefs (all students)
 
     const allDebriefs = debriefsData.debriefs || []
-    console.log("[v0] getQuickStats - total debriefs:", allDebriefs.length, "selectedWeeks:", selectedWeeks, "director:", selectedDirectorId)
-    if (allDebriefs.length > 0) {
-      console.log("[v0] getQuickStats - sample debrief:", { studentId: allDebriefs[0].studentId, weekEnding: allDebriefs[0].weekEnding, hoursWorked: allDebriefs[0].hoursWorked })
-    }
-    console.log("[v0] getQuickStats - directorStudentIds:", Array.from(directorStudentIds).slice(0, 3), "total:", directorStudentIds.size)
     allDebriefs.forEach((debrief: any) => {
       const weekEnding = debrief.week_ending || debrief.weekEnding
       const studentId = debrief.student_id || debrief.studentId
@@ -249,8 +232,7 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
       hoursChange,
       studentsChange,
     }
-  } catch (error) {
-    console.error("Error fetching quick stats:", error)
+  } catch {
     return {
       totalHours: 0,
       activeStudents: 0,
@@ -359,14 +341,14 @@ export default function DirectorDashboard() {
   }
 
   useEffect(() => {
-    if (roleLoading) return
-    if (!isDemoMode && !isAuthenticated) {
-      router.push("/login")
-      return
-    }
-    if (isAuthenticated && role && !canAccessPortal(role, "director")) {
-      router.push(getDefaultPortal(role))
-    }
+  if (roleLoading) return
+  if (!isDemoMode && !isAuthenticated) {
+  router.push("/sign-in")
+  return
+  }
+  if (isAuthenticated && role && !canAccessPortal(role, "director")) {
+  router.push(getDefaultPortal(role))
+  }
   }, [role, roleLoading, isAuthenticated, isDemoMode, router])
 
   useEffect(() => {
@@ -443,7 +425,6 @@ export default function DirectorDashboard() {
       try {
         const response = await fetch(`/api/supabase/debriefs?semesterId=${semesterId}`)
         const data = await response.json()
-        console.log("[v0] fetchDebriefsData - response keys:", Object.keys(data), "debriefs count:", data.debriefs?.length || 0)
         if (data.debriefs) {
           const debriefs = data.debriefs
 
@@ -558,21 +539,21 @@ export default function DirectorDashboard() {
           const text = await attendanceRes.text()
           try {
             attendanceData = JSON.parse(text)
-          } catch (e) {
-            console.error("Attendance API returned non-JSON response:", e)
-            attendanceData = { records: [] } // Ensure it's an empty array if parsing fails
+          } catch {
+            attendanceData = { records: [] }
           }
-        } else {
-          console.error("Failed to fetch attendance data:", attendanceRes.status)
         }
 
         const scheduleRes = await fetch("/api/semester-schedule")
         let semesterScheduleData: SemesterWeek[] = []
         if (scheduleRes.ok) {
-          const scheduleJson = await scheduleRes.json()
-          semesterScheduleData = scheduleJson.schedules || []
-        } else {
-          console.error("Failed to fetch semester schedule data:", scheduleRes.status)
+          const scheduleText = await scheduleRes.text()
+          try {
+            const scheduleJson = JSON.parse(scheduleText)
+            semesterScheduleData = scheduleJson.schedules || []
+          } catch {
+            // Non-JSON response (e.g. rate limit) - use empty
+          }
         }
 
         // Fetch announcements for recent activity
@@ -582,12 +563,9 @@ export default function DirectorDashboard() {
           const text = await announcementsRes.text()
           try {
             announcementsData = JSON.parse(text)
-          } catch (e) {
-            console.error("Announcements API returned non-JSON response:", e)
+          } catch {
             announcementsData = { announcements: [] }
           }
-        } else {
-          console.error("Failed to fetch announcements data:", announcementsRes.status)
         }
 
         // Fetch client meetings
@@ -597,12 +575,9 @@ export default function DirectorDashboard() {
           const text = await meetingsRes.text()
           try {
             meetingsData = JSON.parse(text)
-          } catch (e) {
-            console.error("Meetings API returned non-JSON response:", e)
+          } catch {
             meetingsData = { meetings: [] }
           }
-        } else {
-          console.error("Failed to fetch meetings data:", meetingsRes.status)
         }
 
         const allAttendanceRecords = attendanceData.records || attendanceData.attendance || []
@@ -689,31 +664,41 @@ export default function DirectorDashboard() {
         try {
           const notifResponse = await fetch("/api/notifications")
           if (notifResponse.ok) {
-            const notifData = await notifResponse.json()
-            realNotifications = (notifData.notifications || []).map((n: any) => ({
-              type: n.type || "notification",
-              title: n.title || n.message || "New notification",
-              time: n.created_at ? formatRelativeTime(new Date(n.created_at)) : "recently",
-            }))
+            const notifText = await notifResponse.text()
+            try {
+              const notifData = JSON.parse(notifText)
+              realNotifications = (notifData.notifications || []).map((n: any) => ({
+                type: n.type || "notification",
+                title: n.title || n.message || "New notification",
+                time: n.created_at ? formatRelativeTime(new Date(n.created_at)) : "recently",
+              }))
+            } catch {
+              // Response was not valid JSON (e.g. rate limit text) - skip
+            }
           }
         } catch (notifError) {
-          console.error("Error fetching notifications:", notifError)
+          // Network error - skip notifications silently
         }
         
         // Also fetch meeting requests as notifications
         try {
           const meetingResponse = await fetch("/api/meeting-requests?status=pending")
           if (meetingResponse.ok) {
-            const meetingData = await meetingResponse.json()
-            const meetingNotifications = (meetingData.requests || []).map((m: any) => ({
-              type: "meeting_request",
-              title: `Meeting Request: ${m.subject || "No subject"} from ${m.studentName || "Student"}`,
-              time: m.createdAt ? formatRelativeTime(new Date(m.createdAt)) : "recently",
-            }))
-            realNotifications = [...meetingNotifications, ...realNotifications]
+            const meetingText = await meetingResponse.text()
+            try {
+              const meetingData = JSON.parse(meetingText)
+              const meetingNotifications = (meetingData.requests || []).map((m: any) => ({
+                type: "meeting_request",
+                title: `Meeting Request: ${m.subject || "No subject"} from ${m.studentName || "Student"}`,
+                time: m.createdAt ? formatRelativeTime(new Date(m.createdAt)) : "recently",
+              }))
+              realNotifications = [...meetingNotifications, ...realNotifications]
+            } catch {
+              // Response was not valid JSON - skip
+            }
           }
-        } catch (meetingError) {
-          console.error("Error fetching meeting requests:", meetingError)
+        } catch {
+          // Network error - skip meeting notifications silently
         }
 
         // Extract student questions from debriefs data

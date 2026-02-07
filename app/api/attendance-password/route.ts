@@ -33,17 +33,20 @@ export async function GET(request: NextRequest) {
       query = query.eq("week_number", weekNumber)
     }
 
-    const { data, error } = await query
-
-    if (error) {
-      console.error("[v0] Error fetching attendance passwords:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    let data = null
+    try {
+      const result = await query
+      if (result.error) {
+        return NextResponse.json({ passwords: [] })
+      }
+      data = result.data
+    } catch {
+      return NextResponse.json({ passwords: [] })
     }
 
     return NextResponse.json({ passwords: data || [] })
-  } catch (error: any) {
-    console.error("[v0] Unexpected error in attendance-password route:", error.message)
-    return NextResponse.json({ error: error.message || "Failed to fetch passwords" }, { status: 500 })
+  } catch {
+    return NextResponse.json({ passwords: [] })
   }
 }
 

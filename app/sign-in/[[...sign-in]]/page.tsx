@@ -39,19 +39,59 @@ export default function SignInPage() {
         return
       }
 
-      if (!data.user) {
+      if (!data.user || !data.session) {
         setError("Authentication failed. Please try again.")
         setIsLoading(false)
         return
       }
 
-      // This ensures cookies are written before navigation
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      // Detect role and redirect - single attempt, no retries for speed
+      const userEmail = data.user.email
+      try {
+        const roleRes = await fetch("/api/auth/detect-role", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: userEmail }),
+        })
+        const roleText = await roleRes.text()
+        let roleData: any = null
+        try { roleData = JSON.parse(roleText) } catch {}
 
-      // Navigate to auth loading page which will detect role and redirect
-      router.push("/auth/loading")
+        // Cache the role data in sessionStorage so useUserRole reads it instantly
+        if (roleData?.role) {
+          try {
+            sessionStorage.setItem("shin_role_cache", JSON.stringify({
+              role: roleData.role,
+              userId: roleData.userId,
+              authUserId: data.user.id,
+              email: userEmail,
+              userName: roleData.userName,
+              clinicId: roleData.clinicId || null,
+              studentId: roleData.role === "student" ? roleData.userId : null,
+              directorId: roleData.role === "director" ? roleData.userId : null,
+              clientId: roleData.role === "client" ? roleData.userId : null,
+              timestamp: Date.now(),
+            }))
+          } catch {}
+        }
+
+        // Use router.push for instant client-side navigation (no black screen).
+        // The sessionStorage cache written above ensures useUserRole resolves
+        // synchronously on the target page, so the user sees their dashboard
+        // immediately with no loading flash.
+        if (roleData?.role === "director") {
+          router.push("/director")
+        } else if (roleData?.role === "student") {
+          router.push("/students")
+        } else if (roleData?.role === "client") {
+          router.push("/client-portal")
+        } else {
+          router.push("/auth/loading")
+        }
+      } catch {
+        router.push("/auth/loading")
+      }
     } catch (err) {
-      console.error("SignIn - Error:", err)
       const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred"
       setError(errorMessage)
       setIsLoading(false)

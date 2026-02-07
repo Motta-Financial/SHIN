@@ -56,7 +56,7 @@ export function MyTeamContent() {
   const searchParams = useSearchParams()
   const studentIdFromUrl = searchParams.get("studentId")
 
-  console.log("[v0] MyTeamContent - studentIdFromUrl:", studentIdFromUrl)
+
 
   const [availableStudents, setAvailableStudents] = useState<Array<{ id: string; name: string; email: string }>>([])
   const isAdminOrDirector = role === "admin" || role === "director"
@@ -87,7 +87,7 @@ export function MyTeamContent() {
   const [expandedTimelineItems, setExpandedTimelineItems] = useState<Set<string>>(new Set())
   const [savingEdit, setSavingEdit] = useState(false) // Declare savingEdit state
 
-  console.log("[v0] URL param useEffect - studentIdFromUrl:", studentIdFromUrl, "currentStudentId:", currentStudentId)
+
   // The old useEffect at lines 88-93 is removed
 
   useEffect(() => {
@@ -124,7 +124,7 @@ export function MyTeamContent() {
                   studentToLoad = studentIdFromUrl
                 } else {
                   // URL param student not found in current semester, fall back to first
-                  console.log("[v0] Student from URL not found in roster, defaulting to first")
+            
                   studentToLoad = studentList[0]?.id
                 }
               } else if (!currentStudentId && studentList.length > 0) {
@@ -154,30 +154,21 @@ export function MyTeamContent() {
   }, [roleLoading, isAdminOrDirector])
 
   useEffect(() => {
-    console.log("[v0] MyTeam - Auth state:", { role, isAuthenticated, roleLoading, authStudentId })
-
-    if (roleLoading) {
-      console.log("[v0] MyTeam - Still loading role, waiting...")
-      return
-    }
+    if (roleLoading) return
 
     if (!isAuthenticated) {
-      console.log("[v0] MyTeam - Not authenticated, redirecting to sign-in")
       router.push("/sign-in")
       return
     }
 
+    // Don't redirect when role is null - user IS authenticated, keep them here
+
     // Directors and admins can access all portals
-    if (isAdminOrDirector) {
-      console.log("[v0] MyTeam - Admin/Director access granted, no redirect.")
-      return // Don't redirect, allow access
-    }
+    if (isAdminOrDirector) return
 
     // Students can access the student portal
     if (role === "student") {
-      console.log("[v0] MyTeam - Student role detected.")
       if (authStudentId && authStudentId !== currentStudentId) {
-        console.log("[v0] MyTeam - Using student ID from auth:", authStudentId)
         setCurrentStudentId(authStudentId)
         loadTeamData(authStudentId)
       }
@@ -186,16 +177,11 @@ export function MyTeamContent() {
 
     // Other roles that can't access student portal - redirect
     if (!canAccessPortal(role, "student")) {
-      console.log("[v0] MyTeam - Wrong role, redirecting to:", getDefaultPortal(role))
       router.push(getDefaultPortal(role))
       return
     }
 
-    console.log("[v0] MyTeam - Student access granted (default case)")
-    // This part might be redundant if the above conditions cover all cases,
-    // but it's here for completeness if logic changes.
     if (authStudentId && authStudentId !== currentStudentId) {
-      console.log("[v0] MyTeam - Using student ID from auth (fallback):", authStudentId)
       setCurrentStudentId(authStudentId)
       loadTeamData(authStudentId)
     }
@@ -213,7 +199,7 @@ export function MyTeamContent() {
   const loadTeamData = async (studentId: string) => {
     try {
       setLoading(true)
-      console.log("[v0] loadTeamData called with studentId:", studentId)
+  
 
       // Fetch from v-complete-mapping to get student info
       const mappingRes = await fetch(`/api/supabase/v-complete-mapping?studentId=${studentId}`)
@@ -244,7 +230,7 @@ export function MyTeamContent() {
           })
           setTeamNotes(data.notes || [])
           setDeliverables(data.deliverables || [])
-          console.log("[v0] Deliverables state set to:", data.deliverables?.length || 0, "items")
+    
         }
       } else {
         setCurrentStudentName("Unknown Student")
@@ -312,7 +298,7 @@ export function MyTeamContent() {
       const sanitizedFileName = selectedFile.name.replace(/[^a-zA-Z0-9.-]/g, "_")
       const filePath = `deliverables/${engagement.clientId}/${selectedDeliverableType}/${timestamp}_${sanitizedFileName}`
 
-      console.log("[v0] Starting direct Supabase upload:", filePath, "Size:", selectedFile.size)
+
 
       // Upload directly to Supabase Storage from client
       // This bypasses the Next.js API route body size limit
@@ -329,7 +315,7 @@ export function MyTeamContent() {
         throw new Error(uploadError.message)
       }
 
-      console.log("[v0] Upload successful:", uploadData?.path)
+
       setUploadProgress(50) // File uploaded, now saving record
 
       // Get public URL
@@ -337,7 +323,7 @@ export function MyTeamContent() {
         data: { publicUrl },
       } = supabase.storage.from("SHIN").getPublicUrl(filePath)
 
-      console.log("[v0] Public URL:", publicUrl)
+
 
       // Save document record via API (small JSON payload, no file)
       const response = await fetch("/api/upload-deliverable/save-record", {
@@ -363,7 +349,7 @@ export function MyTeamContent() {
       }
 
       setUploadProgress(100)
-      console.log("[v0] Document record saved")
+
 
       // Success - refresh deliverables list
       await loadTeamData(currentStudentId)

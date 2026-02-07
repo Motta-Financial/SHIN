@@ -41,12 +41,22 @@ export async function GET(request: Request) {
 
     const { data, error } = await query
 
-    if (error) throw error
+    if (error) {
+      const msg = error?.message?.toLowerCase() || ""
+      if (msg.includes("too many") || msg.includes("rate limit")) {
+        return NextResponse.json({ meetings: [] }, { status: 429 })
+      }
+      throw error
+    }
 
     return NextResponse.json({ meetings: data || [] })
-  } catch (error) {
+  } catch (error: any) {
+    const msg = error?.message?.toLowerCase() || ""
+    if (msg.includes("too many") || msg.includes("rate limit") || msg.includes("unexpected token")) {
+      return NextResponse.json({ meetings: [] }, { status: 429 })
+    }
     console.error("Error fetching scheduled client meetings:", error)
-    return NextResponse.json({ error: "Failed to fetch meetings" }, { status: 500 })
+    return NextResponse.json({ meetings: [] }, { status: 500 })
   }
 }
 

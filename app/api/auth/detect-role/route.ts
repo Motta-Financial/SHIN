@@ -39,16 +39,41 @@ export async function POST(request: Request) {
 
     const normalizedEmail = email.toLowerCase().trim()
 
-    // Check directors first - use directors_current view for current semester
-    const { data: directors, error: directorError } = await supabaseAdmin
-      .from("directors_current")
-      .select("id, email, role, full_name")
-
-    if (directorError) {
-      console.error("detect-role - Director query error:", directorError)
+    // Helper: run a query with retry for rate limits
+    async function queryWithRetry<T>(fn: () => Promise<{ data: T | null; error: any }>): Promise<{ data: T | null; error: any }> {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const result = await fn()
+          if (result.error) {
+            const errMsg = typeof result.error === "string" ? result.error : result.error?.message || ""
+            if (errMsg.toLowerCase().includes("too many") || errMsg.toLowerCase().includes("rate limit")) {
+              if (attempt < 2) {
+                await new Promise((r) => setTimeout(r, (attempt + 1) * 1500))
+                continue
+              }
+            }
+          }
+          return result
+        } catch (err: any) {
+          const msg = err?.message?.toLowerCase() || ""
+          if ((msg.includes("too many") || msg.includes("unexpected token")) && attempt < 2) {
+            await new Promise((r) => setTimeout(r, (attempt + 1) * 1500))
+            continue
+          }
+          return { data: null, error: err }
+        }
+      }
+      return { data: null, error: "Max retries reached" }
     }
 
-    const directorData = directors?.find((d) => d.email?.toLowerCase() === normalizedEmail)
+    // Check directors first
+    const { data: directorData } = await queryWithRetry(() =>
+      supabaseAdmin
+        .from("directors_current")
+        .select("id, email, role, full_name, clinic_id")
+        .ilike("email", normalizedEmail)
+        .maybeSingle()
+    )
 
     if (directorData) {
       return NextResponse.json({
@@ -56,21 +81,19 @@ export async function POST(request: Request) {
         userId: directorData.id,
         userRole: directorData.role,
         userName: directorData.full_name,
+        clinicId: directorData.clinic_id,
         redirect: "/director",
       })
     }
 
-    // Check students - use students_current view to get ONLY the current semester's student record
-    // This is critical because a student may exist in multiple semesters with different IDs
-    const { data: students, error: studentError } = await supabaseAdmin
-      .from("students_current")
-      .select("id, email, full_name, clinic, clinic_id")
-
-    if (studentError) {
-      console.error("detect-role - Student query error:", studentError)
-    }
-
-    const studentData = students?.find((s) => s.email?.toLowerCase() === normalizedEmail)
+    // Check students
+    const { data: studentData } = await queryWithRetry(() =>
+      supabaseAdmin
+        .from("students_current")
+        .select("id, email, full_name, clinic, clinic_id, client_id")
+        .ilike("email", normalizedEmail)
+        .maybeSingle()
+    )
 
     if (studentData) {
       return NextResponse.json({
@@ -78,24 +101,83 @@ export async function POST(request: Request) {
         userId: studentData.id,
         userName: studentData.full_name,
         clinic: studentData.clinic,
+        clinicId: studentData.clinic_id,
+        clientId: studentData.client_id,
         redirect: "/students",
       })
     }
 
-    // Check clients - use clients_current view for current semester
-    const { data: clients, error: clientError } = await supabaseAdmin.from("clients_current").select("id, name, email")
-
-    if (clientError) {
-      console.error("detect-role - Client query error:", clientError)
-    }
-
-    const clientData = clients?.find((c) => c.email?.toLowerCase() === normalizedEmail)
+    // Check clients
+    const { data: clientData } = await queryWithRetry(() =>
+      supabaseAdmin
+        .from("clients_current")
+        .select("id, name, email")
+        .ilike("email", normalizedEmail)
+        .maybeSingle()
+    )
 
     if (clientData) {
       return NextResponse.json({
         role: "client",
         userId: clientData.id,
         userName: clientData.name,
+        redirect: "/client-portal",
+      })
+    }
+
+    // Fallback: check base tables directly (in case *_current views have semester issues)
+    const { data: directorBase } = await queryWithRetry(() =>
+      supabaseAdmin
+        .from("directors")
+        .select("id, email, role, full_name, clinic_id")
+        .ilike("email", normalizedEmail)
+        .limit(1)
+        .maybeSingle()
+    )
+    if (directorBase) {
+      return NextResponse.json({
+        role: "director",
+        userId: directorBase.id,
+        userRole: directorBase.role,
+        userName: directorBase.full_name,
+        clinicId: directorBase.clinic_id,
+        redirect: "/director",
+      })
+    }
+
+    const { data: studentBase } = await queryWithRetry(() =>
+      supabaseAdmin
+        .from("students")
+        .select("id, email, full_name, clinic, clinic_id, client_id")
+        .ilike("email", normalizedEmail)
+        .limit(1)
+        .maybeSingle()
+    )
+    if (studentBase) {
+      return NextResponse.json({
+        role: "student",
+        userId: studentBase.id,
+        userName: studentBase.full_name,
+        clinic: studentBase.clinic,
+        clinicId: studentBase.clinic_id,
+        clientId: studentBase.client_id,
+        redirect: "/students",
+      })
+    }
+
+    const { data: clientBase } = await queryWithRetry(() =>
+      supabaseAdmin
+        .from("clients")
+        .select("id, name, email")
+        .ilike("email", normalizedEmail)
+        .limit(1)
+        .maybeSingle()
+    )
+    if (clientBase) {
+      return NextResponse.json({
+        role: "client",
+        userId: clientBase.id,
+        userName: clientBase.name,
         redirect: "/client-portal",
       })
     }

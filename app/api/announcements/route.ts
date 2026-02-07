@@ -29,6 +29,10 @@ export async function GET(request: NextRequest) {
       .limit(50)
 
     if (error) {
+      const msg = error?.message?.toLowerCase() || ""
+      if (msg.includes("too many") || msg.includes("rate limit")) {
+        return NextResponse.json({ announcements: [] }, { status: 429 })
+      }
       console.error("Error fetching announcements:", error)
       return NextResponse.json({ announcements: [] })
     }
@@ -59,7 +63,11 @@ export async function GET(request: NextRequest) {
     }))
 
     return NextResponse.json({ announcements })
-  } catch (error) {
+  } catch (error: any) {
+    const msg = error?.message?.toLowerCase() || ""
+    if (msg.includes("too many") || msg.includes("rate limit") || msg.includes("unexpected token")) {
+      return NextResponse.json({ announcements: [] }, { status: 429 })
+    }
     console.error("Error in announcements GET:", error)
     return NextResponse.json({ announcements: [] })
   }

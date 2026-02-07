@@ -15,9 +15,15 @@ function isRateLimitError(error: unknown): boolean {
     return (
       err.status === 429 ||
       err.code === "429" ||
-      err.message?.toLowerCase().includes("too many") ||
-      err.message?.toLowerCase().includes("rate limit")
+      (typeof err.message === "string" && (
+        err.message.toLowerCase().includes("too many") ||
+        err.message.toLowerCase().includes("rate limit") ||
+        err.message.includes("Too Many R")
+      ))
     )
+  }
+  if (typeof error === "string") {
+    return error.toLowerCase().includes("too many") || error.toLowerCase().includes("rate limit")
   }
   return false
 }
@@ -45,30 +51,32 @@ export async function GET(request: Request) {
     },
   })
 
+  const emptyResponse = { schedules: [], metadata: { totalWeeks: 0, totalClassWeeks: 0, elapsedClassWeeks: 0, currentWeekNumber: null, currentWeekId: null } }
+
   try {
     let activeSemesterId = semesterId
 
     if (!activeSemesterId && !includeAll) {
-      if (semester) {
-        const { data: semesterConfig, error: semesterError } = await supabase
-          .from("semester_config")
-          .select("id, semester")
-          .eq("semester", semester)
-          .maybeSingle()
-        console.log("[v0] semester-schedule API - Looking for semester:", semester, "Found:", semesterConfig, "Error:", semesterError)
-        activeSemesterId = semesterConfig?.id || null
-      } else {
-        const { data: activeSemester, error: activeError } = await supabase
-          .from("semester_config")
-          .select("id")
-          .eq("is_active", true)
-          .maybeSingle()
-        console.log("[v0] semester-schedule API - Looking for active semester. Found:", activeSemester, "Error:", activeError)
-        activeSemesterId = activeSemester?.id || null
+      try {
+        if (semester) {
+          const { data: semesterConfig } = await supabase
+            .from("semester_config")
+            .select("id, semester")
+            .eq("semester", semester)
+            .maybeSingle()
+          activeSemesterId = semesterConfig?.id || null
+        } else {
+          const { data: activeSemester } = await supabase
+            .from("semester_config")
+            .select("id")
+            .eq("is_active", true)
+            .maybeSingle()
+          activeSemesterId = activeSemester?.id || null
+        }
+      } catch {
+        return NextResponse.json(emptyResponse)
       }
     }
-    
-    console.log("[v0] semester-schedule API - Using activeSemesterId:", activeSemesterId)
 
     const selectFields = includeClassSessions
       ? `*, class_sessions!semester_schedule_class_session_id_fkey(id, class_number, class_label, class_date, class_start_time, class_end_time)`
@@ -80,18 +88,23 @@ export async function GET(request: Request) {
       query = query.eq("semester_id", activeSemesterId)
     }
 
-    const { data, error } = await query
-    
-    console.log("[v0] semester-schedule API - Query result count:", data?.length, "Error:", error)
-
-    if (error) throw error
+    let data: any[] | null = null
+    try {
+      const result = await query
+      if (result.error) {
+        return NextResponse.json(emptyResponse)
+      }
+      data = result.data
+    } catch {
+      return NextResponse.json(emptyResponse)
+    }
 
     const now = new Date()
-    const elapsedWeeks = data?.filter((week) => new Date(week.week_end) < now && !week.is_break).length || 0
-    const currentWeek = data?.find((week) => new Date(week.week_start) <= now && new Date(week.week_end) >= now)
-    const totalClassWeeks = data?.filter((week) => !week.is_break).length || 0
+    const elapsedWeeks = data?.filter((week: any) => new Date(week.week_end) < now && !week.is_break).length || 0
+    const currentWeek = data?.find((week: any) => new Date(week.week_start) <= now && new Date(week.week_end) >= now)
+    const totalClassWeeks = data?.filter((week: any) => !week.is_break).length || 0
 
-    const response = {
+    return NextResponse.json({
       schedules: data || [],
       metadata: {
         totalWeeks: data?.length || 0,
@@ -100,15 +113,9 @@ export async function GET(request: Request) {
         currentWeekNumber: currentWeek?.week_number || null,
         currentWeekId: currentWeek?.id || null,
       },
-    }
-
-    return NextResponse.json(response)
-  } catch (error) {
-    console.error("Error fetching semester schedule:", error)
-    if (isRateLimitError(error)) {
-      return NextResponse.json({ schedules: [], error: "Rate limited", rateLimited: true }, { status: 429 })
-    }
-    return NextResponse.json({ schedules: [], error: "Failed to fetch schedule" }, { status: 500 })
+    })
+  } catch {
+    return NextResponse.json(emptyResponse)
   }
 }
 

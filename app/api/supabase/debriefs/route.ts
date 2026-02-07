@@ -53,7 +53,11 @@ export async function GET(request: Request) {
     const { data: debriefs, error } = await query
 
     if (error) {
-      console.error("Supabase debriefs error:", error.message)
+      const msg = error.message || ""
+      if (msg.includes("Too Many R") || msg.includes("rate limit")) {
+        return NextResponse.json({ debriefs: [] }, { status: 429 })
+      }
+      console.error("Supabase debriefs error:", msg)
       return NextResponse.json({ debriefs: [] })
     }
 
@@ -111,7 +115,11 @@ export async function GET(request: Request) {
     setCachedData(cacheKey, response)
 
     return NextResponse.json(response)
-  } catch (error) {
+  } catch (error: any) {
+    const msg = error?.message || ""
+    if (msg.includes("Too Many R") || msg.includes("Unexpected token") || msg.includes("rate limit")) {
+      return NextResponse.json({ debriefs: [] }, { status: 429 })
+    }
     console.error("Error fetching debriefs:", error)
     return NextResponse.json({ debriefs: [] })
   }
@@ -204,7 +212,8 @@ export async function POST(request: Request) {
       clinic_id: clinicId, // IMPORTANT: Include clinic_id so directors can see the debrief
       hours_worked: body.hoursWorked || 0,
       work_summary: body.workSummary,
-      questions: body.questions,
+      questions: body.questions || null,
+      question_type: body.questionType || (body.questions ? "clinic" : null),
       week_ending: body.weekEnding || new Date().toISOString().split("T")[0],
       week_number: body.weekNumber || null,
       semester_id: semesterId,
@@ -247,6 +256,7 @@ export async function POST(request: Request) {
             .from("client_directors")
             .select("director_id")
             .eq("client_id", clientId)
+            .eq("semester_id", semesterId)
 
           if (clientDirectors && clientDirectors.length > 0) {
             for (const cd of clientDirectors) {
@@ -272,6 +282,7 @@ export async function POST(request: Request) {
             .from("clinic_directors")
             .select("director_id")
             .eq("clinic_id", clinicId)
+            .eq("semester_id", semesterId)
 
           if (clinicDirectors && clinicDirectors.length > 0) {
             for (const cd of clinicDirectors) {
@@ -301,6 +312,7 @@ export async function POST(request: Request) {
           .from("clinic_directors")
           .select("director_id")
           .eq("clinic_id", clinicId)
+          .eq("semester_id", semesterId)
 
         if (clinicDirectors && clinicDirectors.length > 0) {
           for (const cd of clinicDirectors) {
@@ -334,12 +346,12 @@ export async function POST(request: Request) {
       }
     } catch (notifError) {
       // Don't fail the debrief creation if notification fails
-      console.log("[v0] Error creating debrief notification:", notifError)
+      console.error("Error creating debrief notification:", notifError)
     }
 
     return NextResponse.json({ success: true, debrief: data })
   } catch (error) {
-    console.log("[v0] Error in POST debriefs:", error)
+    console.error("Error in POST debriefs:", error)
     return NextResponse.json({ error: "Failed to create debrief" }, { status: 500 })
   }
 }

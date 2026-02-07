@@ -17,18 +17,38 @@ export default function AuthLoadingPage() {
 
     const detectRoleAndRedirect = async () => {
       try {
-        const supabase = createClient()
-
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
-
-        let user = sessionData.session?.user
-
-        if (!user) {
-          const { data: userData } = await supabase.auth.getUser()
-          user = userData.user
+        // 1. Check sessionStorage cache first (written by sign-in page)
+        //    This is the fastest path and avoids Supabase calls entirely
+        if (typeof window !== "undefined") {
+          try {
+            const cached = sessionStorage.getItem("shin_role_cache")
+            if (cached) {
+              const parsed = JSON.parse(cached)
+              if (parsed.role && Date.now() - parsed.timestamp < 300000) {
+                setStatus("Loading your profile...")
+                if (parsed.role === "director") { router.push("/director"); return }
+                if (parsed.role === "student") { router.push("/students"); return }
+                if (parsed.role === "client") { router.push("/client-portal"); return }
+              }
+            }
+          } catch {}
         }
 
-        if (!user) {
+        // 2. No cache - try to get user email from Supabase session
+        const supabase = createClient()
+        let userEmail: string | null = null
+
+        // Try getSession first (reads from local storage, no network call)
+        const { data: sessionData } = await supabase.auth.getSession()
+        userEmail = sessionData.session?.user?.email || null
+
+        // Fallback to getUser (network call to Supabase)
+        if (!userEmail) {
+          const { data: userData } = await supabase.auth.getUser()
+          userEmail = userData.user?.email || null
+        }
+
+        if (!userEmail) {
           router.push("/sign-in")
           return
         }
@@ -36,42 +56,44 @@ export default function AuthLoadingPage() {
         setStatus("Loading your profile...")
         clearAuthCache()
 
-        const userEmail = user.email
-
+        // 3. Call detect-role with the validated email
         const response = await fetch("/api/auth/detect-role", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: userEmail }),
-          credentials: "include",
         })
 
-        const responseText = await response.text()
-
-        let data: any
+        let data: any = null
         try {
-          data = JSON.parse(responseText)
-        } catch (parseError) {
-          console.error("AuthLoading - Failed to parse response")
-          setStatus("Server error. Please try again.")
+          const text = await response.text()
+          data = JSON.parse(text)
+        } catch {
+          setStatus("Server is busy. Please try again.")
           setTimeout(() => router.push("/sign-in"), 2000)
           return
         }
 
-        if (response.ok && data.redirect) {
+        if (response.ok && data?.redirect) {
+          // Cache for future use
+          try {
+            sessionStorage.setItem("shin_role_cache", JSON.stringify({
+              role: data.role,
+              userId: data.userId,
+              authUserId: sessionData.session?.user?.id || "",
+              email: userEmail,
+              userName: data.userName,
+              clinicId: data.clinicId || null,
+              studentId: data.role === "student" ? data.userId : null,
+              directorId: data.role === "director" ? data.userId : null,
+              clientId: data.role === "client" ? data.userId : null,
+              timestamp: Date.now(),
+            }))
+          } catch {}
           router.push(data.redirect)
           return
         }
 
-        console.error("AuthLoading - No role found. Status:", response.status, "Error:", data.error, "Debug:", data.debug)
-        
-        // Show more helpful error message based on the error type
-        if (response.status === 500) {
-          setStatus("Server configuration error. Please try again later.")
-        } else if (response.status === 404) {
-          setStatus(`No account found for ${userEmail}. Please contact support.`)
-        } else {
-          setStatus("Account not configured. Please contact support.")
-        }
+        setStatus(`No account found for ${userEmail}. Please contact support.`)
         setTimeout(() => router.push("/sign-in"), 4000)
       } catch (error) {
         console.error("AuthLoading - Error:", error)
