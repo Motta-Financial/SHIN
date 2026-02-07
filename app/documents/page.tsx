@@ -7,8 +7,10 @@ export default function DocumentsPage() {
       <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
         <MainNavigation />
       </aside>
-      <main className="pl-52 pt-14 p-4">
-        <DirectorDocumentsDashboard />
+      <main className="pl-52 pt-14">
+        <div className="p-6">
+          <DirectorDocumentsDashboard />
+        </div>
       </main>
     </div>
   )

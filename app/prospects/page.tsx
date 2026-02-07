@@ -104,24 +104,33 @@ function ProspectsContent() {
 
   const fetchData = async () => {
     setLoading(true)
+    setError(null)
     try {
       const { fetchWithRateLimit } = await import("@/lib/fetch-with-rate-limit")
-      const prospectsRes = await fetchWithRateLimit("/api/prospects")
-      const interviewsRes = await fetchWithRateLimit("/api/prospect-interviews")
-      const directorsRes = await fetchWithRateLimit("/api/directors")
 
-      if (!prospectsRes.ok) throw new Error("Failed to fetch prospects")
-      if (!interviewsRes.ok) throw new Error("Failed to fetch interviews")
-      if (!directorsRes.ok) throw new Error("Failed to fetch directors")
-
-      const [prospectsData, interviewsData, directorsData] = await Promise.all([
-        prospectsRes.json(),
-        interviewsRes.json(),
-        directorsRes.json(),
-      ])
-
+      // Fetch sequentially to avoid rate limiting
+      const prospectsRes = await fetchWithRateLimit("/api/prospects", undefined, 4)
+      if (!prospectsRes.ok) {
+        const errText = await prospectsRes.text()
+        throw new Error(`Failed to fetch prospects: ${errText}`)
+      }
+      const prospectsData = await prospectsRes.json()
       setProspects(prospectsData.data || [])
+
+      const interviewsRes = await fetchWithRateLimit("/api/prospect-interviews", undefined, 4)
+      if (!interviewsRes.ok) {
+        const errText = await interviewsRes.text()
+        throw new Error(`Failed to fetch interviews: ${errText}`)
+      }
+      const interviewsData = await interviewsRes.json()
       setInterviews(interviewsData.data || [])
+
+      const directorsRes = await fetchWithRateLimit("/api/directors", undefined, 4)
+      if (!directorsRes.ok) {
+        const errText = await directorsRes.text()
+        throw new Error(`Failed to fetch directors: ${errText}`)
+      }
+      const directorsData = await directorsRes.json()
       setDirectors(directorsData.directors || directorsData.data || [])
     } catch (err) {
       console.error("Error fetching data:", err)

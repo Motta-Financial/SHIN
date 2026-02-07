@@ -1,69 +1,110 @@
 // Global rate-limited fetch utility to prevent Supabase rate limiting
-// Uses a semaphore to limit concurrent requests
+// Uses a semaphore pattern with exponential backoff
 
-const MAX_CONCURRENT_REQUESTS = 4 // Maximum concurrent requests
-const MIN_REQUEST_INTERVAL = 100 // 100ms minimum between requests
-let activeRequests = 0
-let lastRequestTime = 0
+const MAX_CONCURRENT = 3
+const MIN_INTERVAL_MS = 150
+let active = 0
+let lastTime = 0
+const queue: Array<() => void> = []
 
-async function waitForSlot(): Promise<void> {
-  // Wait for a slot to become available
-  while (activeRequests >= MAX_CONCURRENT_REQUESTS) {
-    await new Promise((resolve) => setTimeout(resolve, 50))
+function tryNext() {
+  if (queue.length > 0 && active < MAX_CONCURRENT) {
+    const next = queue.shift()
+    next?.()
   }
-  
-  // Ensure minimum interval between requests
-  const now = Date.now()
-  const timeSinceLastRequest = now - lastRequestTime
-  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-    await new Promise((resolve) => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest))
-  }
-  
-  activeRequests++
-  lastRequestTime = Date.now()
 }
 
-function releaseSlot(): void {
-  activeRequests = Math.max(0, activeRequests - 1)
+function waitForSlot(): Promise<void> {
+  return new Promise((resolve) => {
+    const attempt = () => {
+      if (active < MAX_CONCURRENT) {
+        const now = Date.now()
+        const gap = MIN_INTERVAL_MS - (now - lastTime)
+        if (gap > 0) {
+          setTimeout(() => {
+            active++
+            lastTime = Date.now()
+            resolve()
+          }, gap)
+        } else {
+          active++
+          lastTime = Date.now()
+          resolve()
+        }
+      } else {
+        queue.push(attempt)
+      }
+    }
+    attempt()
+  })
 }
 
-export async function fetchWithRateLimit(url: string, options?: RequestInit, maxRetries = 3): Promise<Response> {
+function releaseSlot() {
+  active = Math.max(0, active - 1)
+  tryNext()
+}
+
+async function isRateLimited(response: Response): Promise<boolean> {
+  if (response.status === 429) return true
+  // Supabase sometimes returns 200 with "Too Many Requests" as plain text body
+  const ct = response.headers.get("content-type") || ""
+  if (!ct.includes("application/json") && response.status < 400) {
+    // Clone to peek at the body without consuming it
+    const clone = response.clone()
+    try {
+      const text = await clone.text()
+      if (text.includes("Too Many R")) return true
+    } catch {
+      // ignore
+    }
+  }
+  return false
+}
+
+export async function fetchWithRateLimit(
+  url: string,
+  options?: RequestInit,
+  maxRetries = 3,
+): Promise<Response> {
   await waitForSlot()
-  
-  let lastError: Error | null = null
 
   try {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const response = await fetch(url, options)
 
-        if (response.status === 429) {
-          // Rate limited - wait with exponential backoff
-          const waitTime = Math.pow(2, attempt + 1) * 1000 // 2s, 4s, 8s
-          console.log(`[v0] Rate limited on ${url}, waiting ${waitTime}ms before retry ${attempt + 1}/${maxRetries}`)
-          await new Promise((r) => setTimeout(r, waitTime))
+        if (await isRateLimited(response)) {
+          const wait = Math.pow(2, attempt + 1) * 1000
+          console.log(
+            `[v0] Rate limited on ${url}, waiting ${wait}ms before retry ${attempt + 1}/${maxRetries}`,
+          )
+          await new Promise((r) => setTimeout(r, wait))
           continue
         }
 
         return response
       } catch (error) {
-        lastError = error as Error
-        const waitTime = Math.pow(2, attempt) * 500
-        await new Promise((r) => setTimeout(r, waitTime))
+        if (attempt === maxRetries - 1) throw error
+        await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 500))
       }
     }
 
-    throw lastError || new Error(`Failed to fetch ${url} after ${maxRetries} retries`)
+    throw new Error(`Failed to fetch ${url} after ${maxRetries} retries`)
   } finally {
     releaseSlot()
   }
 }
 
-// Fetch multiple URLs with controlled concurrency (respects MAX_CONCURRENT_REQUESTS)
-export async function fetchAllWithRateLimit(urls: string[], options?: RequestInit): Promise<Response[]> {
-  // All requests go through fetchWithRateLimit which handles concurrency
-  return Promise.all(urls.map((url) => fetchWithRateLimit(url, options)))
+// Fetch multiple URLs sequentially with rate limiting
+export async function fetchAllWithRateLimit(
+  urls: string[],
+  options?: RequestInit,
+): Promise<Response[]> {
+  const results: Response[] = []
+  for (const url of urls) {
+    results.push(await fetchWithRateLimit(url, options))
+  }
+  return results
 }
 
-// Alias for backwards compatibility - uses rate limiting
 export const fetchWithRetry = fetchWithRateLimit

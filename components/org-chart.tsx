@@ -109,9 +109,15 @@ export function OrgChart() {
     setError(null)
     try {
       const { fetchWithRateLimit } = await import("@/lib/fetch-with-rate-limit")
-      const response = await fetchWithRateLimit("/api/org-chart")
+      const response = await fetchWithRateLimit("/api/org-chart", undefined, 5)
       if (!response.ok) {
-        throw new Error("Failed to fetch org chart data")
+        const errBody = await response.text().catch(() => "Unknown error")
+        throw new Error(`Failed to fetch org chart data: ${errBody}`)
+      }
+      const contentType = response.headers.get("content-type") || ""
+      if (!contentType.includes("application/json")) {
+        const text = await response.text()
+        throw new Error(`Unexpected response from org-chart API: ${text.substring(0, 100)}`)
       }
       const data = await response.json()
 

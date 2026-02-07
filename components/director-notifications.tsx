@@ -34,53 +34,8 @@ interface DirectorNotificationsProps {
   compact?: boolean
 }
 
-async function fetchWithRetry(url: string, options?: RequestInit, maxRetries = 3): Promise<Response> {
-  let lastError: Error | null = null
-
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      const response = await fetch(url, options)
-
-      // Check for rate limiting
-      if (response.status === 429) {
-        const retryAfter = response.headers.get("Retry-After")
-        const delay = retryAfter ? Number.parseInt(retryAfter) * 1000 : Math.pow(2, attempt + 1) * 1000
-        
-        await new Promise((resolve) => setTimeout(resolve, delay))
-        continue
-      }
-
-      // Check if response is not OK and might be a rate limit text response
-      if (!response.ok) {
-        const text = await response.text()
-        if (text.startsWith("Too Many R")) {
-          const delay = Math.pow(2, attempt + 1) * 1000
-          
-          await new Promise((resolve) => setTimeout(resolve, delay))
-          continue
-        }
-        // Try to parse as JSON error
-        try {
-          const errorData = JSON.parse(text)
-          throw new Error(errorData.error || `HTTP ${response.status}`)
-        } catch {
-          throw new Error(text || `HTTP ${response.status}`)
-        }
-      }
-
-      return response
-    } catch (error) {
-      lastError = error as Error
-      if (attempt < maxRetries - 1) {
-        const delay = Math.pow(2, attempt + 1) * 1000
-        await new Promise((resolve) => setTimeout(resolve, delay))
-      }
-    }
-  }
-
-  // Return an empty OK response instead of throwing - let callers handle gracefully
-  return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } })
-}
+// Use global rate-limited fetch
+import { fetchWithRateLimit as fetchWithRetry } from "@/lib/fetch-with-rate-limit"
 
 export function DirectorNotifications({ selectedClinic, compact = false }: DirectorNotificationsProps) {
   const [notifications, setNotifications] = useState<Notification[]>([])

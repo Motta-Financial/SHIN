@@ -37,35 +37,31 @@ export async function GET(request: Request) {
       activeSemesterId = activeSemester?.id || null
     }
 
-    // Fetch base entities in parallel
-    const [clinicsRes, directorsRes, studentsRes, clientsRes] = await Promise.all([
+    // Fetch base entities - stagger in pairs to avoid rate limiting
+    const [clinicsRes, directorsRes] = await Promise.all([
       supabase.from("clinics").select("*").order("name"),
       supabase.from("directors_current").select("*").order("full_name"),
+    ])
+
+    const [studentsRes, clientsRes] = await Promise.all([
       supabase.from("students_current").select("*").order("last_name"),
       supabase.from("clients_current").select("*").order("name"),
     ])
 
-    if (clinicsRes.error) {
-      console.error("[v0] Clinics error:", clinicsRes.error)
-      return NextResponse.json({ error: clinicsRes.error.message }, { status: 500 })
-    }
-    if (directorsRes.error) {
-      console.error("[v0] Directors error:", directorsRes.error)
-      return NextResponse.json({ error: directorsRes.error.message }, { status: 500 })
-    }
-    if (studentsRes.error) {
-      console.error("[v0] Students error:", studentsRes.error)
-      return NextResponse.json({ error: studentsRes.error.message }, { status: 500 })
-    }
-    if (clientsRes.error) {
-      console.error("[v0] Clients error:", clientsRes.error)
-      return NextResponse.json({ error: clientsRes.error.message }, { status: 500 })
+    for (const [name, res] of [["Clinics", clinicsRes], ["Directors", directorsRes], ["Students", studentsRes], ["Clients", clientsRes]] as const) {
+      if (res.error) {
+        console.error(`[v0] ${name} error:`, res.error)
+        return NextResponse.json({ error: res.error.message }, { status: 500 })
+      }
     }
 
-    // Fetch junction tables for accurate relationships
-    const [clinicDirectorsRes, clinicStudentsRes, clinicClientsRes, clientAssignmentsRes] = await Promise.all([
+    // Fetch junction tables - stagger in pairs
+    const [clinicDirectorsRes, clinicStudentsRes] = await Promise.all([
       supabase.from("clinic_directors_current").select("*"),
       supabase.from("clinic_students_current").select("*"),
+    ])
+
+    const [clinicClientsRes, clientAssignmentsRes] = await Promise.all([
       supabase.from("clinic_clients_current").select("*"),
       supabase.from("client_assignments").select("*"),
     ])
@@ -75,7 +71,6 @@ export async function GET(request: Request) {
       directors: directorsRes.data || [],
       students: studentsRes.data || [],
       clients: clientsRes.data || [],
-      // Junction tables for accurate relationships
       clinicDirectors: clinicDirectorsRes.data || [],
       clinicStudents: clinicStudentsRes.data || [],
       clinicClients: clinicClientsRes.data || [],
