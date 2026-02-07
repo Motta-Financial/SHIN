@@ -568,10 +568,13 @@ export default function DirectorDashboard() {
         const scheduleRes = await fetch("/api/semester-schedule")
         let semesterScheduleData: SemesterWeek[] = []
         if (scheduleRes.ok) {
-          const scheduleJson = await scheduleRes.json()
-          semesterScheduleData = scheduleJson.schedules || []
-        } else {
-          console.error("Failed to fetch semester schedule data:", scheduleRes.status)
+          const scheduleText = await scheduleRes.text()
+          try {
+            const scheduleJson = JSON.parse(scheduleText)
+            semesterScheduleData = scheduleJson.schedules || []
+          } catch {
+            // Non-JSON response (e.g. rate limit) - use empty
+          }
         }
 
         // Fetch announcements for recent activity
@@ -688,31 +691,41 @@ export default function DirectorDashboard() {
         try {
           const notifResponse = await fetch("/api/notifications")
           if (notifResponse.ok) {
-            const notifData = await notifResponse.json()
-            realNotifications = (notifData.notifications || []).map((n: any) => ({
-              type: n.type || "notification",
-              title: n.title || n.message || "New notification",
-              time: n.created_at ? formatRelativeTime(new Date(n.created_at)) : "recently",
-            }))
+            const notifText = await notifResponse.text()
+            try {
+              const notifData = JSON.parse(notifText)
+              realNotifications = (notifData.notifications || []).map((n: any) => ({
+                type: n.type || "notification",
+                title: n.title || n.message || "New notification",
+                time: n.created_at ? formatRelativeTime(new Date(n.created_at)) : "recently",
+              }))
+            } catch {
+              // Response was not valid JSON (e.g. rate limit text) - skip
+            }
           }
         } catch (notifError) {
-          console.error("Error fetching notifications:", notifError)
+          // Network error - skip notifications silently
         }
         
         // Also fetch meeting requests as notifications
         try {
           const meetingResponse = await fetch("/api/meeting-requests?status=pending")
           if (meetingResponse.ok) {
-            const meetingData = await meetingResponse.json()
-            const meetingNotifications = (meetingData.requests || []).map((m: any) => ({
-              type: "meeting_request",
-              title: `Meeting Request: ${m.subject || "No subject"} from ${m.studentName || "Student"}`,
-              time: m.createdAt ? formatRelativeTime(new Date(m.createdAt)) : "recently",
-            }))
-            realNotifications = [...meetingNotifications, ...realNotifications]
+            const meetingText = await meetingResponse.text()
+            try {
+              const meetingData = JSON.parse(meetingText)
+              const meetingNotifications = (meetingData.requests || []).map((m: any) => ({
+                type: "meeting_request",
+                title: `Meeting Request: ${m.subject || "No subject"} from ${m.studentName || "Student"}`,
+                time: m.createdAt ? formatRelativeTime(new Date(m.createdAt)) : "recently",
+              }))
+              realNotifications = [...meetingNotifications, ...realNotifications]
+            } catch {
+              // Response was not valid JSON - skip
+            }
           }
-        } catch (meetingError) {
-          console.error("Error fetching meeting requests:", meetingError)
+        } catch {
+          // Network error - skip meeting notifications silently
         }
 
         // Extract student questions from debriefs data
