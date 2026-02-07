@@ -1989,6 +1989,17 @@ export default function StudentPortal() {
                     onNavigate={(tab) => {
                       setMainTab(tab)
                     }}
+                    onDismissNotification={async (notificationId) => {
+                      try {
+                        await fetch(`/api/notifications/${notificationId}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ is_read: true }),
+                        })
+                      } catch (e) {
+                        // Dismissal is best-effort
+                      }
+                    }}
                   />
                 </div>
 
