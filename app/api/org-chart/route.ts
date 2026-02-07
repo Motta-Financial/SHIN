@@ -37,45 +37,49 @@ export async function GET(request: Request) {
       activeSemesterId = activeSemester?.id || null
     }
 
-    const clinicsRes = await supabase.from("clinics").select("*").order("name")
+    // Fetch base entities in parallel
+    const [clinicsRes, directorsRes, studentsRes, clientsRes] = await Promise.all([
+      supabase.from("clinics").select("*").order("name"),
+      supabase.from("directors_current").select("*").order("full_name"),
+      supabase.from("students_current").select("*").order("last_name"),
+      supabase.from("clients_current").select("*").order("name"),
+    ])
+
     if (clinicsRes.error) {
       console.error("[v0] Clinics error:", clinicsRes.error)
       return NextResponse.json({ error: clinicsRes.error.message }, { status: 500 })
     }
-
-    // Small delay between requests
-    await new Promise((resolve) => setTimeout(resolve, 100))
-
-    // Use directors_current view for current semester
-    const directorsRes = await supabase.from("directors_current").select("*").order("full_name")
     if (directorsRes.error) {
       console.error("[v0] Directors error:", directorsRes.error)
       return NextResponse.json({ error: directorsRes.error.message }, { status: 500 })
     }
-
-    await new Promise((resolve) => setTimeout(resolve, 100))
-
-    // Use students_current view which already filters by current semester
-    const studentsRes = await supabase.from("students_current").select("*").order("last_name")
     if (studentsRes.error) {
       console.error("[v0] Students error:", studentsRes.error)
       return NextResponse.json({ error: studentsRes.error.message }, { status: 500 })
     }
-
-    await new Promise((resolve) => setTimeout(resolve, 100))
-
-    // Use clients_current view which already filters by current semester
-    const clientsRes = await supabase.from("clients_current").select("*").order("name")
     if (clientsRes.error) {
       console.error("[v0] Clients error:", clientsRes.error)
       return NextResponse.json({ error: clientsRes.error.message }, { status: 500 })
     }
+
+    // Fetch junction tables for accurate relationships
+    const [clinicDirectorsRes, clinicStudentsRes, clinicClientsRes, clientAssignmentsRes] = await Promise.all([
+      supabase.from("clinic_directors_current").select("*"),
+      supabase.from("clinic_students_current").select("*"),
+      supabase.from("clinic_clients_current").select("*"),
+      supabase.from("client_assignments").select("*"),
+    ])
 
     const result = {
       clinics: clinicsRes.data || [],
       directors: directorsRes.data || [],
       students: studentsRes.data || [],
       clients: clientsRes.data || [],
+      // Junction tables for accurate relationships
+      clinicDirectors: clinicDirectorsRes.data || [],
+      clinicStudents: clinicStudentsRes.data || [],
+      clinicClients: clinicClientsRes.data || [],
+      clientAssignments: clientAssignmentsRes.data || [],
     }
 
     // Cache the result for 30 seconds
