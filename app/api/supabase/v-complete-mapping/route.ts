@@ -65,11 +65,15 @@ export async function GET(request: Request) {
       query = query.or(`clinic_director_id.eq.${directorId},client_director_id.eq.${directorId}`)
     }
 
-    const { data, error } = await query
-
-    if (error) {
-      console.error("Error fetching v_complete_mapping:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    let data: any[] | null = null
+    try {
+      const result = await query
+      if (result.error) {
+        return NextResponse.json({ success: false, data: [], records: [], mappings: [] })
+      }
+      data = result.data
+    } catch {
+      return NextResponse.json({ success: false, data: [], records: [], mappings: [] })
     }
 
     const response = {
@@ -82,15 +86,7 @@ export async function GET(request: Request) {
     setCache(cacheKey, response, LONG_TTL)
     console.log("[v0] v-complete-mapping - Cached response with", (data || []).length, "records")
     return NextResponse.json(response)
-  } catch (err) {
-    console.error("Error in v-complete-mapping route:", err)
-    // Return empty data on error to prevent UI breakage
-    return NextResponse.json({ 
-      success: false, 
-      error: "Internal server error", 
-      data: [], 
-      records: [], 
-      mappings: [] 
-    }, { status: 500 })
+  } catch {
+    return NextResponse.json({ success: false, data: [], records: [], mappings: [] })
   }
 }
