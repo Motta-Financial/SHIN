@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { fetchWithRateLimit } from "@/lib/fetch-with-rate-limit"
 
 // Fallback values
 const FALLBACK_SEMESTER_ID = "a1b2c3d4-e5f6-7890-abcd-202601120000"
@@ -50,7 +51,7 @@ export function useCurrentSemester(): CurrentSemester {
     // Start fetching
     fetchPromise = (async () => {
       try {
-        const res = await fetch("/api/current-semester")
+        const res = await fetchWithRateLimit("/api/current-semester")
         if (res.ok) {
           const data = await res.json()
           if (data.success) {

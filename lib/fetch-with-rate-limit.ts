@@ -1,8 +1,8 @@
 // Global rate-limited fetch utility to prevent Supabase rate limiting
 // Uses a semaphore to limit concurrent requests
 
-const MAX_CONCURRENT_REQUESTS = 2 // Maximum concurrent requests - keep low to avoid Supabase rate limits
-const MIN_REQUEST_INTERVAL = 200 // 200ms minimum between requests
+const MAX_CONCURRENT_REQUESTS = 4 // Maximum concurrent requests
+const MIN_REQUEST_INTERVAL = 100 // 100ms minimum between requests
 let activeRequests = 0
 let lastRequestTime = 0
 

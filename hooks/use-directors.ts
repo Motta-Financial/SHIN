@@ -1,4 +1,5 @@
 import useSWR from "swr"
+import { fetchWithRateLimit } from "@/lib/fetch-with-rate-limit"
 
 interface Director {
   id: string
@@ -17,7 +18,7 @@ interface DirectorsResponse {
 }
 
 const fetcher = async (url: string): Promise<DirectorsResponse> => {
-  const res = await fetch(url)
+  const res = await fetchWithRateLimit(url)
   if (!res.ok) {
     throw new Error("Failed to fetch directors")
   }
@@ -28,8 +29,9 @@ export function useDirectors() {
   const { data, error, isLoading, mutate } = useSWR<DirectorsResponse>("/api/directors", fetcher, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
-    dedupingInterval: 60000, // Dedupe requests within 60 seconds
-    staleTime: 300000, // Consider data stale after 5 minutes
+    dedupingInterval: 60000,
+    errorRetryCount: 3,
+    errorRetryInterval: 3000,
   })
 
   return {
