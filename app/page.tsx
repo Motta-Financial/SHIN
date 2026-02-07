@@ -177,7 +177,22 @@ export default function DirectorPortalDashboard() {
           </Suspense>
 
           <Suspense fallback={<LoadingSkeleton height="h-80" />}>
-            <Triage userType="director" />
+            <Triage
+              userType="director"
+              userName={fullName || currentDirector?.full_name || ""}
+              userEmail={email || ""}
+              onDismissNotification={async (notificationId) => {
+                try {
+                  await fetch(`/api/notifications/${notificationId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ is_read: true }),
+                  })
+                } catch (e) {
+                  // best-effort
+                }
+              }}
+            />
           </Suspense>
 
           <Suspense fallback={<LoadingSkeleton height="h-80" />}>

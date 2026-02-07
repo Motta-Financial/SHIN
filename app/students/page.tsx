@@ -639,6 +639,9 @@ export default function StudentPortal() {
 
   const [studentNotifications, setStudentNotifications] = useState<any[]>([])
 
+  // Active main tab state (controlled)
+  const [mainTab, setMainTab] = useState("dashboard")
+
   // Add state for signed agreements
   const [signedAgreements, setSignedAgreements] = useState<string[]>([])
 
@@ -769,10 +772,11 @@ export default function StudentPortal() {
         // Fetch student notifications (announcements from directors)
         const fetchStudentNotifications = async () => {
           try {
-            if (!student?.id || !student?.clinicId) return
-            const res = await fetchWithRetry(
-              `/api/student-notifications?studentId=${student.id}&clinicId=${student.clinicId}`,
-            )
+            if (!student?.id) return
+            const url = student.clinicId
+              ? `/api/student-notifications?studentId=${student.id}&clinicId=${student.clinicId}`
+              : `/api/student-notifications?studentId=${student.id}`
+            const res = await fetchWithRetry(url)
             if (!res.ok) {
               console.error("Error fetching student notifications: HTTP", res.status)
               return
@@ -1938,7 +1942,7 @@ export default function StudentPortal() {
           </div>
 
           {/* Main Content Tabs */}
-          <Tabs defaultValue="dashboard" className="space-y-6">
+          <Tabs value={mainTab} onValueChange={setMainTab} className="space-y-6">
             <TabsList className="flex flex-wrap gap-1 h-auto p-1 bg-slate-100/80">
               <TabsTrigger value="dashboard" className="flex items-center gap-2">
                 <Bell className="h-4 w-4" />
@@ -1982,9 +1986,19 @@ export default function StudentPortal() {
                     hasSubmittedLastWeek={hasSubmittedLastWeek}
                     currentWeekEnding={currentWeekEnding}
                     lastWeekEnding={lastWeekEnding}
-                    onNavigateToTab={(tab) => {
-                      const tabsEl = document.querySelector(`[data-state="true"] button[value="${tab}"]`) as HTMLElement
-                      tabsEl?.click()
+                    onNavigate={(tab) => {
+                      setMainTab(tab)
+                    }}
+                    onDismissNotification={async (notificationId) => {
+                      try {
+                        await fetch(`/api/notifications/${notificationId}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ is_read: true }),
+                        })
+                      } catch (e) {
+                        // Dismissal is best-effort
+                      }
                     }}
                   />
                 </div>
@@ -2165,11 +2179,7 @@ export default function StudentPortal() {
                           variant="outline"
                           size="sm"
                           className="h-auto py-2 flex flex-col items-center gap-1 bg-purple-50/50 border-purple-200 hover:bg-purple-100 text-xs"
-                          onClick={() =>
-                            document
-                              .querySelector('[value="attendance"]')
-                              ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-                          }
+                          onClick={() => setMainTab("attendance")}
                         >
                           <UserCheck className="h-4 w-4 text-purple-600" />
                           <span className="font-medium">Attendance</span>
@@ -2207,11 +2217,7 @@ export default function StudentPortal() {
                           variant="outline"
                           size="sm"
                           className="h-auto py-2 flex flex-col items-center gap-1 bg-amber-50/50 border-amber-200 hover:bg-amber-100 text-xs"
-                          onClick={() =>
-                            document
-                              .querySelector('[value="questions"]')
-                              ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-                          }
+                          onClick={() => setMainTab("questions")}
                         >
                           <HelpCircle className="h-4 w-4 text-amber-600" />
                           <span className="font-medium">Ask Question</span>

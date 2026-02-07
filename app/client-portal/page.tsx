@@ -559,6 +559,17 @@ export default function ClientPortalPage() {
                 onAgreementSigned={(type) => {
                   setSignedAgreements((prev) => [...prev, type])
                 }}
+                onDismissNotification={async (notificationId) => {
+                  try {
+                    await fetch(`/api/notifications/${notificationId}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ is_read: true }),
+                    })
+                  } catch (e) {
+                    // best-effort
+                  }
+                }}
               />
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

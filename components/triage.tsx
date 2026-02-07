@@ -38,7 +38,8 @@ import {
   Inbox,
   Send,
   Building2,
-  CalendarCheck, // Added import for CalendarCheck
+  CalendarCheck,
+  X,
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
@@ -87,6 +88,7 @@ interface TriageProps {
   onNavigate?: (tab: string) => void
   onAgreementSigned?: (type: AgreementType) => void
   signedAgreements?: AgreementType[]
+  onDismissNotification?: (notificationId: string) => void
 }
 
 const fetchWithRetry = async (url: string, maxRetries = 3): Promise<Response> => {
@@ -167,9 +169,11 @@ export function Triage({
   onNavigate,
   onAgreementSigned,
   signedAgreements = [],
+  onDismissNotification,
 }: TriageProps) {
   const [activeTab, setActiveTab] = useState("all")
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
+  const [dismissedItems, setDismissedItems] = useState<Set<string>>(new Set())
   const [showAgreementDialog, setShowAgreementDialog] = useState(false)
   const [selectedAgreement, setSelectedAgreement] = useState<AgreementType | null>(null)
   const [signature, setSignature] = useState("")
@@ -254,6 +258,18 @@ export function Triage({
       return next
     })
   }
+
+  const handleDismiss = (item: TriageItem) => {
+    setDismissedItems((prev) => new Set(prev).add(item.id))
+    // If a DB-backed notification, call the parent callback to mark it read/dismissed
+    const originalId = item.metadata?.originalId || item.id.replace(/^notification-announcement-/, "").replace(/^notification-/, "")
+    onDismissNotification?.(originalId)
+  }
+
+  // Auto-expire threshold: notifications older than 5 days are hidden
+  const EXPIRY_DAYS = 5
+  const expiryThreshold = new Date()
+  expiryThreshold.setDate(expiryThreshold.getDate() - EXPIRY_DAYS)
 
   // Build triage items based on user type
   const buildTriageItems = (): TriageItem[] => {
@@ -459,7 +475,7 @@ export function Triage({
           icon: studentIconMap[notif.type] || <Bell className="h-4 w-4" />,
           iconBg: studentBgMap[notif.type] || "bg-purple-100 text-purple-700",
           timestamp: notif.created_at,
-          metadata: { from: notif.created_by },
+          metadata: { from: notif.created_by, originalId: notif.id },
         })
       })
     }
@@ -570,7 +586,21 @@ export function Triage({
     return items.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])
   }
 
-  const triageItems = buildTriageItems()
+  const allTriageItems = buildTriageItems()
+
+  // Filter out dismissed and auto-expired notification items
+  const triageItems = allTriageItems.filter((item) => {
+    // Never filter out actions or onboarding - those are structural
+    if (item.type !== "notification") return true
+    // Dismissed by user
+    if (dismissedItems.has(item.id)) return false
+    // Auto-expire old notifications (older than EXPIRY_DAYS)
+    if (item.timestamp) {
+      const itemDate = new Date(item.timestamp)
+      if (itemDate < expiryThreshold) return false
+    }
+    return true
+  })
 
   const filteredItems = activeTab === "all" ? triageItems : triageItems.filter((item) => item.type === activeTab)
 
@@ -810,6 +840,21 @@ export function Triage({
                                       }}
                                     >
                                       {item.actionLabel}
+                                    </Button>
+                                  )}
+                                  {item.type === "notification" && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                                      title="Dismiss"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleDismiss(item)
+                                      }}
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                      <span className="sr-only">Dismiss notification</span>
                                     </Button>
                                   )}
                                   <CollapsibleTrigger asChild>
