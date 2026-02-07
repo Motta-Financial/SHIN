@@ -557,12 +557,9 @@ export default function DirectorDashboard() {
           const text = await attendanceRes.text()
           try {
             attendanceData = JSON.parse(text)
-          } catch (e) {
-            console.error("Attendance API returned non-JSON response:", e)
-            attendanceData = { records: [] } // Ensure it's an empty array if parsing fails
+          } catch {
+            attendanceData = { records: [] }
           }
-        } else {
-          console.error("Failed to fetch attendance data:", attendanceRes.status)
         }
 
         const scheduleRes = await fetch("/api/semester-schedule")
@@ -584,12 +581,9 @@ export default function DirectorDashboard() {
           const text = await announcementsRes.text()
           try {
             announcementsData = JSON.parse(text)
-          } catch (e) {
-            console.error("Announcements API returned non-JSON response:", e)
+          } catch {
             announcementsData = { announcements: [] }
           }
-        } else {
-          console.error("Failed to fetch announcements data:", announcementsRes.status)
         }
 
         // Fetch client meetings
@@ -599,12 +593,9 @@ export default function DirectorDashboard() {
           const text = await meetingsRes.text()
           try {
             meetingsData = JSON.parse(text)
-          } catch (e) {
-            console.error("Meetings API returned non-JSON response:", e)
+          } catch {
             meetingsData = { meetings: [] }
           }
-        } else {
-          console.error("Failed to fetch meetings data:", meetingsRes.status)
         }
 
         const allAttendanceRecords = attendanceData.records || attendanceData.attendance || []
