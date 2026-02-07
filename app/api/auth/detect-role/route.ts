@@ -38,18 +38,42 @@ export async function POST(request: Request) {
     }
 
     const normalizedEmail = email.toLowerCase().trim()
-    
 
-    // Check directors first - query by email directly instead of fetching all
-    const { data: directorData, error: directorError } = await supabaseAdmin
-      .from("directors_current")
-      .select("id, email, role, full_name")
-      .ilike("email", normalizedEmail)
-      .maybeSingle()
-
-    if (directorError) {
-      console.error("detect-role - Director query error:", directorError)
+    // Helper: run a query with retry for rate limits
+    async function queryWithRetry<T>(fn: () => Promise<{ data: T | null; error: any }>): Promise<{ data: T | null; error: any }> {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const result = await fn()
+          if (result.error) {
+            const errMsg = typeof result.error === "string" ? result.error : result.error?.message || ""
+            if (errMsg.toLowerCase().includes("too many") || errMsg.toLowerCase().includes("rate limit")) {
+              if (attempt < 2) {
+                await new Promise((r) => setTimeout(r, (attempt + 1) * 1500))
+                continue
+              }
+            }
+          }
+          return result
+        } catch (err: any) {
+          const msg = err?.message?.toLowerCase() || ""
+          if ((msg.includes("too many") || msg.includes("unexpected token")) && attempt < 2) {
+            await new Promise((r) => setTimeout(r, (attempt + 1) * 1500))
+            continue
+          }
+          return { data: null, error: err }
+        }
+      }
+      return { data: null, error: "Max retries reached" }
     }
+
+    // Check directors first
+    const { data: directorData } = await queryWithRetry(() =>
+      supabaseAdmin
+        .from("directors_current")
+        .select("id, email, role, full_name, clinic_id")
+        .ilike("email", normalizedEmail)
+        .maybeSingle()
+    )
 
     if (directorData) {
       return NextResponse.json({
@@ -57,20 +81,19 @@ export async function POST(request: Request) {
         userId: directorData.id,
         userRole: directorData.role,
         userName: directorData.full_name,
+        clinicId: directorData.clinic_id,
         redirect: "/director",
       })
     }
 
-    // Check students - query by email directly
-    const { data: studentData, error: studentError } = await supabaseAdmin
-      .from("students_current")
-      .select("id, email, full_name, clinic, clinic_id")
-      .ilike("email", normalizedEmail)
-      .maybeSingle()
-
-    if (studentError) {
-      console.error("detect-role - Student query error:", studentError)
-    }
+    // Check students
+    const { data: studentData } = await queryWithRetry(() =>
+      supabaseAdmin
+        .from("students_current")
+        .select("id, email, full_name, clinic, clinic_id, client_id")
+        .ilike("email", normalizedEmail)
+        .maybeSingle()
+    )
 
     if (studentData) {
       return NextResponse.json({
@@ -78,20 +101,20 @@ export async function POST(request: Request) {
         userId: studentData.id,
         userName: studentData.full_name,
         clinic: studentData.clinic,
+        clinicId: studentData.clinic_id,
+        clientId: studentData.client_id,
         redirect: "/students",
       })
     }
 
-    // Check clients - query by email directly
-    const { data: clientData, error: clientError } = await supabaseAdmin
-      .from("clients_current")
-      .select("id, name, email")
-      .ilike("email", normalizedEmail)
-      .maybeSingle()
-
-    if (clientError) {
-      console.error("detect-role - Client query error:", clientError)
-    }
+    // Check clients
+    const { data: clientData } = await queryWithRetry(() =>
+      supabaseAdmin
+        .from("clients_current")
+        .select("id, name, email")
+        .ilike("email", normalizedEmail)
+        .maybeSingle()
+    )
 
     if (clientData) {
       return NextResponse.json({

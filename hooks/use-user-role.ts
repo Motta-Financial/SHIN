@@ -142,6 +142,33 @@ async function fetchUserRole(): Promise<UserRoleData> {
     }
   }
 
+  // Check sessionStorage cache from sign-in page (avoids redundant Supabase queries)
+  if (typeof window !== "undefined") {
+    try {
+      const cached = sessionStorage.getItem("shin_role_cache")
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        // Only use cache if it's fresh (< 60 seconds) and matches the current user
+        if (parsed.authUserId === user.id && Date.now() - parsed.timestamp < 60000 && parsed.role) {
+          return {
+            role: parsed.role as UserRole,
+            userId: parsed.userId,
+            authUserId: user.id,
+            email: user.email || null,
+            fullName: parsed.userName || null,
+            clinicId: parsed.clinicId || null,
+            clinicName: null,
+            studentId: parsed.studentId || null,
+            directorId: parsed.directorId || null,
+            clientId: parsed.clientId || null,
+            isLoading: false,
+            isAuthenticated: true,
+          }
+        }
+      }
+    } catch {}
+  }
+
   // User IS authenticated. Now try to resolve their role with retries.
   // Even if role lookup fails, isAuthenticated stays true.
   for (let attempt = 0; attempt < 3; attempt++) {

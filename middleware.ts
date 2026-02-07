@@ -2,7 +2,17 @@ import type { NextRequest } from "next/server"
 import { updateSession } from "@/utils/supabase/middleware"
 
 export async function middleware(request: NextRequest) {
-  const response = await updateSession(request)
+  const { pathname } = request.nextUrl
+
+  // Skip Supabase session refresh for API routes and auth pages to reduce rate limiting
+  const skipSessionRefresh =
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/sign-in") ||
+    pathname.startsWith("/auth/")
+
+  const response = skipSessionRefresh
+    ? new (await import("next/server")).NextResponse()
+    : await updateSession(request)
 
   // Add security headers
   response.headers.set("X-Frame-Options", "DENY")

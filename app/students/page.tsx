@@ -64,7 +64,7 @@ function isRateLimitText(text: string): boolean {
 
 async function fetchWithRetry(url: string, maxRetries = 2): Promise<Response> {
   const emptyJson = () =>
-    new Response(JSON.stringify({}), { status: 503, headers: { "Content-Type": "application/json" } })
+    new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } })
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -98,7 +98,6 @@ async function fetchWithRetry(url: string, maxRetries = 2): Promise<Response> {
         headers: response.headers,
       })
     } catch (error: any) {
-      console.log("[v0] fetchWithRetry error for", url, "attempt", attempt, ":", error?.message)
       if (attempt < maxRetries) {
         await new Promise((r) => setTimeout(r, Math.pow(2, attempt + 1) * 1000))
         continue
@@ -676,7 +675,6 @@ export default function StudentPortal() {
 
     async function fetchData() {
       const currentStudentId = role === "student" ? authStudentId : selectedStudentId
-      console.log("[v0] fetchData called - role:", role, "authStudentId:", authStudentId, "currentStudentId:", currentStudentId)
       if (!currentStudentId) return
       // Don't fetch while role is still settling to avoid duplicate calls
       if (!role) return
@@ -687,24 +685,25 @@ export default function StudentPortal() {
 
       setLoading(true)
       try {
-        // Fetch all data in parallel - much faster than sequential
-        const [studentRes, debriefsRes, attendanceRes, meetingRes, materialsRes, docsRes, scheduleRes] =
-          await Promise.all([
-            fetchWithRetry(`/api/supabase/roster?studentId=${currentStudentId}`),
-            fetchWithRetry(`/api/supabase/debriefs?studentId=${currentStudentId}`),
-            fetchWithRetry(`/api/supabase/attendance?studentId=${currentStudentId}`),
-            fetchWithRetry(`/api/meeting-requests?studentId=${currentStudentId}`),
-            fetchWithRetry("/api/course-materials"),
-            fetchWithRetry(`/api/documents?studentId=${currentStudentId}`),
-            fetchWithRetry("/api/semester-schedule"),
-          ])
+        // Fetch critical data first (roster + debriefs), then secondary data
+        // This avoids Supabase rate limits from 7+ simultaneous queries
+        const [studentRes, debriefsRes, scheduleRes] = await Promise.all([
+          fetchWithRetry(`/api/supabase/roster?studentId=${currentStudentId}`),
+          fetchWithRetry(`/api/supabase/debriefs?studentId=${currentStudentId}`),
+          fetchWithRetry("/api/semester-schedule"),
+        ])
+
+        const [attendanceRes, meetingRes, materialsRes, docsRes] = await Promise.all([
+          fetchWithRetry(`/api/supabase/attendance?studentId=${currentStudentId}`),
+          fetchWithRetry(`/api/meeting-requests?studentId=${currentStudentId}`),
+          fetchWithRetry("/api/course-materials"),
+          fetchWithRetry(`/api/documents?studentId=${currentStudentId}`),
+        ])
 
         // If this effect was cancelled (re-triggered), don't update state
         if (cancelled) return
 
-        console.log("[v0] roster response status:", studentRes.status, "ok:", studentRes.ok)
-        const studentData = await safeJsonParse(studentRes, { students: [] }) // Corrected parsing for single student
-        console.log("[v0] parsed studentData:", JSON.stringify(studentData).substring(0, 200))
+        const studentData = await safeJsonParse(studentRes, { students: [] })
         const debriefsData = await safeJsonParse(debriefsRes, { debriefs: [] })
         const attendanceData = await safeJsonParse(attendanceRes, { attendance: [] })
         const meetingData = await safeJsonParse(meetingRes, { requests: [] })

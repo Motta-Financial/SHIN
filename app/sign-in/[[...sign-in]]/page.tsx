@@ -50,18 +50,46 @@ export default function SignInPage() {
       // so we call detect-role here and redirect with a full page navigation.
       const userEmail = data.user.email
       try {
-        const roleRes = await fetch("/api/auth/detect-role", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: userEmail }),
-        })
-        const roleData = await roleRes.json()
+        let roleData: any = null
+        // Retry detect-role up to 3 times to handle Supabase rate limits
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 2000))
+          const roleRes = await fetch("/api/auth/detect-role", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: userEmail }),
+          })
+          try {
+            roleData = await roleRes.json()
+            if (roleData.role) break
+          } catch {
+            if (attempt < 2) continue
+          }
+        }
 
-        if (roleData.role === "director") {
+        // Cache the role data in sessionStorage so useUserRole can skip Supabase queries
+        if (roleData?.role) {
+          try {
+            sessionStorage.setItem("shin_role_cache", JSON.stringify({
+              role: roleData.role,
+              userId: roleData.userId,
+              authUserId: data.user.id,
+              email: userEmail,
+              userName: roleData.userName,
+              clinicId: roleData.clinicId || null,
+              studentId: roleData.role === "student" ? roleData.userId : null,
+              directorId: roleData.role === "director" ? roleData.userId : null,
+              clientId: roleData.role === "client" ? roleData.userId : null,
+              timestamp: Date.now(),
+            }))
+          } catch {}
+        }
+
+        if (roleData?.role === "director") {
           window.location.href = "/director"
-        } else if (roleData.role === "student") {
+        } else if (roleData?.role === "student") {
           window.location.href = "/students"
-        } else if (roleData.role === "client") {
+        } else if (roleData?.role === "client") {
           window.location.href = "/client-portal"
         } else {
           window.location.href = "/auth/loading"
