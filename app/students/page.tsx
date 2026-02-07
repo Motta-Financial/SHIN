@@ -521,12 +521,7 @@ export default function StudentPortal() {
       return
     }
 
-    // Authenticated but role is null - role lookup failed (rate limit etc.)
-    // Redirect to auth/loading which has its own robust role detection
-    if (role === null) {
-      router.push("/auth/loading")
-      return
-    }
+    // Don't redirect when role is null - user IS authenticated, keep them here
 
     // Authenticated with a role that can't access student portal (e.g., client)
     if (!canAccessPortal(role, "student")) {

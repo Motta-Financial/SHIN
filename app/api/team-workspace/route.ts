@@ -1,37 +1,35 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { getCurrentSemesterId } from "@/lib/semester"
 
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient()
-    const currentSemesterId = await getCurrentSemesterId()
     const { searchParams } = new URL(req.url)
     const email = searchParams.get("email")
     const studentId = searchParams.get("studentId")
     const includeDebriefs = searchParams.get("includeDebriefs") === "true"
 
-    const { data: allTeamData, error: viewError } = await supabase
-      .from("v_complete_mapping")
-      .select("*")
-      .eq("semester_id", currentSemesterId)
-
-    if (viewError) {
-      console.error("[v0] Error fetching from v_complete_mapping:", viewError)
-      return NextResponse.json({ success: false, error: viewError.message }, { status: 500 })
-    }
-
-    // Find the student's record(s) - prefer UUID lookup, fallback to email
-    let studentRecords: any[] = []
+    // Find the student in students_current
+    let studentRecord: any = null
     if (studentId && studentId !== "undefined") {
-      studentRecords = (allTeamData || []).filter((r: any) => r.student_id === studentId)
+      const { data } = await supabase
+        .from("students_current")
+        .select("id, full_name, email, clinic_id, clinic, client_id, is_team_leader, semester_id")
+        .eq("id", studentId)
+        .maybeSingle()
+      studentRecord = data
     } else if (email && email !== "undefined") {
-      studentRecords = (allTeamData || []).filter((r: any) => r.student_email?.toLowerCase() === email.toLowerCase())
+      const { data } = await supabase
+        .from("students_current")
+        .select("id, full_name, email, clinic_id, clinic, client_id, is_team_leader, semester_id")
+        .ilike("email", email)
+        .maybeSingle()
+      studentRecord = data
     } else {
       return NextResponse.json({ success: false, error: "Valid studentId or email required" }, { status: 400 })
     }
 
-    if (studentRecords.length === 0) {
+    if (!studentRecord) {
       return NextResponse.json({
         success: true,
         teamMembers: [],
@@ -43,30 +41,36 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // Get the client from the student's first record
-    const studentData = studentRecords[0]
-    const clientId = studentData.client_id
-    const clientName = studentData.client_name || ""
+    const clientId = studentRecord.client_id
 
-    let clientData = null
+    // Fetch client data
+    let clientData: any = null
     if (clientId) {
-      const { data } = await supabase.from("clients").select("*").eq("id", clientId).maybeSingle()
+      const { data } = await supabase.from("clients_current").select("*").eq("id", clientId).maybeSingle()
       clientData = data
     }
 
-    // Get ALL team members for this client from the view data (already fetched)
-    const teamRecords = clientId ? (allTeamData || []).filter((r: any) => r.client_id === clientId) : [studentData] // If no client, just include the student themselves
+    // Get ALL team members for this client from students_current
+    let teamStudents: any[] = []
+    if (clientId) {
+      const { data } = await supabase
+        .from("students_current")
+        .select("id, full_name, email, clinic_id, clinic, is_team_leader")
+        .eq("client_id", clientId)
+      teamStudents = data || []
+    } else {
+      teamStudents = [studentRecord]
+    }
 
-    // Build unique team members list (dedupe by student_id)
     const teamMemberMap = new Map<string, any>()
-    for (const m of teamRecords) {
-      if (m.student_id && !teamMemberMap.has(m.student_id)) {
-        teamMemberMap.set(m.student_id, {
-          id: m.student_id,
-          full_name: m.student_name || "",
-          email: m.student_email || "",
-          role: m.student_role || "Team Member",
-          clinic: m.student_clinic_name || "",
+    for (const s of teamStudents) {
+      if (s.id && !teamMemberMap.has(s.id)) {
+        teamMemberMap.set(s.id, {
+          id: s.id,
+          full_name: s.full_name || "",
+          email: s.email || "",
+          role: s.is_team_leader ? "Team Leader" : "Team Member",
+          clinic: s.clinic || "",
           totalHours: 0,
           debriefCount: 0,
         })
@@ -74,6 +78,36 @@ export async function GET(req: NextRequest) {
     }
 
     const teamMembers = Array.from(teamMemberMap.values())
+
+    // Get directors for this student's clinic
+    let clinicDirectorId: string | null = null
+    let clinicDirectorName: string | null = null
+    let clientDirectorId: string | null = null
+    let clientDirectorName: string | null = null
+
+    if (studentRecord.clinic_id) {
+      const { data: clinicDir } = await supabase
+        .from("directors_current")
+        .select("id, full_name")
+        .eq("clinic_id", studentRecord.clinic_id)
+        .maybeSingle()
+      if (clinicDir) {
+        clinicDirectorId = clinicDir.id
+        clinicDirectorName = clinicDir.full_name
+      }
+    }
+
+    if (clientData?.primary_director_id) {
+      const { data: clientDir } = await supabase
+        .from("directors_current")
+        .select("id, full_name")
+        .eq("id", clientData.primary_director_id)
+        .maybeSingle()
+      if (clientDir) {
+        clientDirectorId = clientDir.id
+        clientDirectorName = clientDir.full_name
+      }
+    }
 
     let debriefs: any[] = []
     let totalHours = 0
@@ -85,7 +119,6 @@ export async function GET(req: NextRequest) {
         .from("debriefs")
         .select("*")
         .in("student_id", teamStudentIds)
-        .eq("semester_id", currentSemesterId)
         .order("created_at", { ascending: false })
 
       if (teamDebriefs) {
@@ -107,7 +140,6 @@ export async function GET(req: NextRequest) {
           }
         })
 
-        // Calculate total hours and per-member stats
         const memberHours = new Map<string, { hours: number; count: number }>()
         for (const d of teamDebriefs) {
           totalHours += d.hours_worked || 0
@@ -117,7 +149,6 @@ export async function GET(req: NextRequest) {
           memberHours.set(d.student_id, existing)
         }
 
-        // Add hours to team members
         for (const member of teamMembers) {
           const stats = memberHours.get(member.id) || { hours: 0, count: 0 }
           member.totalHours = stats.hours
@@ -128,27 +159,18 @@ export async function GET(req: NextRequest) {
 
     let deliverables: any[] = []
     if (clientId) {
-      console.log("[v0] Fetching deliverables for clientId:", clientId)
-
-      const { data: clientDeliverables, error: deliverableError } = await supabase
+      const { data: clientDeliverables } = await supabase
         .from("documents")
         .select(`
           *,
           document_reviews (
-            id,
-            grade,
-            comment,
-            director_name,
-            created_at
+            id, grade, comment, director_name, created_at
           )
         `)
         .eq("client_id", clientId)
         .order("uploaded_at", { ascending: false })
 
-      if (deliverableError) {
-        console.error("[v0] Error fetching deliverables:", deliverableError)
-      } else if (clientDeliverables) {
-        console.log("[v0] Found deliverables count:", clientDeliverables.length)
+      if (clientDeliverables) {
         deliverables = clientDeliverables.map((d) => ({
           id: d.id,
           fileName: d.file_name,
@@ -168,32 +190,29 @@ export async function GET(req: NextRequest) {
           reviewedAt: d.document_reviews?.[0]?.created_at || null,
         }))
       }
-    } else {
-      console.log("[v0] No clientId found, skipping deliverables fetch")
     }
 
     return NextResponse.json({
       success: true,
       teamMembers,
-      clientName: clientData?.name || clientName,
+      clientName: clientData?.name || "",
       clientEmail: clientData?.email || "",
       projectType: clientData?.project_type || "",
       status: clientData?.status || "active",
       clientId,
-      clinicId: studentData.student_clinic_id,
-      clinicName: studentData.student_clinic_name,
-      clinicDirectorId: studentData.clinic_director_id,
-      clinicDirectorName: studentData.clinic_director_name,
-      clientDirectorId: studentData.client_director_id,
-      clientDirectorName: studentData.client_director_name,
+      clinicId: studentRecord.clinic_id,
+      clinicName: studentRecord.clinic,
+      clinicDirectorId,
+      clinicDirectorName,
+      clientDirectorId,
+      clientDirectorName,
       notes: [],
       debriefs,
-      deliverables, // Include deliverables in response
+      deliverables,
       totalHours,
       sowProgress: buildSowProgress(debriefs.length, totalHours),
     })
   } catch (error) {
-    console.error("[v0] Team workspace error:", error)
     return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 })
   }
 }

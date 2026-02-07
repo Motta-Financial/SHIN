@@ -161,11 +161,7 @@ export function MyTeamContent() {
       return
     }
 
-    // Authenticated but role lookup failed - use auth/loading
-    if (role === null) {
-      router.push("/auth/loading")
-      return
-    }
+    // Don't redirect when role is null - user IS authenticated, keep them here
 
     // Directors and admins can access all portals
     if (isAdminOrDirector) return

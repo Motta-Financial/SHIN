@@ -75,7 +75,7 @@ export function GlobalHeader() {
     clearAuthCache()
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push("/login")
+    router.push("/sign-in")
   }
 
   const initials = fullName
@@ -137,7 +137,7 @@ export function GlobalHeader() {
 
         {!isAuthenticated && !isLoading && !isDemoMode && (
           <Button asChild variant="outline" size="sm">
-            <Link href="/login">
+            <Link href="/sign-in">
               <LogIn className="mr-2 h-4 w-4" />
               Sign In
             </Link>

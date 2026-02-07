@@ -155,14 +155,9 @@ export default function ClientPortalPage() {
       if (role === "student") return
       // Clients can access their own portal
       if (role === "client") return
-      // Not authenticated - redirect to login
+      // Not authenticated - redirect to sign-in
       if (!isAuthenticated) {
-        router.push("/login")
-        return
-      }
-      // Authenticated but role is null (rate limit etc.) - use auth/loading
-      if (role === null) {
-        router.push("/auth/loading")
+        router.push("/sign-in")
         return
       }
       // Authenticated but wrong role - redirect to their portal

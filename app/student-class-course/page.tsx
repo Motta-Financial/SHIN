@@ -208,14 +208,20 @@ export default function StudentClassCoursePage() {
         setClinicDirectors(directorsData)
       }
 
-      // Fetch clinic team members from v_complete_mapping
+      // Fetch clinic team members from students_current
       const { data: teamData, error: teamError } = await supabase
-        .from("v_complete_mapping")
-        .select("student_id, student_name, student_email, client_name, student_role")
-        .eq("student_clinic_id", studentInfo.clinic_id)
+        .from("students_current")
+        .select("id, full_name, email, client_id, is_team_leader")
+        .eq("clinic_id", studentInfo.clinic_id)
 
       if (!teamError && teamData) {
-        setClinicTeam(teamData)
+        setClinicTeam(teamData.map((s: any) => ({
+          student_id: s.id,
+          student_name: s.full_name,
+          student_email: s.email,
+          client_name: null,
+          student_role: s.is_team_leader ? "team_lead" : "member",
+        })))
       }
     } catch (error) {
       console.error("[v0] Error fetching clinic data:", error)
@@ -241,19 +247,19 @@ export default function StudentClassCoursePage() {
       setCurrentSemesterId(semesterId)
 
       const { data: studentData, error: studentError } = await supabase
-        .from("v_complete_mapping")
-        .select("student_id, student_name, student_email, student_clinic_id, student_clinic_name")
+        .from("students_current")
+        .select("id, full_name, email, clinic_id, clinic, semester_id")
         .limit(1)
         .maybeSingle()
 
       if (studentData) {
         setStudentInfo({
-          id: studentData.student_id,
-          full_name: studentData.student_name,
-          email: studentData.student_email,
-          clinic: studentData.student_clinic_name,
-          clinic_id: studentData.student_clinic_id || "",
-          semester_id: semesterId || "",
+          id: studentData.id,
+          full_name: studentData.full_name,
+          email: studentData.email,
+          clinic: studentData.clinic,
+          clinic_id: studentData.clinic_id || "",
+          semester_id: studentData.semester_id || semesterId || "",
         })
       }
 

@@ -1,63 +1,53 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
-import { getCurrentSemesterId } from "@/lib/semester"
 
 export async function GET(request: Request) {
   try {
     const supabase = createServiceClient()
-    const currentSemesterId = await getCurrentSemesterId()
-
     const { searchParams } = new URL(request.url)
     const emailFilter = searchParams.get("email")
 
-    let query = supabase.from("v_complete_mapping").select("*").eq("semester_id", currentSemesterId)
+    let query = supabase
+      .from("students_current")
+      .select("id, full_name, email, clinic, clinic_id, client_id, is_team_leader")
 
     if (emailFilter) {
-      console.log("[v0] students/overview - Filtering by email:", emailFilter)
-      // Use filter with ilike operator for case-insensitive matching
-      query = query.filter("student_email", "ilike", emailFilter)
+      query = query.ilike("email", emailFilter)
     }
 
     const { data, error } = await query
 
     if (error) {
-      console.log("[v0] Supabase v_complete_mapping error:", error.message)
       return NextResponse.json({ students: [] })
     }
 
-    console.log("[v0] students/overview - Raw data count:", data?.length || 0)
-
-    const studentMap = new Map()
-    data?.forEach((row: any) => {
-      if (row.student_id && !studentMap.has(row.student_id)) {
-        studentMap.set(row.student_id, {
-          id: row.student_id,
-          student_id: row.student_id,
-          student_name: row.student_name,
-          student_email: row.student_email,
-          student_role: row.student_role,
-          clinic: row.student_clinic_name,
-          clinic_id: row.student_clinic_id,
-          client_name: row.client_name,
-          client_id: row.client_id,
-        })
+    // Fetch client names
+    const clientIds = [...new Set((data || []).map((s: any) => s.client_id).filter(Boolean))]
+    let clientMap = new Map<string, string>()
+    if (clientIds.length > 0) {
+      const { data: clients } = await supabase
+        .from("clients_current")
+        .select("id, name")
+        .in("id", clientIds)
+      for (const c of clients || []) {
+        clientMap.set(c.id, c.name)
       }
-    })
-
-    const students = Array.from(studentMap.values())
-    console.log(
-      "[v0] Fetched students from v_complete_mapping count:",
-      students.length,
-      emailFilter ? `for email: ${emailFilter}` : "",
-    )
-
-    if (emailFilter && students.length > 0) {
-      console.log("[v0] students/overview - Found student:", students[0].student_name, students[0].student_email)
     }
 
+    const students = (data || []).map((s: any) => ({
+      id: s.id,
+      student_id: s.id,
+      student_name: s.full_name,
+      student_email: s.email,
+      student_role: s.is_team_leader ? "Team Leader" : "Consultant",
+      clinic: s.clinic,
+      clinic_id: s.clinic_id,
+      client_name: clientMap.get(s.client_id) || null,
+      client_id: s.client_id,
+    }))
+
     return NextResponse.json({ students })
-  } catch (error) {
-    console.log("[v0] Error fetching students:", error)
+  } catch {
     return NextResponse.json({ students: [] })
   }
 }

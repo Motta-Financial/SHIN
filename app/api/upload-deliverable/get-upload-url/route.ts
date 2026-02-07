@@ -1,66 +1,66 @@
-import { createClient } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
-
-// Current semester - should be fetched dynamically in production
-const CURRENT_SEMESTER_ID = "dff1ee95-485c-4653-b9be-42f73986e3df"
+import { createServiceClient } from "@/lib/supabase/service"
+import { getCurrentSemesterId } from "@/lib/semester"
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { studentId, studentName, clientId, clientName, submissionType, fileName, fileType, fileSize } = body
 
-    console.log("[v0] Get upload URL request:", { studentId, clientId, submissionType, fileName, fileSize })
-
     if (!studentId || !clientId || !submissionType || !fileName) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabase = createServiceClient()
+    const currentSemesterId = await getCurrentSemesterId()
 
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
+    // Get student's clinic info from students_current (source of truth)
+    const { data: studentData } = await supabase
+      .from("students_current")
+      .select("clinic_id, clinic")
+      .eq("id", studentId)
+      .maybeSingle()
+
+    // Get clinic director from directors_current
+    let clinicDirectorId: string | null = null
+    let clientDirectorId: string | null = null
+    if (studentData?.clinic_id) {
+      const { data: dirData } = await supabase
+        .from("directors_current")
+        .select("id")
+        .eq("clinic_id", studentData.clinic_id)
+        .maybeSingle()
+      clinicDirectorId = dirData?.id || null
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    // Get client director
+    const { data: clientRow } = await supabase
+      .from("clients_current")
+      .select("primary_director_id")
+      .eq("id", clientId)
+      .maybeSingle()
+    clientDirectorId = clientRow?.primary_director_id || null
 
-    // Get mapping data for clinic/director info
-    const { data: mappingData } = await supabase
-      .from("v_complete_mapping")
-      .select("student_clinic_id, student_clinic_name, clinic_director_id, client_director_id")
-      .eq("student_id", studentId)
-      .eq("client_id", clientId)
-      .limit(1)
-      .single()
-
-    const clinicId = mappingData?.student_clinic_id || null
-    const clinicName = mappingData?.student_clinic_name || null
-    const clinicDirectorId = mappingData?.clinic_director_id || null
-    const clientDirectorId = mappingData?.client_director_id || null
+    const clinicId = studentData?.clinic_id || null
+    const clinicName = studentData?.clinic || null
 
     // Create file path
     const timestamp = Date.now()
     const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, "_")
     const filePath = `deliverables/${clientId}/${submissionType}/${timestamp}_${sanitizedFileName}`
 
-    // Create a signed upload URL (valid for 1 hour)
+    // Create a signed upload URL
     const { data: signedUrlData, error: signedUrlError } = await supabase.storage
       .from("SHIN")
       .createSignedUploadUrl(filePath)
 
     if (signedUrlError) {
-      console.error("[v0] Signed URL error:", signedUrlError)
       return NextResponse.json({ error: `Failed to create upload URL: ${signedUrlError.message}` }, { status: 500 })
     }
 
-    console.log("[v0] Created signed upload URL for:", filePath)
+    const { data: { publicUrl } } = supabase.storage.from("SHIN").getPublicUrl(filePath)
 
-    // Get public URL for after upload
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("SHIN").getPublicUrl(filePath)
-
-    // Pre-create the document record (will be updated when upload completes)
+    // Create document record
     const { data: docData, error: docError } = await supabase
       .from("documents")
       .insert({
@@ -77,14 +77,13 @@ export async function POST(request: NextRequest) {
         clinic_director_id: clinicDirectorId,
         client_director_id: clientDirectorId,
         submission_type: submissionType,
-        semester_id: CURRENT_SEMESTER_ID,
+        semester_id: currentSemesterId,
         uploaded_at: new Date().toISOString(),
       })
       .select()
       .single()
 
     if (docError) {
-      console.error("[v0] Document insert error:", docError)
       return NextResponse.json({ error: `Document record failed: ${docError.message}` }, { status: 500 })
     }
 
@@ -96,7 +95,6 @@ export async function POST(request: NextRequest) {
       documentId: docData.id,
     })
   } catch (error) {
-    console.error("[v0] Get upload URL error:", error)
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to get upload URL" },
       { status: 500 },

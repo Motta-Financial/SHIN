@@ -80,7 +80,7 @@ export default function DirectorPortalDashboard() {
     }
 
     if (!isAuthenticated) {
-      router.push("/login")
+      router.push("/sign-in")
       return
     }
 
@@ -90,9 +90,6 @@ export default function DirectorPortalDashboard() {
       router.push("/students")
     } else if (role === "client") {
       router.push("/client-portal")
-    } else if (role === null) {
-      // Authenticated but role lookup failed (rate limit etc.) - use auth/loading to detect
-      router.push("/auth/loading")
     }
   }, [role, roleLoading, isAuthenticated, isDemoMode, router])
 

@@ -147,14 +147,27 @@ export async function POST(request: Request) {
 
     // Create notification for the student's clinic director
     try {
-      // Get the student's clinic director from v_complete_mapping
-      const { data: studentData } = await supabase
-        .from("v_complete_mapping")
-        .select("clinic_director_id, clinic_id, student_clinic_name")
-        .eq("student_id", studentId)
-        .eq("semester_id", semesterId)
-        .limit(1)
+      // Get the student's clinic info from students_current, then director from directors_current
+      const { data: studentRow } = await supabase
+        .from("students_current")
+        .select("clinic_id, clinic")
+        .eq("id", studentId)
         .maybeSingle()
+
+      // Get director for this clinic
+      let studentData: any = null
+      if (studentRow?.clinic_id) {
+        const { data: dirRow } = await supabase
+          .from("directors_current")
+          .select("id")
+          .eq("clinic_id", studentRow.clinic_id)
+          .maybeSingle()
+        studentData = {
+          clinic_director_id: dirRow?.id || null,
+          clinic_id: studentRow.clinic_id,
+          student_clinic_name: studentRow.clinic,
+        }
+      }
 
       if (studentData?.clinic_director_id) {
         await supabase.from("notifications").insert({
