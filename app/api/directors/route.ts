@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js"
+import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
 import { getCached, setCache, getCacheKey, LONG_TTL } from "@/lib/api-cache"
 import { supabaseQueryWithRetry } from "@/lib/supabase-retry"
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
       return NextResponse.json(cached)
     }
 
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    const supabase = createServiceClient()
 
     // If includeAll is true, return all directors without semester filtering
     if (includeAll) {

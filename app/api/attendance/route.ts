@@ -1,18 +1,9 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+import { createServiceClient } from "@/lib/supabase/service"
 import { getCachedData, setCachedData } from "@/lib/api-cache"
 
 function getSupabaseClient() {
-  // Handle multiple possible env var names
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.supabase_SUPABASE_SERVICE_ROLE_KEY
-  
-  if (!supabaseUrl || !serviceRoleKey) {
-    console.error("[v0] getSupabaseClient - Missing env vars. URL:", !!supabaseUrl, "Key:", !!serviceRoleKey)
-    throw new Error("Missing Supabase credentials")
-  }
-  
-  return createClient(supabaseUrl, serviceRoleKey)
+  return createServiceClient()
 }
 
 export async function GET(request: Request) {

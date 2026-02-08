@@ -18,12 +18,18 @@ interface DebriefSubmission {
   question?: string
 }
 
+interface WeekScheduleInfo {
+  weekStart: string
+  weekEnd: string
+}
+
 interface DetailedDebriefsProps {
   selectedWeeks: string[]
   selectedClinic: string
+  weekSchedule?: WeekScheduleInfo[]
 }
 
-export function DetailedDebriefs({ selectedWeeks, selectedClinic }: DetailedDebriefsProps) {
+export function DetailedDebriefs({ selectedWeeks, selectedClinic, weekSchedule = [] }: DetailedDebriefsProps) {
   const [submissions, setSubmissions] = useState<DebriefSubmission[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
@@ -35,44 +41,44 @@ export function DetailedDebriefs({ selectedWeeks, selectedClinic }: DetailedDebr
         const response = await fetch("/api/supabase/debriefs")
         const data = await response.json()
 
-        if (data.records) {
-          const debriefsList: DebriefSubmission[] = data.records
-            .filter((record: any) => {
-              const fields = record.fields
-              const dateSubmitted = fields["Date Submitted"]
-              const clinic = fields["Related Clinic"]
+        if (data.debriefs) {
+          // Build a set of week_end dates that correspond to selected week_start dates
+          const selectedWeekEnds = new Set<string>()
+          for (const weekStart of selectedWeeks) {
+            const match = weekSchedule.find((w) => w.weekStart === weekStart)
+            if (match) {
+              selectedWeekEnds.add(match.weekEnd)
+            }
+          }
+          // Also add the selectedWeeks themselves as fallback
+          for (const w of selectedWeeks) {
+            selectedWeekEnds.add(w)
+          }
 
-              if (!dateSubmitted) return false
-              const submittedDate = new Date(dateSubmitted)
+          const debriefsList: DebriefSubmission[] = data.debriefs
+            .filter((debrief: any) => {
+              const weekEnding = debrief.weekEnding
+              const clinic = debrief.clinic
 
-              const isInSelectedWeeks = selectedWeeks.some((weekEnd) => {
-                const weekEndDate = new Date(weekEnd)
-                const weekStart = new Date(weekEndDate)
-                weekStart.setDate(weekStart.getDate() - 6)
-                return submittedDate >= weekStart && submittedDate <= weekEndDate
-              })
+              if (!weekEnding) return false
+              const isInSelectedWeeks = selectedWeekEnds.has(weekEnding)
 
               // Filter by clinic
               const matchesClinic = selectedClinic === "all" || clinic === selectedClinic
 
               return isInSelectedWeeks && matchesClinic
             })
-            .map((record: any) => {
-              const fields = record.fields
-              const studentName = fields.client_name || "Unknown"
-
-              return {
-                id: record.id,
-                student: studentName,
-                clinic: fields.clinic || "Unknown",
-                client: fields.client_name || "Unknown",
-                hours: fields.total_hours || 0,
-                summary: fields.summary || "",
-                date: fields.week_ending || "",
-                question: undefined,
-              }
-            })
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            .map((debrief: any) => ({
+              id: debrief.id,
+              student: debrief.studentName || "Unknown",
+              clinic: debrief.clinic || "Unknown",
+              client: debrief.clientName || "Unknown",
+              hours: debrief.hoursWorked || 0,
+              summary: debrief.workSummary || "",
+              date: debrief.weekEnding || "",
+              question: debrief.questions || undefined,
+            }))
+            .sort((a: DebriefSubmission, b: DebriefSubmission) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
           setSubmissions(debriefsList)
         }

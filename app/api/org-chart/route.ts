@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js"
+import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
 import { getCachedData, setCachedData, LONG_TTL } from "@/lib/api-cache"
 import { supabaseQueryWithRetry } from "@/lib/supabase-retry"
@@ -17,14 +17,7 @@ export async function GET(request: Request) {
       return NextResponse.json(cached)
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ error: "Missing Supabase configuration" }, { status: 500 })
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    const supabase = createServiceClient()
 
     // Get active semester
     let activeSemesterId = semesterId

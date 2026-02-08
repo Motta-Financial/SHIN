@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-
-function getSupabaseClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-}
+import { createServiceClient } from "@/lib/supabase/service"
 
 export async function GET(request: Request) {
   try {
@@ -12,7 +8,7 @@ export async function GET(request: Request) {
     const classNumber = searchParams.get("classNumber")
     const includeSchedule = searchParams.get("includeSchedule") === "true"
 
-    const supabase = getSupabaseClient()
+    const supabase = createServiceClient()
 
     // If no semesterId, get the active semester
     let activeSemesterId = semesterId
@@ -81,7 +77,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = getSupabaseClient()
+    const supabase = createServiceClient()
     const body = await request.json()
 
     const { semester_schedule_id, semester_id, class_number, class_label, class_date, location, is_cancelled } = body
@@ -111,7 +107,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const supabase = getSupabaseClient()
+    const supabase = createServiceClient()
     const body = await request.json()
     const { id, ...updates } = body
 

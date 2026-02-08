@@ -1,11 +1,9 @@
-import { createClient } from "@supabase/supabase-js"
+import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
 
 // Function to get Supabase client
 function getSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_supabase_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.supabase_SUPABASE_SERVICE_ROLE_KEY
-  return createClient(supabaseUrl!, supabaseServiceKey!)
+  return createServiceClient()
 }
 
 // All debriefs from the MIGRATION_DEBRIEFS CSV

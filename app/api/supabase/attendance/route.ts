@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
 import { getCurrentSemesterId } from "@/lib/semester"
+import { getCachedData, setCachedData } from "@/lib/api-cache"
 
 export async function GET(request: Request) {
   try {
@@ -10,6 +11,13 @@ export async function GET(request: Request) {
     const studentEmail = searchParams.get("studentEmail")
     const defaultSemesterId = await getCurrentSemesterId()
     const semesterId = searchParams.get("semesterId") || defaultSemesterId
+
+    // Check cache first
+    const cacheKey = `attendance-${semesterId}-${studentId || "all"}-${studentEmail || "none"}`
+    const cached = getCachedData(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached)
+    }
 
     let query = supabase
       .from("attendance")
@@ -62,7 +70,9 @@ export async function GET(request: Request) {
       semesterId: record.semester_id, // Include semester_id in the response
     }))
 
-    return NextResponse.json({ attendance: formattedAttendance })
+    const result = { attendance: formattedAttendance }
+    setCachedData(cacheKey, result, 60_000) // Cache for 60 seconds
+    return NextResponse.json(result)
   } catch (error: any) {
     const msg = error?.message || ""
     if (msg.includes("Too Many R") || msg.includes("Unexpected token") || msg.includes("rate limit")) {

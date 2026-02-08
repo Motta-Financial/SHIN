@@ -120,10 +120,12 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
       ? `/api/supabase/students?directorId=${selectedDirectorId}`
       : "/api/supabase/students"
 
-    // Stagger requests to avoid rate limiting
-    const allStudentsRes = await fetchWithRateLimit(studentsUrl)
-    const debriefsRes = await fetchWithRateLimit("/api/supabase/debriefs")
-    const clientsRes = await fetchWithRateLimit("/api/supabase/clients")
+    // Fetch in parallel to reduce total request time
+    const [allStudentsRes, debriefsRes, clientsRes] = await Promise.all([
+      fetchWithRateLimit(studentsUrl),
+      fetchWithRateLimit("/api/supabase/debriefs"),
+      fetchWithRateLimit("/api/supabase/clients"),
+    ])
 
     const allStudentsData = await allStudentsRes.json()
     const debriefsData = await debriefsRes.json()
@@ -509,53 +511,32 @@ export default function DirectorDashboard() {
   useEffect(() => {
     async function fetchOverviewData() {
       try {
-        // Fetch attendance data from correct endpoint
-        const attendanceRes = await fetchWithRateLimit("/api/supabase/attendance")
-        let attendanceData = { records: [] }
-        if (attendanceRes.ok) {
-          const text = await attendanceRes.text()
+        // Helper to safely fetch with graceful fallback - uses plain fetch to avoid
+        // semaphore contention with other parallel useEffects on the page
+        async function safeFetch<T>(url: string, fallback: T): Promise<T> {
           try {
-            attendanceData = JSON.parse(text)
+            const res = await fetch(url)
+            if (!res.ok) return fallback
+            const text = await res.text()
+            try {
+              return JSON.parse(text) as T
+            } catch {
+              return fallback
+            }
           } catch {
-            attendanceData = { records: [] }
+            return fallback
           }
         }
 
-        const scheduleRes = await fetchWithRateLimit("/api/semester-schedule")
-        let semesterScheduleData: SemesterWeek[] = []
-        if (scheduleRes.ok) {
-          const scheduleText = await scheduleRes.text()
-          try {
-            const scheduleJson = JSON.parse(scheduleText)
-            semesterScheduleData = scheduleJson.schedules || []
-          } catch {
-            // Non-JSON response (e.g. rate limit) - use empty
-          }
-        }
+        // Fetch in parallel with graceful degradation - each call falls back silently
+        const [attendanceData, scheduleJson, announcementsData, meetingsData] = await Promise.all([
+          safeFetch<{ records?: any[]; attendance?: any[] }>("/api/supabase/attendance", { records: [], attendance: [] }),
+          safeFetch<{ schedules?: any[] }>("/api/semester-schedule", { schedules: [] }),
+          safeFetch<{ announcements?: any[] }>("/api/announcements", { announcements: [] }),
+          safeFetch<{ meetings?: any[] }>("/api/scheduled-client-meetings", { meetings: [] }),
+        ])
 
-        // Fetch announcements for recent activity
-        const announcementsRes = await fetchWithRateLimit("/api/announcements")
-        let announcementsData = { announcements: [] }
-        if (announcementsRes.ok) {
-          const text = await announcementsRes.text()
-          try {
-            announcementsData = JSON.parse(text)
-          } catch {
-            announcementsData = { announcements: [] }
-          }
-        }
-
-        // Fetch client meetings
-        const meetingsRes = await fetchWithRateLimit("/api/scheduled-client-meetings")
-        let meetingsData = { meetings: [] }
-        if (meetingsRes.ok) {
-          const text = await meetingsRes.text()
-          try {
-            meetingsData = JSON.parse(text)
-          } catch {
-            meetingsData = { meetings: [] }
-          }
-        }
+        const semesterScheduleData: SemesterWeek[] = scheduleJson.schedules || []
 
         const allAttendanceRecords = attendanceData.records || attendanceData.attendance || []
         const elapsedClasses = getElapsedClassCount(semesterScheduleData)
@@ -638,45 +619,23 @@ export default function DirectorDashboard() {
 
         // Fetch real notifications from the database
         let realNotifications: Array<{ type: string; title: string; time: string }> = []
-        try {
-          const notifResponse = await fetchWithRateLimit("/api/notifications")
-          if (notifResponse.ok) {
-            const notifText = await notifResponse.text()
-            try {
-              const notifData = JSON.parse(notifText)
-              realNotifications = (notifData.notifications || []).map((n: any) => ({
-                type: n.type || "notification",
-                title: n.title || n.message || "New notification",
-                time: n.created_at ? formatRelativeTime(new Date(n.created_at)) : "recently",
-              }))
-            } catch {
-              // Response was not valid JSON (e.g. rate limit text) - skip
-            }
-          }
-        } catch (notifError) {
-          // Network error - skip notifications silently
-        }
-        
-        // Also fetch meeting requests as notifications
-        try {
-          const meetingResponse = await fetchWithRateLimit("/api/meeting-requests?status=pending")
-          if (meetingResponse.ok) {
-            const meetingText = await meetingResponse.text()
-            try {
-              const meetingData = JSON.parse(meetingText)
-              const meetingNotifications = (meetingData.requests || []).map((m: any) => ({
-                type: "meeting_request",
-                title: `Meeting Request: ${m.subject || "No subject"} from ${m.studentName || "Student"}`,
-                time: m.createdAt ? formatRelativeTime(new Date(m.createdAt)) : "recently",
-              }))
-              realNotifications = [...meetingNotifications, ...realNotifications]
-            } catch {
-              // Response was not valid JSON - skip
-            }
-          }
-        } catch {
-          // Network error - skip meeting notifications silently
-        }
+        const [notifResult, meetingReqResult] = await Promise.all([
+          safeFetch<{ notifications?: any[] }>("/api/notifications", { notifications: [] }),
+          safeFetch<{ requests?: any[] }>("/api/meeting-requests?status=pending", { requests: [] }),
+        ])
+
+        realNotifications = (notifResult.notifications || []).map((n: any) => ({
+          type: n.type || "notification",
+          title: n.title || n.message || "New notification",
+          time: n.created_at ? formatRelativeTime(new Date(n.created_at)) : "recently",
+        }))
+
+        const meetingNotifications = (meetingReqResult.requests || []).map((m: any) => ({
+          type: "meeting_request",
+          title: `Meeting Request: ${m.subject || "No subject"} from ${m.studentName || "Student"}`,
+          time: m.createdAt ? formatRelativeTime(new Date(m.createdAt)) : "recently",
+        }))
+        realNotifications = [...meetingNotifications, ...realNotifications]
 
         // Extract student questions from debriefs data
         const studentQuestions: Array<{ student: string; question: string; time: string; answered: boolean }> = []
