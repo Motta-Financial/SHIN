@@ -1,8 +1,8 @@
 // Global rate-limited fetch utility to prevent Supabase rate limiting
 // Uses a semaphore pattern with exponential backoff
 
-const MAX_CONCURRENT = 3
-const MIN_INTERVAL_MS = 150
+const MAX_CONCURRENT = 6
+const MIN_INTERVAL_MS = 50
 let active = 0
 let lastTime = 0
 const queue: Array<() => void> = []
@@ -74,9 +74,9 @@ export async function fetchWithRateLimit(
         const response = await fetch(url, options)
 
         if (await isRateLimited(response)) {
-          const wait = Math.pow(2, attempt + 1) * 1000
+          const wait = 500 * (attempt + 1)
           console.log(
-            `[v0] Rate limited on ${url}, waiting ${wait}ms before retry ${attempt + 1}/${maxRetries}`,
+            `[v0] Rate limited on ${url}, retrying in ${wait}ms (${attempt + 1}/${maxRetries})`,
           )
           await new Promise((r) => setTimeout(r, wait))
           continue

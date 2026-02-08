@@ -1,25 +1,9 @@
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
+import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
 import { supabaseQueryWithRetry } from "@/lib/supabase-retry"
+import { getCached, setCache, getCacheKey } from "@/lib/api-cache"
 
 export const dynamic = "force-dynamic"
-
-async function getSupabaseClient() {
-  const cookieStore = await cookies()
-  return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll()
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => {
-          cookieStore.set(name, value, options)
-        })
-      },
-    },
-  })
-}
 
 export async function GET(request: Request) {
   try {
@@ -28,7 +12,17 @@ export async function GET(request: Request) {
     const interviewerId = searchParams.get("interviewerId")
     const status = searchParams.get("status")
 
-    const supabase = await getSupabaseClient()
+    const cacheKey = getCacheKey("prospect-interviews", {
+      prospectId: prospectId || undefined,
+      interviewerId: interviewerId || undefined,
+      status: status || undefined,
+    })
+    const cached = getCached<{ data: any[] }>(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached)
+    }
+
+    const supabase = createServiceClient()
 
     const { data, error } = await supabaseQueryWithRetry(() => {
       let query = supabase
@@ -47,14 +41,16 @@ export async function GET(request: Request) {
       }
 
       return query
-    }, 4, "prospect_interviews")
+    }, 3, "prospect_interviews")
 
     if (error) {
       console.error("Error fetching prospect interviews:", error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ data })
+    const result = { data: data || [] }
+    setCache(cacheKey, result)
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Error in prospect-interviews API:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

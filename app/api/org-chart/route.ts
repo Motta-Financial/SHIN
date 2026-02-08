@@ -37,23 +37,13 @@ export async function GET(request: Request) {
       activeSemesterId = activeSemester?.id || null
     }
 
-    // Fetch all 8 tables sequentially with retry to avoid rate limiting
-    const clinicsRes = await supabaseQueryWithRetry(
-      () => supabase.from("clinics").select("*").order("name"),
-      3, "clinics",
-    )
-    const directorsRes = await supabaseQueryWithRetry(
-      () => supabase.from("directors_current").select("*").order("full_name"),
-      3, "directors_current",
-    )
-    const studentsRes = await supabaseQueryWithRetry(
-      () => supabase.from("students_current").select("*").order("last_name"),
-      3, "students_current",
-    )
-    const clientsRes = await supabaseQueryWithRetry(
-      () => supabase.from("clients_current").select("*").order("name"),
-      3, "clients_current",
-    )
+    // Fetch base entities + junction tables in 2 parallel batches
+    const [clinicsRes, directorsRes, studentsRes, clientsRes] = await Promise.all([
+      supabaseQueryWithRetry(() => supabase.from("clinics").select("*").order("name"), 3, "clinics"),
+      supabaseQueryWithRetry(() => supabase.from("directors_current").select("*").order("full_name"), 3, "directors"),
+      supabaseQueryWithRetry(() => supabase.from("students_current").select("*").order("last_name"), 3, "students"),
+      supabaseQueryWithRetry(() => supabase.from("clients_current").select("*").order("name"), 3, "clients"),
+    ])
 
     for (const [name, res] of [
       ["Clinics", clinicsRes],
@@ -67,23 +57,12 @@ export async function GET(request: Request) {
       }
     }
 
-    // Junction tables - also sequential with retry
-    const clinicDirectorsRes = await supabaseQueryWithRetry(
-      () => supabase.from("clinic_directors_current").select("*"),
-      3, "clinic_directors_current",
-    )
-    const clinicStudentsRes = await supabaseQueryWithRetry(
-      () => supabase.from("clinic_students_current").select("*"),
-      3, "clinic_students_current",
-    )
-    const clinicClientsRes = await supabaseQueryWithRetry(
-      () => supabase.from("clinic_clients_current").select("*"),
-      3, "clinic_clients_current",
-    )
-    const clientAssignmentsRes = await supabaseQueryWithRetry(
-      () => supabase.from("client_assignments").select("*"),
-      3, "client_assignments",
-    )
+    const [clinicDirectorsRes, clinicStudentsRes, clinicClientsRes, clientAssignmentsRes] = await Promise.all([
+      supabaseQueryWithRetry(() => supabase.from("clinic_directors_current").select("*"), 3, "clinic_directors"),
+      supabaseQueryWithRetry(() => supabase.from("clinic_students_current").select("*"), 3, "clinic_students"),
+      supabaseQueryWithRetry(() => supabase.from("clinic_clients_current").select("*"), 3, "clinic_clients"),
+      supabaseQueryWithRetry(() => supabase.from("client_assignments").select("*"), 3, "client_assignments"),
+    ])
 
     const result = {
       clinics: clinicsRes.data || [],
