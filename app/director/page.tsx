@@ -120,10 +120,12 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
       ? `/api/supabase/students?directorId=${selectedDirectorId}`
       : "/api/supabase/students"
 
-    // Stagger requests to avoid rate limiting
-    const allStudentsRes = await fetchWithRateLimit(studentsUrl)
-    const debriefsRes = await fetchWithRateLimit("/api/supabase/debriefs")
-    const clientsRes = await fetchWithRateLimit("/api/supabase/clients")
+    // Fetch in parallel to reduce total request time
+    const [allStudentsRes, debriefsRes, clientsRes] = await Promise.all([
+      fetchWithRateLimit(studentsUrl),
+      fetchWithRateLimit("/api/supabase/debriefs"),
+      fetchWithRateLimit("/api/supabase/clients"),
+    ])
 
     const allStudentsData = await allStudentsRes.json()
     const debriefsData = await debriefsRes.json()
@@ -509,53 +511,31 @@ export default function DirectorDashboard() {
   useEffect(() => {
     async function fetchOverviewData() {
       try {
-        // Fetch attendance data from correct endpoint
-        const attendanceRes = await fetchWithRateLimit("/api/supabase/attendance")
-        let attendanceData = { records: [] }
-        if (attendanceRes.ok) {
-          const text = await attendanceRes.text()
+        // Helper to safely fetch with graceful fallback on rate limit / errors
+        async function safeFetch<T>(url: string, fallback: T): Promise<T> {
           try {
-            attendanceData = JSON.parse(text)
+            const res = await fetchWithRateLimit(url)
+            if (!res.ok) return fallback
+            const text = await res.text()
+            try {
+              return JSON.parse(text) as T
+            } catch {
+              return fallback
+            }
           } catch {
-            attendanceData = { records: [] }
+            return fallback
           }
         }
 
-        const scheduleRes = await fetchWithRateLimit("/api/semester-schedule")
-        let semesterScheduleData: SemesterWeek[] = []
-        if (scheduleRes.ok) {
-          const scheduleText = await scheduleRes.text()
-          try {
-            const scheduleJson = JSON.parse(scheduleText)
-            semesterScheduleData = scheduleJson.schedules || []
-          } catch {
-            // Non-JSON response (e.g. rate limit) - use empty
-          }
-        }
+        // Fetch all in parallel with graceful degradation
+        const [attendanceData, scheduleJson, announcementsData, meetingsData] = await Promise.all([
+          safeFetch<{ records?: any[]; attendance?: any[] }>("/api/supabase/attendance", { records: [] }),
+          safeFetch<{ schedules?: any[] }>("/api/semester-schedule", { schedules: [] }),
+          safeFetch<{ announcements?: any[] }>("/api/announcements", { announcements: [] }),
+          safeFetch<{ meetings?: any[] }>("/api/scheduled-client-meetings", { meetings: [] }),
+        ])
 
-        // Fetch announcements for recent activity
-        const announcementsRes = await fetchWithRateLimit("/api/announcements")
-        let announcementsData = { announcements: [] }
-        if (announcementsRes.ok) {
-          const text = await announcementsRes.text()
-          try {
-            announcementsData = JSON.parse(text)
-          } catch {
-            announcementsData = { announcements: [] }
-          }
-        }
-
-        // Fetch client meetings
-        const meetingsRes = await fetchWithRateLimit("/api/scheduled-client-meetings")
-        let meetingsData = { meetings: [] }
-        if (meetingsRes.ok) {
-          const text = await meetingsRes.text()
-          try {
-            meetingsData = JSON.parse(text)
-          } catch {
-            meetingsData = { meetings: [] }
-          }
-        }
+        const semesterScheduleData: SemesterWeek[] = scheduleJson.schedules || []
 
         const allAttendanceRecords = attendanceData.records || attendanceData.attendance || []
         const elapsedClasses = getElapsedClassCount(semesterScheduleData)

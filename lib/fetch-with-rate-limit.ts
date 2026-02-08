@@ -74,9 +74,9 @@ export async function fetchWithRateLimit(
         const response = await fetch(url, options)
 
         if (await isRateLimited(response)) {
-          const wait = 500 * (attempt + 1)
+          const wait = Math.pow(2, attempt) * 1000 + Math.random() * 500
           console.log(
-            `[v0] Rate limited on ${url}, retrying in ${wait}ms (${attempt + 1}/${maxRetries})`,
+            `[v0] Rate limited on ${url}, retrying in ${Math.round(wait)}ms (${attempt + 1}/${maxRetries})`,
           )
           await new Promise((r) => setTimeout(r, wait))
           continue
