@@ -9,31 +9,42 @@ import { StudentPerformance } from "@/components/student-performance"
 import { DetailedDebriefs } from "@/components/detailed-debriefs"
 import { Badge } from "@/components/ui/badge"
 
-async function getAvailableWeeks(): Promise<string[]> {
+interface WeekScheduleInfo {
+  weekStart: string
+  weekEnd: string
+}
+
+async function getAvailableWeeks(): Promise<{ weeks: string[]; schedule: WeekScheduleInfo[] }> {
   try {
     const response = await fetch("/api/supabase/weeks")
     const data = await response.json()
 
     if (data.success && data.weeks) {
-      return data.weeks
+      const schedule = (data.schedule || []).map((s: any) => ({
+        weekStart: s.weekStart,
+        weekEnd: s.weekEnd,
+      }))
+      return { weeks: data.weeks, schedule }
     }
-    return []
+    return { weeks: [], schedule: [] }
   } catch (error) {
     console.error("Error fetching available weeks:", error)
-    return []
+    return { weeks: [], schedule: [] }
   }
 }
 
 export default function StudentProgressPage() {
   const [availableWeeks, setAvailableWeeks] = useState<string[]>([])
   const [selectedWeeks, setSelectedWeeks] = useState<string[]>([])
+  const [weekSchedule, setWeekSchedule] = useState<WeekScheduleInfo[]>([])
   const [selectedClinics, setSelectedClinics] = useState<string[]>([])
   const [selectedClients, setSelectedClients] = useState<string[]>([])
   const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
-    getAvailableWeeks().then((weeks) => {
+    getAvailableWeeks().then(({ weeks, schedule }) => {
       setAvailableWeeks(weeks)
+      setWeekSchedule(schedule)
       // Set initial selected week to include ALL weeks to show all data
       if (weeks.length > 0) {
         setSelectedWeeks(weeks)
@@ -78,7 +89,7 @@ export default function StudentProgressPage() {
               </Suspense>
 
               <Suspense fallback={<div>Loading student questions...</div>}>
-                <StudentQuestions selectedWeeks={selectedWeeks} selectedClinic={selectedClinic} />
+                <StudentQuestions selectedWeeks={selectedWeeks} selectedClinic={selectedClinic} weekSchedule={weekSchedule} />
               </Suspense>
 
               <Suspense fallback={<div>Loading student performance...</div>}>

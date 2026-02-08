@@ -1,9 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-
-function getSupabaseClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-}
+import { createServiceClient } from "@/lib/supabase/service"
 
 function isValidUUID(str: string | null): boolean {
   if (!str) return false
@@ -22,7 +18,7 @@ export async function GET(request: NextRequest) {
 
     // Don't cache student notifications to ensure fresh data
 
-    const supabase = getSupabaseClient()
+    const supabase = createServiceClient()
 
     // Build the query to fetch notifications for this student
     // Since notifications table requires student_id (NOT NULL), we fetch:
@@ -61,7 +57,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = getSupabaseClient()
+    const supabase = createServiceClient()
     const body = await request.json()
     const { studentId, clinicId, title, message, type } = body
 

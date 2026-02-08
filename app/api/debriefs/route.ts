@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+import { createServiceClient } from "@/lib/supabase/service"
 import { getCachedData, setCachedData } from "@/lib/api-cache"
 
-function getSupabaseClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-}
 
 export async function GET(request: Request) {
   try {
@@ -19,7 +16,7 @@ export async function GET(request: Request) {
       return NextResponse.json(cached)
     }
 
-    const supabase = getSupabaseClient()
+    const supabase = createServiceClient()
 
     let query = supabase
       .from("debriefs")

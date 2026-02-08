@@ -16,12 +16,18 @@ interface Question {
   resolved: boolean
 }
 
+interface WeekScheduleInfo {
+  weekStart: string
+  weekEnd: string
+}
+
 interface StudentQuestionsProps {
   selectedWeeks: string[]
   selectedClinic: string
+  weekSchedule?: WeekScheduleInfo[]
 }
 
-export function StudentQuestions({ selectedWeeks, selectedClinic }: StudentQuestionsProps) {
+export function StudentQuestions({ selectedWeeks, selectedClinic, weekSchedule = [] }: StudentQuestionsProps) {
   const [questions, setQuestions] = useState<Question[]>([])
   const [loading, setLoading] = useState(true)
 

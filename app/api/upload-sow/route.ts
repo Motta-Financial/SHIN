@@ -1,10 +1,6 @@
 import { put } from "@vercel/blob"
-import { createClient } from "@supabase/supabase-js"
+import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
-
-function createServiceClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-}
 
 // SOW documents data
 const sowDocuments = [

@@ -1,13 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-
-function getSupabaseClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-}
+import { createServiceClient } from "@/lib/supabase/service"
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getSupabaseClient()
+    const supabase = createServiceClient()
     const { searchParams } = new URL(request.url)
     const contextType = searchParams.get("contextType") // "client" or "clinic"
     const contextId = searchParams.get("contextId")
@@ -42,7 +38,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = getSupabaseClient()
+    const supabase = createServiceClient()
     const body = await request.json()
     const { contextType, contextId, title, content, authorName, authorEmail, authorType } = body
 

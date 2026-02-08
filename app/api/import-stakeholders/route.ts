@@ -1,13 +1,9 @@
-import { createClient } from "@supabase/supabase-js"
+import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
 import { directorsData, studentsData, clientsData } from "@/lib/seed-data/stakeholders"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
-
-function getSupabaseClient() {
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-}
 
 // Helper to generate UUID v4
 function generateUUID() {
@@ -48,7 +44,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const supabase = getSupabaseClient()
+    const supabase = createServiceClient()
     const { searchParams } = new URL(request.url)
     const mode = searchParams.get("mode") || "full"
 
