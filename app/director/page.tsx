@@ -511,10 +511,11 @@ export default function DirectorDashboard() {
   useEffect(() => {
     async function fetchOverviewData() {
       try {
-        // Helper to safely fetch with graceful fallback on rate limit / errors
+        // Helper to safely fetch with graceful fallback - uses plain fetch to avoid
+        // semaphore contention with other parallel useEffects on the page
         async function safeFetch<T>(url: string, fallback: T): Promise<T> {
           try {
-            const res = await fetchWithRateLimit(url)
+            const res = await fetch(url)
             if (!res.ok) return fallback
             const text = await res.text()
             try {
@@ -527,9 +528,9 @@ export default function DirectorDashboard() {
           }
         }
 
-        // Fetch all in parallel with graceful degradation
+        // Fetch in parallel with graceful degradation - each call falls back silently
         const [attendanceData, scheduleJson, announcementsData, meetingsData] = await Promise.all([
-          safeFetch<{ records?: any[]; attendance?: any[] }>("/api/supabase/attendance", { records: [] }),
+          safeFetch<{ records?: any[]; attendance?: any[] }>("/api/supabase/attendance", { records: [], attendance: [] }),
           safeFetch<{ schedules?: any[] }>("/api/semester-schedule", { schedules: [] }),
           safeFetch<{ announcements?: any[] }>("/api/announcements", { announcements: [] }),
           safeFetch<{ meetings?: any[] }>("/api/scheduled-client-meetings", { meetings: [] }),
@@ -618,45 +619,23 @@ export default function DirectorDashboard() {
 
         // Fetch real notifications from the database
         let realNotifications: Array<{ type: string; title: string; time: string }> = []
-        try {
-          const notifResponse = await fetchWithRateLimit("/api/notifications")
-          if (notifResponse.ok) {
-            const notifText = await notifResponse.text()
-            try {
-              const notifData = JSON.parse(notifText)
-              realNotifications = (notifData.notifications || []).map((n: any) => ({
-                type: n.type || "notification",
-                title: n.title || n.message || "New notification",
-                time: n.created_at ? formatRelativeTime(new Date(n.created_at)) : "recently",
-              }))
-            } catch {
-              // Response was not valid JSON (e.g. rate limit text) - skip
-            }
-          }
-        } catch (notifError) {
-          // Network error - skip notifications silently
-        }
-        
-        // Also fetch meeting requests as notifications
-        try {
-          const meetingResponse = await fetchWithRateLimit("/api/meeting-requests?status=pending")
-          if (meetingResponse.ok) {
-            const meetingText = await meetingResponse.text()
-            try {
-              const meetingData = JSON.parse(meetingText)
-              const meetingNotifications = (meetingData.requests || []).map((m: any) => ({
-                type: "meeting_request",
-                title: `Meeting Request: ${m.subject || "No subject"} from ${m.studentName || "Student"}`,
-                time: m.createdAt ? formatRelativeTime(new Date(m.createdAt)) : "recently",
-              }))
-              realNotifications = [...meetingNotifications, ...realNotifications]
-            } catch {
-              // Response was not valid JSON - skip
-            }
-          }
-        } catch {
-          // Network error - skip meeting notifications silently
-        }
+        const [notifResult, meetingReqResult] = await Promise.all([
+          safeFetch<{ notifications?: any[] }>("/api/notifications", { notifications: [] }),
+          safeFetch<{ requests?: any[] }>("/api/meeting-requests?status=pending", { requests: [] }),
+        ])
+
+        realNotifications = (notifResult.notifications || []).map((n: any) => ({
+          type: n.type || "notification",
+          title: n.title || n.message || "New notification",
+          time: n.created_at ? formatRelativeTime(new Date(n.created_at)) : "recently",
+        }))
+
+        const meetingNotifications = (meetingReqResult.requests || []).map((m: any) => ({
+          type: "meeting_request",
+          title: `Meeting Request: ${m.subject || "No subject"} from ${m.studentName || "Student"}`,
+          time: m.createdAt ? formatRelativeTime(new Date(m.createdAt)) : "recently",
+        }))
+        realNotifications = [...meetingNotifications, ...realNotifications]
 
         // Extract student questions from debriefs data
         const studentQuestions: Array<{ student: string; question: string; time: string; answered: boolean }> = []
