@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
 import { supabaseQueryWithRetry } from "@/lib/supabase-retry"
-import { getCached, setCache, getCacheKey } from "@/lib/api-cache"
+import { getCached, setCache, getCacheKey, clearCache } from "@/lib/api-cache"
 
 export const dynamic = "force-dynamic"
 
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await getSupabaseClient()
+    const supabase = createServiceClient()
     const body = await request.json()
 
     const { data, error } = await supabase.from("prospect_interviews").insert(body).select().single()
@@ -69,6 +69,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    clearCache("prospect-interviews")
     return NextResponse.json({ data })
   } catch (error) {
     console.error("Error in prospect-interviews POST:", error)
