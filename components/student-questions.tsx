@@ -38,15 +38,28 @@ export function StudentQuestions({ selectedWeeks, selectedClinic, weekSchedule =
         const data = await response.json()
 
         if (data.debriefs) {
+          // Build a set of week_end dates that correspond to selected week_start dates
+          const selectedWeekEnds = new Set<string>()
+          for (const weekStart of selectedWeeks) {
+            const match = weekSchedule.find((w) => w.weekStart === weekStart)
+            if (match) {
+              selectedWeekEnds.add(match.weekEnd)
+            }
+          }
+          // Also add the selectedWeeks themselves as fallback (in case weekEnding IS a week_start)
+          for (const w of selectedWeeks) {
+            selectedWeekEnds.add(w)
+          }
+
           const questionsList: Question[] = data.debriefs
             .filter((debrief: any) => {
               const weekEnding = debrief.weekEnding
               const clinic = debrief.clinic
               const question = debrief.questions
 
-              // Filter by week
+              // Filter by week - match against both week_start and week_end dates
               if (!weekEnding) return false
-              const isInSelectedWeeks = selectedWeeks.includes(weekEnding)
+              const isInSelectedWeeks = selectedWeekEnds.has(weekEnding)
 
               // Filter by clinic
               const matchesClinic = selectedClinic === "all" || clinic === selectedClinic

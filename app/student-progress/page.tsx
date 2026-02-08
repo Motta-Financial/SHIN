@@ -97,7 +97,7 @@ export default function StudentProgressPage() {
               </Suspense>
 
               <Suspense fallback={<div>Loading debrief submissions...</div>}>
-                <DetailedDebriefs selectedWeeks={selectedWeeks} selectedClinic={selectedClinic} />
+                <DetailedDebriefs selectedWeeks={selectedWeeks} selectedClinic={selectedClinic} weekSchedule={weekSchedule} />
               </Suspense>
             </>
           ) : (
