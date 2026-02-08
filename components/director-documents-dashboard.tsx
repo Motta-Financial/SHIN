@@ -57,7 +57,12 @@ export function DirectorDocumentsDashboard() {
 
   const fetchDocuments = async () => {
     try {
-      const response = await fetch("/api/documents")
+      const { fetchWithRateLimit } = await import("@/lib/fetch-with-rate-limit")
+      const response = await fetchWithRateLimit("/api/documents", undefined, 4)
+      if (!response.ok) {
+        console.error("Error fetching documents: HTTP", response.status)
+        return
+      }
       const data = await response.json()
       setDocuments(data.documents || [])
     } catch (error) {
@@ -97,9 +102,12 @@ export function DirectorDocumentsDashboard() {
 
     // Fetch existing reviews
     try {
-      const response = await fetch(`/api/documents/reviews?documentId=${doc.id}`)
-      const data = await response.json()
-      setReviews(data.reviews || [])
+      const { fetchWithRateLimit } = await import("@/lib/fetch-with-rate-limit")
+      const response = await fetchWithRateLimit(`/api/documents/reviews?documentId=${doc.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        setReviews(data.reviews || [])
+      }
     } catch (error) {
       console.error("Error fetching reviews:", error)
     }
@@ -142,11 +150,11 @@ export function DirectorDocumentsDashboard() {
   const uniqueClients = Array.from(new Set(documents.map((d) => d.client_name).filter(Boolean)))
 
   return (
-  <div className="space-y-6 pt-6">
-  <div>
-  <h2 className="text-2xl font-bold text-foreground">Document Review Dashboard</h2>
-  <p className="text-muted-foreground">Review student submissions and provide feedback</p>
-  </div>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-foreground">Document Review Dashboard</h2>
+        <p className="text-muted-foreground">Review student submissions and provide feedback</p>
+      </div>
 
       {/* Filters */}
       <Card>

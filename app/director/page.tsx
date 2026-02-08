@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { MainNavigation } from "@/components/main-navigation"
 import { getErrorMessage, isAuthError, isPermissionError } from "@/lib/error-handler"
+import { fetchWithRateLimit } from "@/lib/fetch-with-rate-limit"
 import { useCurrentSemester } from "@/hooks/use-current-semester"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { WeeklyProgramSummary } from "@/components/weekly-program-summary"
@@ -86,7 +87,7 @@ async function getAvailableWeeks(): Promise<{ weeks: string[]; schedule: WeekSch
     return { weeks: [], schedule: [], currentWeek: null }
   }
   try {
-    const response = await fetch("/api/supabase/weeks")
+    const response = await fetchWithRateLimit("/api/supabase/weeks")
     const data = await response.json()
     if (data.success && data.weeks) {
       return { weeks: data.weeks, schedule: data.schedule || [], currentWeek: data.currentWeek || null }
@@ -114,39 +115,15 @@ function formatRelativeTime(date: Date): string {
 
 async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string): Promise<QuickStats> {
   try {
-    const fetchWithRetry = async (url: string, retries = 3): Promise<Response> => {
-      for (let i = 0; i < retries; i++) {
-        try {
-          const response = await fetch(url)
-          if (response.ok) return response
-
-          // If rate limited or server error, retry
-          if (response.status === 429 || response.status >= 500) {
-            await new Promise((resolve) => setTimeout(resolve, 2000 * (i + 1)))
-            continue
-          }
-
-          return response
-        } catch {
-          if (i === retries - 1) {
-            return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } })
-          }
-          await new Promise((resolve) => setTimeout(resolve, 2000 * (i + 1)))
-        }
-      }
-      return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } })
-    }
-
     // Use *_current views (source of truth) instead of v_complete_mapping
     const studentsUrl = selectedDirectorId && selectedDirectorId !== "all"
       ? `/api/supabase/students?directorId=${selectedDirectorId}`
       : "/api/supabase/students"
 
-    const [allStudentsRes, debriefsRes, clientsRes] = await Promise.all([
-      fetchWithRetry(studentsUrl),
-      fetchWithRetry("/api/supabase/debriefs"),
-      fetchWithRetry("/api/supabase/clients"),
-    ])
+    // Stagger requests to avoid rate limiting
+    const allStudentsRes = await fetchWithRateLimit(studentsUrl)
+    const debriefsRes = await fetchWithRateLimit("/api/supabase/debriefs")
+    const clientsRes = await fetchWithRateLimit("/api/supabase/clients")
 
     const allStudentsData = await allStudentsRes.json()
     const debriefsData = await debriefsRes.json()
@@ -423,7 +400,7 @@ export default function DirectorDashboard() {
   useEffect(() => {
     async function fetchDebriefsData() {
       try {
-        const response = await fetch(`/api/supabase/debriefs?semesterId=${semesterId}`)
+        const response = await fetchWithRateLimit(`/api/supabase/debriefs?semesterId=${semesterId}`)
         const data = await response.json()
         if (data.debriefs) {
           const debriefs = data.debriefs
@@ -493,7 +470,7 @@ export default function DirectorDashboard() {
   useEffect(() => {
     async function fetchScheduleData() {
       try {
-        const response = await fetch("/api/semester-schedule?semester=Spring%202026")
+        const response = await fetchWithRateLimit("/api/semester-schedule?semester=Spring%202026")
         const data = await response.json()
         if (data.schedules) {
           const schedules = data.schedules
@@ -533,7 +510,7 @@ export default function DirectorDashboard() {
     async function fetchOverviewData() {
       try {
         // Fetch attendance data from correct endpoint
-        const attendanceRes = await fetch("/api/supabase/attendance")
+        const attendanceRes = await fetchWithRateLimit("/api/supabase/attendance")
         let attendanceData = { records: [] }
         if (attendanceRes.ok) {
           const text = await attendanceRes.text()
@@ -544,7 +521,7 @@ export default function DirectorDashboard() {
           }
         }
 
-        const scheduleRes = await fetch("/api/semester-schedule")
+        const scheduleRes = await fetchWithRateLimit("/api/semester-schedule")
         let semesterScheduleData: SemesterWeek[] = []
         if (scheduleRes.ok) {
           const scheduleText = await scheduleRes.text()
@@ -557,7 +534,7 @@ export default function DirectorDashboard() {
         }
 
         // Fetch announcements for recent activity
-        const announcementsRes = await fetch("/api/announcements")
+        const announcementsRes = await fetchWithRateLimit("/api/announcements")
         let announcementsData = { announcements: [] }
         if (announcementsRes.ok) {
           const text = await announcementsRes.text()
@@ -569,7 +546,7 @@ export default function DirectorDashboard() {
         }
 
         // Fetch client meetings
-        const meetingsRes = await fetch("/api/scheduled-client-meetings")
+        const meetingsRes = await fetchWithRateLimit("/api/scheduled-client-meetings")
         let meetingsData = { meetings: [] }
         if (meetingsRes.ok) {
           const text = await meetingsRes.text()
@@ -662,7 +639,7 @@ export default function DirectorDashboard() {
         // Fetch real notifications from the database
         let realNotifications: Array<{ type: string; title: string; time: string }> = []
         try {
-          const notifResponse = await fetch("/api/notifications")
+          const notifResponse = await fetchWithRateLimit("/api/notifications")
           if (notifResponse.ok) {
             const notifText = await notifResponse.text()
             try {
@@ -682,7 +659,7 @@ export default function DirectorDashboard() {
         
         // Also fetch meeting requests as notifications
         try {
-          const meetingResponse = await fetch("/api/meeting-requests?status=pending")
+          const meetingResponse = await fetchWithRateLimit("/api/meeting-requests?status=pending")
           if (meetingResponse.ok) {
             const meetingText = await meetingResponse.text()
             try {
@@ -746,7 +723,7 @@ export default function DirectorDashboard() {
   useEffect(() => {
     async function fetchClinics() {
       try {
-        const response = await fetch("/api/clinics")
+        const response = await fetchWithRateLimit("/api/clinics")
         if (response.ok) {
           const data = await response.json()
           setClinics(data.clinics || [])
@@ -777,7 +754,7 @@ export default function DirectorDashboard() {
 
         const weekNum = currentWeekData?.weekNumber || 1
 
-        const response = await fetch(`/api/attendance-password?weekNumber=${weekNum}`)
+        const response = await fetchWithRateLimit(`/api/attendance-password?weekNumber=${weekNum}`)
         const data = await response.json()
 
         if (data.passwords && data.passwords.length > 0) {

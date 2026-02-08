@@ -104,36 +104,20 @@ export function OrgChart() {
     fetchOrgData()
   }, [])
 
-  const fetchWithRetry = async (url: string, retries = 3, delay = 2000): Promise<Response> => {
-    for (let i = 0; i < retries; i++) {
-      const response = await fetch(url)
-      if (response.status === 429) {
-        await new Promise((resolve) => setTimeout(resolve, delay))
-        delay *= 2
-        continue
-      }
-      const contentType = response.headers.get("content-type")
-      if (!contentType?.includes("application/json")) {
-        const text = await response.text()
-        if (text.startsWith("Too Many R")) {
-          await new Promise((resolve) => setTimeout(resolve, delay))
-          delay *= 2
-          continue
-        }
-        throw new Error(`Unexpected response: ${text}`)
-      }
-      return response
-    }
-    throw new Error(`Failed after ${retries} retries`)
-  }
-
   const fetchOrgData = async () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetchWithRetry("/api/org-chart")
+      const { fetchWithRateLimit } = await import("@/lib/fetch-with-rate-limit")
+      const response = await fetchWithRateLimit("/api/org-chart", undefined, 5)
       if (!response.ok) {
-        throw new Error("Failed to fetch org chart data")
+        const errBody = await response.text().catch(() => "Unknown error")
+        throw new Error(`Failed to fetch org chart data: ${errBody}`)
+      }
+      const contentType = response.headers.get("content-type") || ""
+      if (!contentType.includes("application/json")) {
+        const text = await response.text()
+        throw new Error(`Unexpected response from org-chart API: ${text.substring(0, 100)}`)
       }
       const data = await response.json()
 

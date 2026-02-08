@@ -162,8 +162,9 @@ export default function ClinicView({ selectedClinic, selectedWeeks, weekSchedule
       )
 
       // API uses current semester by default
+      const { fetchWithRateLimit } = await import("@/lib/fetch-with-rate-limit")
       const mappingUrl = `/api/supabase/v-complete-mapping`
-      const mappingRes = await fetch(mappingUrl)
+      const mappingRes = await fetchWithRateLimit(mappingUrl)
       let mappingData: CompleteMapping[] = []
 
       if (mappingRes.ok) {
@@ -207,7 +208,7 @@ export default function ClinicView({ selectedClinic, selectedWeeks, weekSchedule
         semester: filteredStudents[0]?.semester || "Spring 2026",
       })
 
-      const debriefsRes = await fetch("/api/supabase/debriefs")
+      const debriefsRes = await fetchWithRateLimit("/api/supabase/debriefs")
       if (debriefsRes.ok) {
         const debriefsData = await debriefsRes.json()
         const allDebriefs = debriefsData.debriefs || []
@@ -1222,6 +1223,3 @@ export default function ClinicView({ selectedClinic, selectedWeeks, weekSchedule
     </div>
   )
 }
-
-
-export { ClinicView }

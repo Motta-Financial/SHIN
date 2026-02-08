@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
-import { getCached, setCache, getCacheKey } from "@/lib/api-cache"
+import { getCached, setCache, getCacheKey, LONG_TTL } from "@/lib/api-cache"
+import { supabaseQueryWithRetry } from "@/lib/supabase-retry"
 
 export async function GET(request: Request) {
   try {
@@ -61,16 +62,20 @@ export async function GET(request: Request) {
 
     // Fetch directors filtered by clinic_directors for the active semester
     if (activeSemesterId) {
-      const { data: clinicDirectors, error: cdError } = await supabase
-        .from("clinic_directors")
-        .select(`
-          director_id,
-          clinic_id,
-          role,
-          directors!inner(id, full_name, email, job_title, role),
-          clinics!inner(id, name)
-        `)
-        .eq("semester_id", activeSemesterId)
+      const { data: clinicDirectors, error: cdError } = await supabaseQueryWithRetry(
+        () => supabase
+          .from("clinic_directors")
+          .select(`
+            director_id,
+            clinic_id,
+            role,
+            directors!inner(id, full_name, email, job_title, role),
+            clinics!inner(id, name)
+          `)
+          .eq("semester_id", activeSemesterId),
+        3,
+        "clinic_directors",
+      )
 
       if (cdError) {
         console.error("[v0] Error fetching clinic_directors:", cdError)
@@ -100,7 +105,7 @@ export async function GET(request: Request) {
       console.log("[v0] Fetched directors for semester:", activeSemesterId, "count:", formattedDirectors.length)
 
       const response = { directors: formattedDirectors }
-      setCache(cacheKey, response)
+      setCache(cacheKey, response, LONG_TTL)
       return NextResponse.json(response)
     }
 

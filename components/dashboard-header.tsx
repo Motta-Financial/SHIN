@@ -56,39 +56,10 @@ interface DashboardHeaderProps {
   onCurrentWeekDetected?: (currentWeek: string) => void
 }
 
-// Helper functions for sequential fetching with retry
-async function fetchWithRetry(url: string, retries = 5, delay = 1000): Promise<Response> {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const res = await fetch(url)
-      if (res.ok) return res
-      if (res.status === 429) {
-        // Exponential backoff for rate limits
-        const backoffDelay = delay * Math.pow(2, i)
-        await new Promise((resolve) => setTimeout(resolve, backoffDelay))
-        continue
-      }
-      return res
-    } catch (error) {
-      if (i === retries - 1) throw error
-      await new Promise((resolve) => setTimeout(resolve, delay * (i + 1)))
-    }
-  }
-  return fetch(url)
-}
+// Use global rate-limited fetch
+import { fetchWithRateLimit, fetchAllWithRateLimit } from "@/lib/fetch-with-rate-limit"
 
-async function fetchSequentially(urls: string[]): Promise<Response[]> {
-  // Fetch with small delays between requests to avoid rate limiting
-  const results: Response[] = []
-  for (const url of urls) {
-    if (results.length > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 150))
-    }
-    const res = await fetchWithRetry(url)
-    results.push(res)
-  }
-  return results
-}
+const fetchSequentially = fetchAllWithRateLimit
 
 export function DashboardHeader({
   selectedWeeks,

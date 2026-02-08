@@ -102,50 +102,35 @@ function ProspectsContent() {
     fetchData()
   }, [])
 
-  const fetchWithRetry = async (url: string, retries = 3, delay = 2000): Promise<Response> => {
-    for (let i = 0; i < retries; i++) {
-      const response = await fetch(url)
-      if (response.status === 429) {
-        await new Promise((r) => setTimeout(r, delay))
-        delay *= 2
-        continue
-      }
-      const ct = response.headers.get("content-type")
-      if (!ct?.includes("application/json")) {
-        const text = await response.text()
-        if (text.includes("Too Many R")) {
-          await new Promise((r) => setTimeout(r, delay))
-          delay *= 2
-          continue
-        }
-      }
-      return response
-    }
-    throw new Error(`Failed after ${retries} retries for ${url}`)
-  }
-
   const fetchData = async () => {
     setLoading(true)
+    setError(null)
     try {
-      // Stagger requests to avoid rate limiting
-      const prospectsRes = await fetchWithRetry("/api/prospects")
-      await new Promise((r) => setTimeout(r, 300))
-      const interviewsRes = await fetchWithRetry("/api/prospect-interviews")
-      await new Promise((r) => setTimeout(r, 300))
-      const directorsRes = await fetchWithRetry("/api/directors")
+      const { fetchWithRateLimit } = await import("@/lib/fetch-with-rate-limit")
 
-      if (!prospectsRes.ok) throw new Error("Failed to fetch prospects")
-      if (!interviewsRes.ok) throw new Error("Failed to fetch interviews")
-      if (!directorsRes.ok) throw new Error("Failed to fetch directors")
-
-      const [prospectsData, interviewsData, directorsData] = await Promise.all([
-        prospectsRes.json(),
-        interviewsRes.json(),
-        directorsRes.json(),
-      ])
-
+      // Fetch sequentially to avoid rate limiting
+      const prospectsRes = await fetchWithRateLimit("/api/prospects", undefined, 4)
+      if (!prospectsRes.ok) {
+        const errText = await prospectsRes.text()
+        throw new Error(`Failed to fetch prospects: ${errText}`)
+      }
+      const prospectsData = await prospectsRes.json()
       setProspects(prospectsData.data || [])
+
+      const interviewsRes = await fetchWithRateLimit("/api/prospect-interviews", undefined, 4)
+      if (!interviewsRes.ok) {
+        const errText = await interviewsRes.text()
+        throw new Error(`Failed to fetch interviews: ${errText}`)
+      }
+      const interviewsData = await interviewsRes.json()
       setInterviews(interviewsData.data || [])
+
+      const directorsRes = await fetchWithRateLimit("/api/directors", undefined, 4)
+      if (!directorsRes.ok) {
+        const errText = await directorsRes.text()
+        throw new Error(`Failed to fetch directors: ${errText}`)
+      }
+      const directorsData = await directorsRes.json()
       setDirectors(directorsData.directors || directorsData.data || [])
     } catch (err) {
       console.error("Error fetching data:", err)
