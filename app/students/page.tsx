@@ -2353,12 +2353,8 @@ export default function StudentPortal() {
                             const isCurrent =
                               new Date(week.week_start) <= new Date() && new Date(week.week_end) >= new Date()
                             
-                            // Check if today is the class day (Monday - week_start)
-                            const today = new Date()
-                            const classDay = new Date(week.week_start)
-                            const isClassDay = today.toDateString() === classDay.toDateString()
-                            // Attendance is only available on the class day itself
-                            const canSubmitAttendance = isClassDay && !hasAttendance
+                            // Attendance is available for the entire current week (from week_start through week_end)
+                            const canSubmitAttendance = isCurrent && !hasAttendance
 
                             return (
                               <div
