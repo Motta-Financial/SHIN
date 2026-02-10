@@ -617,6 +617,8 @@ export default function StudentPortal() {
   const [teamGrades, setTeamGrades] = useState<TeamGrade[]>([])
 
   const [semesterSchedule, setSemesterSchedule] = useState<SemesterWeek[]>([])
+  const [classAttendanceRecords, setClassAttendanceRecords] = useState<AttendanceRecord[]>([])
+  const [totalStudentCount, setTotalStudentCount] = useState(0)
   const [attendancePassword, setAttendancePassword] = useState("")
   const [selectedWeekForAttendance, setSelectedWeekForAttendance] = useState<string>("")
   const [submittingAttendance, setSubmittingAttendance] = useState(false)
@@ -691,11 +693,13 @@ export default function StudentPortal() {
           fetchWithRetry("/api/semester-schedule"),
         ])
 
-        const [attendanceRes, meetingRes, materialsRes, docsRes] = await Promise.all([
+        const [attendanceRes, meetingRes, materialsRes, docsRes, classAttendanceRes, studentListRes] = await Promise.all([
           fetchWithRetry(`/api/supabase/attendance?studentId=${currentStudentId}`),
           fetchWithRetry(`/api/meeting-requests?studentId=${currentStudentId}`),
           fetchWithRetry("/api/course-materials"),
           fetchWithRetry(`/api/documents?studentId=${currentStudentId}`),
+          fetchWithRetry("/api/supabase/attendance"),
+          fetchWithRetry("/api/students/list"),
         ])
 
         // If this effect was cancelled (re-triggered), don't update state
@@ -723,6 +727,13 @@ export default function StudentPortal() {
         setDebriefs(debriefsData.debriefs || [])
         setAttendanceRecords(attendanceData.attendance || [])
         setMeetingRequests(meetingData.requests || []) // Set meeting requests
+
+        // Class-wide attendance data
+        const classAttData = await safeJsonParse(classAttendanceRes, { attendance: [] })
+        setClassAttendanceRecords(classAttData.attendance || [])
+        const studentListData = await safeJsonParse(studentListRes, { students: [] })
+        setTotalStudentCount((studentListData.students || []).length)
+
         // Get materials from last 7 days for "new" materials
         const weekAgo = new Date()
         weekAgo.setDate(weekAgo.getDate() - 7)
@@ -1290,11 +1301,21 @@ export default function StudentPortal() {
   }
 
   const totalHours = debriefs.reduce((sum, d) => sum + d.hoursWorked, 0)
-  // Only count attendance records where is_present is true
+  // Only count attendance records where is_present is true (for individual student)
   const totalAttendance = attendanceRecords.filter((r) => r.is_present).length
   // Count submitted and reviewed debriefs as completed
   const completedDebriefs = debriefs.filter((d) => d.status === "submitted" || d.status === "reviewed").length
   const pendingDebriefs = debriefs.filter((d) => d.status === "pending" || d.status === "draft").length
+
+  // Class-wide attendance: find current week and count present students
+  const currentWeek = semesterSchedule.find((w) => {
+    const now = new Date()
+    return new Date(w.week_start) <= now && new Date(w.week_end) >= now
+  })
+  const currentWeekNumber = currentWeek ? Number(currentWeek.week_number) : null
+  const studentsPresent = currentWeekNumber !== null
+    ? new Set(classAttendanceRecords.filter((r) => r.weekNumber === currentWeekNumber && r.is_present).map((r) => r.studentId)).size
+    : 0
 
   const getWeekEndingDate = () => {
     const today = new Date()
@@ -1487,6 +1508,9 @@ export default function StudentPortal() {
             currentStudent={currentStudent}
             totalHours={totalHours}
             totalAttendance={totalAttendance}
+            studentsPresent={studentsPresent}
+            totalStudentCount={totalStudentCount}
+            currentWeekNumber={currentWeekNumber}
           />
 
           {/* Quick Stats - Now Expandable with Semester Schedule */}
@@ -1835,8 +1859,12 @@ export default function StudentPortal() {
                           <Calendar className="h-5 w-5 text-purple-600" />
                         </div>
                         <div>
-                          <p className="text-xs text-slate-500">Classes Attended</p>
-                          <p className="text-xl font-bold text-slate-900">{totalAttendance}</p>
+                          <p className="text-xs text-slate-500">
+                            {currentWeekNumber !== null ? `Week ${currentWeekNumber} Attendance` : "Class Attendance"}
+                          </p>
+                          <p className="text-xl font-bold text-slate-900">
+                            {studentsPresent}/{totalStudentCount}
+                          </p>
                         </div>
                       </div>
                       <ChevronDown
@@ -1927,12 +1955,11 @@ export default function StudentPortal() {
                       )}
                     </div>
                     <div className="mt-3 pt-3 border-t border-purple-100 flex justify-between items-center">
-                      <span className="text-sm font-medium text-slate-600">Attendance Rate</span>
+                      <span className="text-sm font-medium text-slate-600">
+                        {currentWeekNumber !== null ? `Week ${currentWeekNumber} Attendance` : "Current Attendance"}
+                      </span>
                       <span className="text-lg font-bold text-purple-600">
-                        {totalAttendance}/
-                        {totalAttendance > 0
-                          ? semesterSchedule.filter((w) => !w.is_break && new Date(w.week_end) < new Date()).length
-                          : 0}
+                        {studentsPresent}/{totalStudentCount}
                       </span>
                     </div>
                   </div>
@@ -2284,12 +2311,14 @@ export default function StudentPortal() {
                     <CardContent className="pt-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm text-green-700">Classes Attended</p>
+                          <p className="text-sm text-green-700">
+                            {currentWeekNumber !== null ? `Week ${currentWeekNumber} Attendance` : "Class Attendance"}
+                          </p>
                           <p className="text-2xl font-bold text-green-800">
-                            {attendanceRecords.filter((r) => r.is_present).length}/{semesterSchedule.filter((w) => !w.is_break).length}
+                            {studentsPresent}/{totalStudentCount}
                           </p>
                         </div>
-                        <CheckCircle2 className="h-8 w-8 text-green-600" />
+                        <UserCheck className="h-8 w-8 text-green-600" />
                       </div>
                     </CardContent>
                   </Card>
