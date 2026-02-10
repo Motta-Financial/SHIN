@@ -48,16 +48,23 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
     async function fetchNotifications() {
       setLoading(true)
       try {
-        // Fetch notifications and meeting requests sequentially to avoid rate limiting
+        // Fetch notifications first
         const notifResponse = await fetchWithRetry(
           `/api/notifications?${selectedClinic !== "all" ? `directorId=${selectedClinic}` : ""}`,
         )
         const notifData = await notifResponse.json()
-        
-        await new Promise((resolve) => setTimeout(resolve, 200))
-        
-        const meetingResponse = await fetchWithRetry("/api/meeting-requests?status=pending")
-        const meetingData = await meetingResponse.json()
+
+        // Fetch meeting requests separately with graceful fallback on rate limit
+        let meetingData: { requests: any[] } = { requests: [] }
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 500))
+          const meetingResponse = await fetch("/api/meeting-requests?status=pending")
+          if (meetingResponse.ok) {
+            meetingData = await meetingResponse.json()
+          }
+        } catch {
+          // Silently fall back to empty meeting requests if rate limited
+        }
 
         // Map meeting requests to notification format
         const meetingNotifs: Notification[] = (meetingData.requests || []).map((m: any) => ({
