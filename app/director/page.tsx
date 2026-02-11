@@ -57,7 +57,8 @@ interface QuickStats {
   pendingReviews: number
   hoursChange: number
   studentsChange: number
-}
+  studentsList: Array<{ id: string; name: string; clinic: string }>
+  }
 
 interface WeekSchedule {
   value: string
@@ -210,6 +211,11 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
       pendingReviews,
       hoursChange,
       studentsChange,
+      studentsList: students.map((s: any) => ({
+        id: s.id,
+        name: `${s.first_name || ''} ${s.last_name || ''}`.trim() || s.email || 'Student',
+        clinic: s.clinic_name || s.clinic || 'Unknown Clinic',
+      })),
     }
   } catch {
     return {
@@ -223,6 +229,7 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
       pendingReviews: 0,
       hoursChange: 0,
       studentsChange: 0,
+      studentsList: [],
     }
   }
 }
@@ -295,14 +302,19 @@ export default function DirectorDashboard() {
 
   const [overviewData, setOverviewData] = useState<{
     urgentItems: Array<{ type: string; message: string; count?: number; action?: string }>
-  attendanceSummary: { present: number; absent: number; rate: number; currentWeekNumber?: number | null; totalStudents?: number }
+  attendanceSummary: {
+    present: number; absent: number; rate: number;
+    currentWeekNumber?: number | null; totalStudents?: number;
+    presentStudents: Array<{ id: string; name: string; clinic: string }>;
+    absentStudents: Array<{ id: string; name: string; clinic: string }>;
+  }
   recentClientActivity: Array<{ client: string; activity: string; time: string; type: string }>
   studentQuestions: Array<{ student: string; question: string; time: string; answered: boolean }>
   weeklyProgress: { hoursTarget: number; hoursActual: number; debriefsExpected: number; clinicDebriefsExpected: number; debriefsSubmitted: number }
-  notifications: Array<{ type: string; title: string; time: string }> // Added for notifications
+  notifications: Array<{ type: string; title: string; time: string }>
   }>({
   urgentItems: [],
-  attendanceSummary: { present: 0, absent: 0, rate: 0, currentWeekNumber: null, totalStudents: 0 },
+  attendanceSummary: { present: 0, absent: 0, rate: 0, currentWeekNumber: null, totalStudents: 0, presentStudents: [], absentStudents: [] },
     recentClientActivity: [],
     studentQuestions: [],
     weeklyProgress: { hoursTarget: 0, hoursActual: 0, debriefsExpected: 0, clinicDebriefsExpected: 0, debriefsSubmitted: 0 },
@@ -560,13 +572,25 @@ export default function DirectorDashboard() {
         const presentRecords = currentWeekRecords.filter((r: any) => r.is_present === true)
         const absentRecords = currentWeekRecords.filter((r: any) => r.is_present === false)
 
-        // Get unique students who were present THIS WEEK
-        const studentsWithAttendance = new Set(presentRecords.map((r: any) => r.studentId || r.student_id))
-        const presentCount = studentsWithAttendance.size
+        // Get unique students who were present THIS WEEK (deduplicate by student ID)
+        const presentStudentMap = new Map<string, { id: string; name: string; clinic: string }>()
+        for (const r of presentRecords) {
+          const sid = r.studentId || r.student_id
+          if (sid && !presentStudentMap.has(sid)) {
+            presentStudentMap.set(sid, {
+              id: sid,
+              name: r.studentName || r.student_name || 'Student',
+              clinic: r.clinic || 'Unknown Clinic',
+            })
+          }
+        }
+        const presentCount = presentStudentMap.size
+        const presentStudentIds = new Set(presentStudentMap.keys())
 
-        // Total students is the denominator - students without a record this week are absent
+        // Absent students = all students in the roster who are NOT in the present set
+        const absentStudentsList = quickStats.studentsList.filter((s) => !presentStudentIds.has(s.id))
         const totalStudents = quickStats.totalStudents || quickStats.activeStudents || 0
-        const absentCount = Math.max(0, totalStudents - presentCount)
+        const absentCount = absentStudentsList.length
 
         // Calculate rate based on present students vs total students for current week
         const attendanceRate =
@@ -674,6 +698,8 @@ export default function DirectorDashboard() {
             rate: Math.min(attendanceRate, 100),
             currentWeekNumber: currentWeekNum,
             totalStudents,
+            presentStudents: Array.from(presentStudentMap.values()).sort((a, b) => a.clinic.localeCompare(b.clinic) || a.name.localeCompare(b.name)),
+            absentStudents: absentStudentsList.sort((a, b) => a.clinic.localeCompare(b.clinic) || a.name.localeCompare(b.name)),
           },
           recentClientActivity: recentActivity,
           studentQuestions,
@@ -1897,33 +1923,27 @@ export default function DirectorDashboard() {
                 <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                 Present Students ({overviewData.attendanceSummary.present})
               </h4>
-              <div className="border rounded-lg divide-y max-h-40 overflow-y-auto">
-                {debriefsData.recentDebriefs.length > 0 ? (
-                  debriefsData.recentDebriefs
-                    .slice(0, overviewData.attendanceSummary.present)
-                    .map((debrief: any, index: number) => (
-                      <div
-                        key={debrief.id || index}
-                        className="flex items-center justify-between p-3 hover:bg-slate-50"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center">
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-sm">
-                              {debrief.studentName || debrief.student_name || "Student"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {debrief.clientName || debrief.client_name || "Client"}
-                            </p>
-                          </div>
+              <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
+                {overviewData.attendanceSummary.presentStudents.length > 0 ? (
+                  overviewData.attendanceSummary.presentStudents.map((student) => (
+                    <div
+                      key={student.id}
+                      className="flex items-center justify-between p-3 hover:bg-slate-50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                         </div>
-                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
-                          Present
-                        </Badge>
+                        <div>
+                          <p className="font-medium text-sm">{student.name}</p>
+                          <p className="text-xs text-muted-foreground">{student.clinic}</p>
+                        </div>
                       </div>
-                    ))
+                      <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+                        Present
+                      </Badge>
+                    </div>
+                  ))
                 ) : (
                   <p className="p-4 text-sm text-muted-foreground text-center">No attendance data available</p>
                 )}
@@ -1931,24 +1951,37 @@ export default function DirectorDashboard() {
             </div>
 
             {/* Absent Students */}
-            {overviewData.attendanceSummary.absent > 0 && (
+            {overviewData.attendanceSummary.absentStudents.length > 0 && (
               <div className="space-y-2">
                 <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 text-red-500" />
                   Absent Students ({overviewData.attendanceSummary.absent})
                 </h4>
-                <div className="border border-red-200 rounded-lg bg-red-50/50 p-4">
-                  <p className="text-sm text-red-700">
-                    {overviewData.attendanceSummary.absent} student{overviewData.attendanceSummary.absent > 1 ? "s have" : " has"} not submitted attendance this week.
-                    Students who did not receive the in-class password are counted as absent.
-                  </p>
-                  <a
-                    href="/class-course?tab=attendance"
-                    className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-md hover:bg-red-100 transition-colors"
-                  >
-                    View in Attendance Portal
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
+                <div className="border border-red-200 rounded-lg divide-y max-h-64 overflow-y-auto">
+                  <div className="bg-red-50/50 p-3">
+                    <p className="text-xs text-red-600">
+                      Students who did not receive the in-class password are counted as absent.
+                    </p>
+                  </div>
+                  {overviewData.attendanceSummary.absentStudents.map((student) => (
+                    <div
+                      key={student.id}
+                      className="flex items-center justify-between p-3 hover:bg-red-50/30"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
+                          <AlertCircle className="h-4 w-4 text-red-500" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{student.name}</p>
+                          <p className="text-xs text-muted-foreground">{student.clinic}</p>
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="bg-red-100 text-red-700">
+                        Absent
+                      </Badge>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

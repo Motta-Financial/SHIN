@@ -3044,18 +3044,20 @@ toast({
                         <TabsList className="flex flex-wrap gap-1 h-auto p-1 bg-slate-100/80 mb-4">
                           {Array.from(new Set(attendanceRecords.map((r) => r.weekNumber)))
                             .sort((a, b) => a - b)
-                            .map((weekNum) => {
-                              const weekRecords = attendanceRecords.filter((r) => r.weekNumber === weekNum)
-                              const isCurrentWeek = weekNum === Math.max(...attendanceRecords.map((r) => r.weekNumber))
-                              return (
-                                <TabsTrigger
+  .map((weekNum) => {
+                  const weekRecords = attendanceRecords.filter((r) => r.weekNumber === weekNum)
+                  // Deduplicate: count unique students with is_present=true
+                  const uniquePresent = new Set(weekRecords.filter((r) => r.is_present).map((r) => r.studentId)).size
+                  const isCurrentWeek = weekNum === Math.max(...attendanceRecords.map((r) => r.weekNumber))
+                  return (
+                    <TabsTrigger
                                   key={weekNum}
                                   value={`week-${weekNum}`}
                                   className={`gap-2 ${isCurrentWeek ? "bg-blue-50 border-blue-200" : ""}`}
                                 >
-                                  <Calendar className="h-4 w-4" />
-                                  Week {weekNum}
-                                  <span className="ml-1 text-xs text-slate-500">({weekRecords.length})</span>
+                  <Calendar className="h-4 w-4" />
+                  Week {weekNum}
+                  <span className="ml-1 text-xs text-slate-500">({uniquePresent})</span>
                                 </TabsTrigger>
                               )
                             })}
@@ -3073,13 +3075,22 @@ toast({
 
                             if (weekAttendance.length === 0) return null
 
-                            // Split attendance records by is_present boolean
-                            const presentRecords = weekAttendance.filter((r) => r.is_present)
-                            const explicitAbsentRecords = weekAttendance.filter((r) => !r.is_present)
+                            // Split attendance records by is_present boolean, deduplicate by studentId
+                            const presentMap = new Map<string, typeof weekAttendance[0]>()
+                            const absentMap = new Map<string, typeof weekAttendance[0]>()
+                            for (const r of weekAttendance) {
+                              if (r.is_present) {
+                                if (!presentMap.has(r.studentId)) presentMap.set(r.studentId, r)
+                              } else {
+                                if (!absentMap.has(r.studentId)) absentMap.set(r.studentId, r)
+                              }
+                            }
+                            const presentRecords = Array.from(presentMap.values())
+                            const explicitAbsentRecords = Array.from(absentMap.values())
                             const classDate = weekAttendance[0]?.classDate || ''
 
                             // Find students who have NO attendance record for this week (didn't submit = absent)
-                            const studentIdsWithRecords = new Set(weekAttendance.map((r) => r.studentId))
+                            const studentIdsWithRecords = new Set([...presentMap.keys(), ...absentMap.keys()])
                             const missingStudents = students.filter((s) => !studentIdsWithRecords.has(s.id))
 
                             // Combine explicit absent records + missing students into one absent list
