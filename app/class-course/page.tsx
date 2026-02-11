@@ -671,11 +671,9 @@ const fetchSemesterSchedule = async () => {
   useEffect(() => {
     const fetchRosterForAbsent = async () => {
       try {
-        console.log("[v0] Fetching roster for absent students calculation...")
         const response = await fetch("/api/supabase/v-complete-mapping")
         if (response.ok) {
           const data = await response.json()
-          console.log("[v0] Roster data fetched:", data.mappings?.length, "students")
           setRosterData(data.mappings || [])
         }
       } catch (error) {
@@ -3077,8 +3075,26 @@ toast({
 
                             // Split attendance records by is_present boolean
                             const presentRecords = weekAttendance.filter((r) => r.is_present)
-                            const absentRecords = weekAttendance.filter((r) => !r.is_present)
+                            const explicitAbsentRecords = weekAttendance.filter((r) => !r.is_present)
                             const classDate = weekAttendance[0]?.classDate || ''
+
+                            // Find students who have NO attendance record for this week (didn't submit = absent)
+                            const studentIdsWithRecords = new Set(weekAttendance.map((r) => r.studentId))
+                            const missingStudents = students.filter((s) => !studentIdsWithRecords.has(s.id))
+
+                            // Combine explicit absent records + missing students into one absent list
+                            const allAbsentStudents = [
+                              ...explicitAbsentRecords.map((r) => ({
+                                student_id: r.studentId,
+                                student_name: r.studentName,
+                                student_clinic_name: r.clinic,
+                              })),
+                              ...missingStudents.map((s) => ({
+                                student_id: s.id,
+                                student_name: `${s.first_name} ${s.last_name}`,
+                                student_clinic_name: s.clinic_name,
+                              })),
+                            ]
 
                             // Group present students by clinic
                             const byClinic = presentRecords.reduce(
@@ -3091,16 +3107,12 @@ toast({
                               {} as Record<string, typeof weekAttendance>,
                             )
 
-                            // Group absent students by clinic (from attendance records with notes="Absent")
-                            const absentByClinic = absentRecords.reduce(
-                              (acc, record) => {
-                                const clinic = record.clinic || "Unknown Clinic"
+                            // Group absent students by clinic
+                            const absentByClinic = allAbsentStudents.reduce(
+                              (acc, student) => {
+                                const clinic = student.student_clinic_name || "Unknown Clinic"
                                 if (!acc[clinic]) acc[clinic] = []
-                                acc[clinic].push({
-                                  student_id: record.studentId,
-                                  student_name: record.studentName,
-                                  student_clinic_name: record.clinic,
-                                })
+                                acc[clinic].push(student)
                                 return acc
                               },
                               {} as Record<string, Array<{ student_id: string; student_name: string; student_clinic_name: string }>>,
@@ -3128,8 +3140,12 @@ toast({
                                       <p className="text-xs text-slate-500">Present</p>
                                     </div>
                                     <div>
-                                      <p className="text-2xl font-bold text-red-600">{absentRecords.length}</p>
+                                      <p className="text-2xl font-bold text-red-600">{allAbsentStudents.length}</p>
                                       <p className="text-xs text-slate-500">Absent</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-2xl font-bold text-slate-600">{students.length}</p>
+                                      <p className="text-xs text-slate-500">Total</p>
                                     </div>
                                   </div>
                                 </div>

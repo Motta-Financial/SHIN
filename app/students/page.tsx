@@ -1314,7 +1314,7 @@ export default function StudentPortal() {
   })
   const currentWeekNumber = currentWeek ? Number(currentWeek.week_number) : null
   const studentsPresent = currentWeekNumber !== null
-    ? new Set(classAttendanceRecords.filter((r) => r.weekNumber === currentWeekNumber && r.is_present).map((r) => r.studentId)).size
+    ? new Set(classAttendanceRecords.filter((r) => Number(r.weekNumber) === currentWeekNumber && r.is_present).map((r) => r.studentId)).size
     : 0
 
   const getWeekEndingDate = () => {

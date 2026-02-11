@@ -295,14 +295,14 @@ export default function DirectorDashboard() {
 
   const [overviewData, setOverviewData] = useState<{
     urgentItems: Array<{ type: string; message: string; count?: number; action?: string }>
-    attendanceSummary: { present: number; absent: number; rate: number }
-    recentClientActivity: Array<{ client: string; activity: string; time: string; type: string }>
-    studentQuestions: Array<{ student: string; question: string; time: string; answered: boolean }>
-    weeklyProgress: { hoursTarget: number; hoursActual: number; debriefsExpected: number; clinicDebriefsExpected: number; debriefsSubmitted: number }
-    notifications: Array<{ type: string; title: string; time: string }> // Added for notifications
+  attendanceSummary: { present: number; absent: number; rate: number; currentWeekNumber?: number | null; totalStudents?: number }
+  recentClientActivity: Array<{ client: string; activity: string; time: string; type: string }>
+  studentQuestions: Array<{ student: string; question: string; time: string; answered: boolean }>
+  weeklyProgress: { hoursTarget: number; hoursActual: number; debriefsExpected: number; clinicDebriefsExpected: number; debriefsSubmitted: number }
+  notifications: Array<{ type: string; title: string; time: string }> // Added for notifications
   }>({
-    urgentItems: [],
-    attendanceSummary: { present: 0, absent: 0, rate: 0 },
+  urgentItems: [],
+  attendanceSummary: { present: 0, absent: 0, rate: 0, currentWeekNumber: null, totalStudents: 0 },
     recentClientActivity: [],
     studentQuestions: [],
     weeklyProgress: { hoursTarget: 0, hoursActual: 0, debriefsExpected: 0, clinicDebriefsExpected: 0, debriefsSubmitted: 0 },
@@ -542,22 +542,35 @@ export default function DirectorDashboard() {
         const elapsedClasses = getElapsedClassCount(semesterScheduleData)
         const totalClasses = getTotalClassCount(semesterScheduleData)
 
-        // Filter attendance records by is_present boolean
-        // Note: API returns camelCase fields (studentId, is_present)
-        const presentRecords = allAttendanceRecords.filter((r: any) => r.is_present === true)
-        const absentRecords = allAttendanceRecords.filter((r: any) => r.is_present === false)
+        // Determine the current week number from the semester schedule
+        const now = new Date()
+        const currentWeekEntry = semesterScheduleData.find((w) => {
+          const start = new Date(w.week_start)
+          const end = new Date(w.week_end)
+          return now >= start && now <= end
+        })
+        const currentWeekNum = currentWeekEntry ? Number(currentWeekEntry.week_number) : null
 
-        // Get unique students who were present (API returns studentId in camelCase)
+        // Filter attendance to CURRENT WEEK ONLY for the dashboard summary
+        // This ensures the count matches the attendance portal
+        const currentWeekRecords = currentWeekNum !== null
+          ? allAttendanceRecords.filter((r: any) => Number(r.weekNumber || r.week_number) === currentWeekNum)
+          : allAttendanceRecords
+
+        const presentRecords = currentWeekRecords.filter((r: any) => r.is_present === true)
+        const absentRecords = currentWeekRecords.filter((r: any) => r.is_present === false)
+
+        // Get unique students who were present THIS WEEK
         const studentsWithAttendance = new Set(presentRecords.map((r: any) => r.studentId || r.student_id))
-        const presentCount = studentsWithAttendance.size // This is the count of unique students present in *any* class
+        const presentCount = studentsWithAttendance.size
 
-        // Calculate total possible attendances (students × elapsed classes)
-        const totalPossibleAttendances = elapsedClasses * (quickStats.activeStudents || 0)
+        // Total students is the denominator - students without a record this week are absent
+        const totalStudents = quickStats.totalStudents || quickStats.activeStudents || 0
+        const absentCount = Math.max(0, totalStudents - presentCount)
 
-        // Calculate rate based on present vs total records
-        const totalRecords = allAttendanceRecords.length
+        // Calculate rate based on present students vs total students for current week
         const attendanceRate =
-          totalRecords > 0 ? Math.round((presentRecords.length / totalRecords) * 100) : 0
+          totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0
 
         // Build urgent items
         const urgentItems: Array<{ type: string; message: string; count?: number; action?: string }> = []
@@ -656,9 +669,11 @@ export default function DirectorDashboard() {
         setOverviewData({
           urgentItems,
           attendanceSummary: {
-            present: presentRecords.length,
-            absent: absentRecords.length,
+            present: presentCount,
+            absent: absentCount,
             rate: Math.min(attendanceRate, 100),
+            currentWeekNumber: currentWeekNum,
+            totalStudents,
           },
           recentClientActivity: recentActivity,
           studentQuestions,
@@ -1103,11 +1118,7 @@ export default function DirectorDashboard() {
                           <div className="flex justify-between">
                             <span className="text-gray-500">Absent</span>
                             <span className="text-red-500 font-medium">
-                              {Math.max(
-                                0,
-                                (quickStats.totalStudents || quickStats.activeStudents || 0) -
-                                  overviewData.attendanceSummary.present,
-                              )}
+                              {overviewData.attendanceSummary.absent}
                             </span>
                           </div>
                         </div>
@@ -1845,9 +1856,9 @@ export default function DirectorDashboard() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-violet-600">
               <Users className="h-5 w-5" />
-              Student Attendance
+              Student Attendance {overviewData.attendanceSummary.currentWeekNumber != null && `- Week ${overviewData.attendanceSummary.currentWeekNumber}`}
             </DialogTitle>
-            <DialogDescription>Attendance breakdown for this week</DialogDescription>
+            <DialogDescription>Attendance breakdown for this week. Students who have not submitted attendance are listed as absent.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {/* Summary Stats */}
@@ -1858,11 +1869,7 @@ export default function DirectorDashboard() {
               </div>
               <div className="p-4 rounded-lg bg-red-50 text-center">
                 <p className="text-3xl font-bold text-red-600">
-                  {Math.max(
-                    0,
-                    (quickStats.totalStudents || quickStats.activeStudents || 0) -
-                      overviewData.attendanceSummary.present,
-                  )}
+                  {overviewData.attendanceSummary.absent}
                 </p>
                 <p className="text-sm text-muted-foreground">Absent</p>
               </div>
@@ -1878,7 +1885,7 @@ export default function DirectorDashboard() {
                 <span className="text-muted-foreground">Attendance Rate</span>
                 <span className="font-medium">
                   {overviewData.attendanceSummary.present} /{" "}
-                  {quickStats.totalStudents || quickStats.activeStudents || 0} students
+                  {overviewData.attendanceSummary.totalStudents || quickStats.totalStudents || 0} students
                 </span>
               </div>
               <Progress value={overviewData.attendanceSummary.rate} className="h-3" />
@@ -1924,31 +1931,27 @@ export default function DirectorDashboard() {
             </div>
 
             {/* Absent Students */}
-            {(() => {
-              const total = quickStats.totalStudents || quickStats.activeStudents || 0
-              const absent = Math.max(0, total - overviewData.attendanceSummary.present)
-              if (absent === 0) return null
-              return (
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4 text-red-500" />
-                    Absent Students ({absent})
-                  </h4>
-                  <div className="border border-red-200 rounded-lg bg-red-50/50 p-4">
-                    <p className="text-sm text-red-700">
-                      {absent} student{absent > 1 ? "s were" : " was"} absent this week.
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-3 text-red-600 border-red-200 hover:bg-red-100 bg-transparent"
-                    >
-                      View Absent Students
-                    </Button>
-                  </div>
+            {overviewData.attendanceSummary.absent > 0 && (
+              <div className="space-y-2">
+                <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-500" />
+                  Absent Students ({overviewData.attendanceSummary.absent})
+                </h4>
+                <div className="border border-red-200 rounded-lg bg-red-50/50 p-4">
+                  <p className="text-sm text-red-700">
+                    {overviewData.attendanceSummary.absent} student{overviewData.attendanceSummary.absent > 1 ? "s have" : " has"} not submitted attendance this week.
+                    Students who did not receive the in-class password are counted as absent.
+                  </p>
+                  <a
+                    href="/class-course?tab=attendance"
+                    className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-md hover:bg-red-100 transition-colors"
+                  >
+                    View in Attendance Portal
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
                 </div>
-              )
-            })()}
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
