@@ -92,16 +92,12 @@ export async function fetchWithRateLimit(
   }
 }
 
-// Fetch multiple URLs sequentially with rate limiting
+// Fetch multiple URLs in parallel with rate limiting
 export async function fetchAllWithRateLimit(
   urls: string[],
   options?: RequestInit,
 ): Promise<Response[]> {
-  const results: Response[] = []
-  for (const url of urls) {
-    results.push(await fetchWithRateLimit(url, options))
-  }
-  return results
+  return Promise.all(urls.map((url) => fetchWithRateLimit(url, options)))
 }
 
 export const fetchWithRetry = fetchWithRateLimit

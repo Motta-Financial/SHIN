@@ -512,159 +512,76 @@ const semesterName = "Spring 2026" // Define semester name
   
   const [semesterSchedule, setSemesterSchedule] = useState<any[]>([])
 
+  // Single consolidated data fetch - all initial data loads in parallel
   useEffect(() => {
-const fetchSemesterSchedule = async () => {
-  try {
-  const res = await fetch(`/api/semester-schedule?semesterId=${semesterId}`)
-        if (res.ok) {
-          const data = await res.json()
-          setSemesterSchedule(data.schedules || [])
-        }
-      } catch (error) {
-        console.error("Error fetching semester schedule:", error)
-      }
-    }
-    fetchSemesterSchedule()
-  }, [])
-
-  useEffect(() => {
-    const fetchEvaluations = async () => {
-      try {
-        const res = await fetch("/api/evaluations")
-        if (res.ok) {
-          const data = await res.json()
-          setEvaluations(data.evaluations || [])
-        }
-      } catch (error) {
-        console.error("Error fetching evaluations:", error)
-      }
-    }
-
-    const fetchClientDeliverables = async () => {
-      try {
-        const res = await fetch("/api/documents?submissionType=all")
-        if (res.ok) {
-          const data = await res.json()
-          const deliverablesByClient: Record<string, { sow: boolean; midterm: boolean; final: boolean }> = {}
-
-          for (const doc of data.documents || []) {
-            if (!deliverablesByClient[doc.client_id]) {
-              deliverablesByClient[doc.client_id] = { sow: false, midterm: false, final: false }
-            }
-            if (doc.submission_type === "sow") deliverablesByClient[doc.client_id].sow = true
-            if (doc.submission_type === "midterm") deliverablesByClient[doc.client_id].midterm = true
-            if (doc.submission_type === "final") deliverablesByClient[doc.client_id].final = true
-          }
-
-          setClientDeliverables(deliverablesByClient)
-        }
-      } catch (error) {
-        console.error("Error fetching deliverables:", error)
-      }
-    }
-
-    fetchEvaluations()
-    fetchClientDeliverables()
-  }, [])
-
-  // Fetch directors and clients from database
-  useEffect(() => {
-    const fetchDirectors = async () => {
-      try {
-        const res = await fetch("/api/directors")
-        if (res.ok) {
-          const data = await res.json()
-          setDirectors(data.directors || [])
-        }
-      } catch (error) {
-        console.error("Error fetching directors:", error)
-      }
-    }
-    fetchDirectors()
-  }, [])
-
-  useEffect(() => {
-    const fetchClients = async () => {
-      try {
-        const res = await fetch("/api/supabase/clients")
-        if (res.ok) {
-          const data = await res.json()
-          const clientsWithTeams = data.clients || []
-
-          // Fetch team members for each client
-          const teamRes = await fetch("/api/supabase/v-complete-mapping")
-          if (teamRes.ok) {
-            const teamData = await teamRes.json()
-            const mappings = teamData.records || []
-
-            for (const client of clientsWithTeams) {
-              client.teamMembers = mappings
-                .filter((m: any) => m.client_id === client.id)
-                .map((m: any) => ({
-                  student_id: m.student_id,
-                  student_name: m.student_name,
-                  student_role: m.student_role,
-                  student_email: m.student_email,
-                }))
-            }
-          }
-
-          setClients(clientsWithTeams)
-        }
-      } catch (error) {
-        console.error("Error fetching clients:", error)
-      }
-    }
-    fetchClients()
-  }, [])
-
-  useEffect(() => {
-    const fetchAnnouncements = async () => {
+    async function fetchAllInitialData() {
       setLoadingAnnouncements(true)
       try {
-        const res = await fetch("/api/announcements")
-        if (res.ok) {
-          const data = await res.json()
-          setAnnouncements(data.announcements || [])
+        const [scheduleRes, evalRes, deliverablesRes, directorsRes, clientsRes, teamRes, announcementsRes, clinicsRes, studentsRes] = await Promise.all([
+          fetch(`/api/semester-schedule?semesterId=${semesterId}`),
+          fetch("/api/evaluations"),
+          fetch("/api/documents?submissionType=all"),
+          fetch("/api/directors"),
+          fetch("/api/supabase/clients"),
+          fetch("/api/supabase/v-complete-mapping"),
+          fetch("/api/announcements"),
+          fetch("/api/supabase/clinics"),
+          fetch("/api/supabase/students"),
+        ])
+
+        // Process all responses in parallel
+        const [scheduleData, evalData, deliverablesData, directorsData, clientsData, teamData, announcementsData, clinicsData, studentsData] = await Promise.all([
+          scheduleRes.ok ? scheduleRes.json() : {},
+          evalRes.ok ? evalRes.json() : {},
+          deliverablesRes.ok ? deliverablesRes.json() : {},
+          directorsRes.ok ? directorsRes.json() : {},
+          clientsRes.ok ? clientsRes.json() : {},
+          teamRes.ok ? teamRes.json() : {},
+          announcementsRes.ok ? announcementsRes.json() : {},
+          clinicsRes.ok ? clinicsRes.json() : {},
+          studentsRes.ok ? studentsRes.json() : {},
+        ])
+
+        setSemesterSchedule(scheduleData.schedules || [])
+        setEvaluations(evalData.evaluations || [])
+        setDirectors(directorsData.directors || [])
+        setAnnouncements(announcementsData.announcements || [])
+        setClinics(clinicsData.clinics || [])
+        setStudents(studentsData.students || [])
+
+        // Process deliverables
+        const deliverablesByClient: Record<string, { sow: boolean; midterm: boolean; final: boolean }> = {}
+        for (const doc of deliverablesData.documents || []) {
+          if (!deliverablesByClient[doc.client_id]) {
+            deliverablesByClient[doc.client_id] = { sow: false, midterm: false, final: false }
+          }
+          if (doc.submission_type === "sow") deliverablesByClient[doc.client_id].sow = true
+          if (doc.submission_type === "midterm") deliverablesByClient[doc.client_id].midterm = true
+          if (doc.submission_type === "final") deliverablesByClient[doc.client_id].final = true
         }
+        setClientDeliverables(deliverablesByClient)
+
+        // Process clients with team members
+        const clientsWithTeams = clientsData.clients || []
+        const mappings = teamData.records || []
+        for (const client of clientsWithTeams) {
+          client.teamMembers = mappings
+            .filter((m: any) => m.client_id === client.id)
+            .map((m: any) => ({
+              student_id: m.student_id,
+              student_name: m.student_name,
+              student_role: m.student_role,
+              student_email: m.student_email,
+            }))
+        }
+        setClients(clientsWithTeams)
       } catch (error) {
-        console.error("Error fetching announcements:", error)
+        console.error("Error fetching initial data:", error)
       } finally {
         setLoadingAnnouncements(false)
       }
     }
-
-    const fetchClinics = async () => {
-      try {
-        const res = await fetch("/api/supabase/clinics")
-        if (res.ok) {
-          const data = await res.json()
-          setClinics(data.clinics || [])
-        }
-      } catch (error) {
-        console.error("Error fetching clinics:", error)
-      }
-    }
-
-    fetchAnnouncements()
-    fetchClinics()
-  }, [])
-
-  useEffect(() => {
-    const fetchStudents = async () => {
-      try {
-        const res = await fetch("/api/supabase/students")
-        if (res.ok) {
-          const data = await res.json()
-          setStudents(data.students || [])
-        } else {
-          console.error("Failed to fetch students")
-        }
-      } catch (error) {
-        console.error("Error fetching students:", error)
-      }
-    }
-    fetchStudents()
+    fetchAllInitialData()
   }, [])
 
   // Fetch roster data for absent students

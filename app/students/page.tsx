@@ -685,15 +685,11 @@ export default function StudentPortal() {
 
       setLoading(true)
       try {
-        // Fetch critical data first (roster + debriefs), then secondary data
-        // This avoids Supabase rate limits from 7+ simultaneous queries
-        const [studentRes, debriefsRes, scheduleRes] = await Promise.all([
+        // Fetch all data in parallel - single batch for fastest load
+        const [studentRes, debriefsRes, scheduleRes, attendanceRes, meetingRes, materialsRes, docsRes, classAttendanceRes, studentListRes] = await Promise.all([
           fetchWithRetry(`/api/supabase/roster?studentId=${currentStudentId}`),
           fetchWithRetry(`/api/supabase/debriefs?studentId=${currentStudentId}`),
           fetchWithRetry("/api/semester-schedule"),
-        ])
-
-        const [attendanceRes, meetingRes, materialsRes, docsRes, classAttendanceRes, studentListRes] = await Promise.all([
           fetchWithRetry(`/api/supabase/attendance?studentId=${currentStudentId}`),
           fetchWithRetry(`/api/meeting-requests?studentId=${currentStudentId}`),
           fetchWithRetry("/api/course-materials"),

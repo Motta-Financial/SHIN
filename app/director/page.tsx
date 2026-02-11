@@ -121,11 +121,11 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
       ? `/api/supabase/students?directorId=${selectedDirectorId}`
       : "/api/supabase/students"
 
-    // Fetch in parallel to reduce total request time
+    // Fetch in parallel with plain fetch to avoid semaphore contention
     const [allStudentsRes, debriefsRes, clientsRes] = await Promise.all([
-      fetchWithRateLimit(studentsUrl),
-      fetchWithRateLimit("/api/supabase/debriefs"),
-      fetchWithRateLimit("/api/supabase/clients"),
+      fetch(studentsUrl),
+      fetch("/api/supabase/debriefs"),
+      fetch("/api/supabase/clients"),
     ])
 
     const allStudentsData = await allStudentsRes.json()
