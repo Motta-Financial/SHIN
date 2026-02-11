@@ -541,12 +541,20 @@ export default function DirectorDashboard() {
         }
 
         // Fetch in parallel with graceful degradation - each call falls back silently
-        const [attendanceData, scheduleJson, announcementsData, meetingsData] = await Promise.all([
+        const [attendanceData, scheduleJson, announcementsData, meetingsData, studentsListData] = await Promise.all([
           safeFetch<{ records?: any[]; attendance?: any[] }>("/api/supabase/attendance", { records: [], attendance: [] }),
           safeFetch<{ schedules?: any[] }>("/api/semester-schedule", { schedules: [] }),
           safeFetch<{ announcements?: any[] }>("/api/announcements", { announcements: [] }),
           safeFetch<{ meetings?: any[] }>("/api/scheduled-client-meetings", { meetings: [] }),
+          safeFetch<{ students?: any[] }>("/api/students/list", { students: [] }),
         ])
+
+        // Build a local student roster for attendance cross-referencing
+        const studentRoster = (studentsListData.students || []).map((s: any) => ({
+          id: s.id,
+          name: `${s.first_name || ''} ${s.last_name || ''}`.trim() || s.email || 'Student',
+          clinic: s.clinic_name || s.clinic || 'Unknown Clinic',
+        }))
 
         const semesterScheduleData: SemesterWeek[] = scheduleJson.schedules || []
 
@@ -588,8 +596,8 @@ export default function DirectorDashboard() {
         const presentStudentIds = new Set(presentStudentMap.keys())
 
         // Absent students = all students in the roster who are NOT in the present set
-        const absentStudentsList = quickStats.studentsList.filter((s) => !presentStudentIds.has(s.id))
-        const totalStudents = quickStats.totalStudents || quickStats.activeStudents || 0
+        const absentStudentsList = studentRoster.filter((s: { id: string }) => !presentStudentIds.has(s.id))
+        const totalStudents = studentRoster.length || quickStats.totalStudents || quickStats.activeStudents || 0
         const absentCount = absentStudentsList.length
 
         // Calculate rate based on present students vs total students for current week
