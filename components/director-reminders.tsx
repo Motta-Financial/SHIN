@@ -17,15 +17,14 @@ interface Director {
   clinicName?: string
 }
 
-async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
+async function fetchWithRetry(url: string, maxRetries = 2): Promise<Response> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       const response = await fetch(url)
 
       // Check for rate limiting
       if (response.status === 429) {
-        const delay = Math.pow(2, attempt + 1) * 1000 // 2s, 4s, 8s
-        console.log(`[v0] Rate limited, retrying in ${delay}ms...`)
+        const delay = Math.pow(2, attempt) * 400 + Math.random() * 200
         await new Promise((resolve) => setTimeout(resolve, delay))
         continue
       }
@@ -35,12 +34,10 @@ async function fetchWithRetry(url: string, maxRetries = 3): Promise<Response> {
       if (!contentType?.includes("application/json")) {
         const text = await response.text()
         if (text.startsWith("Too Many R")) {
-          const delay = Math.pow(2, attempt + 1) * 1000
-          console.log(`[v0] Rate limited (text), retrying in ${delay}ms...`)
+          const delay = Math.pow(2, attempt) * 400 + Math.random() * 200
           await new Promise((resolve) => setTimeout(resolve, delay))
           continue
         }
-        // Return a mock response with the text
         return new Response(JSON.stringify({ error: text }), { status: 500 })
       }
 

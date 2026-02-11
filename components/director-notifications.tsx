@@ -57,7 +57,7 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
         // Fetch meeting requests separately with graceful fallback on rate limit
         let meetingData: { requests: any[] } = { requests: [] }
         try {
-          await new Promise((resolve) => setTimeout(resolve, 500))
+          await new Promise((resolve) => setTimeout(resolve, 100))
           const meetingResponse = await fetch("/api/meeting-requests?status=pending")
           if (meetingResponse.ok) {
             meetingData = await meetingResponse.json()

@@ -88,7 +88,7 @@ async function getAvailableWeeks(): Promise<{ weeks: string[]; schedule: WeekSch
     return { weeks: [], schedule: [], currentWeek: null }
   }
   try {
-    const response = await fetchWithRateLimit("/api/supabase/weeks")
+    const response = await fetch("/api/supabase/weeks")
     const data = await response.json()
     if (data.success && data.weeks) {
       return { weeks: data.weeks, schedule: data.schedule || [], currentWeek: data.currentWeek || null }
@@ -414,7 +414,7 @@ export default function DirectorDashboard() {
   useEffect(() => {
     async function fetchDebriefsData() {
       try {
-        const response = await fetchWithRateLimit(`/api/supabase/debriefs?semesterId=${semesterId}`)
+        const response = await fetch(`/api/supabase/debriefs?semesterId=${semesterId}`)
         const data = await response.json()
         if (data.debriefs) {
           const debriefs = data.debriefs
@@ -484,7 +484,7 @@ export default function DirectorDashboard() {
   useEffect(() => {
     async function fetchScheduleData() {
       try {
-        const response = await fetchWithRateLimit("/api/semester-schedule?semester=Spring%202026")
+        const response = await fetch("/api/semester-schedule?semester=Spring%202026")
         const data = await response.json()
         if (data.schedules) {
           const schedules = data.schedules
@@ -722,16 +722,14 @@ export default function DirectorDashboard() {
   }
   }
 
-    // Fetch overview data only after initial loading is complete and relevant data (quickStats, debriefsData) is available
-    if (!isLoading && quickStats && debriefsData) {
-      fetchOverviewData()
-    }
-  }, [isLoading, quickStats, debriefsData]) // Depend on isLoading, quickStats, and debriefsData
+    // Fetch overview data immediately - it fetches its own data via safeFetch
+    fetchOverviewData()
+  }, []) // Run once on mount - no waterfall dependency
 
   useEffect(() => {
     async function fetchClinics() {
       try {
-        const response = await fetchWithRateLimit("/api/clinics")
+        const response = await fetch("/api/clinics")
         if (response.ok) {
           const data = await response.json()
           setClinics(data.clinics || [])

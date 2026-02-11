@@ -73,7 +73,7 @@ async function fetchWithRetry(url: string, maxRetries = 2): Promise<Response> {
       // Check for rate limiting via status code
       if (response.status === 429) {
         if (attempt < maxRetries) {
-          await new Promise((r) => setTimeout(r, Math.pow(2, attempt + 1) * 2000))
+          await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 500 + Math.random() * 200))
           continue
         }
         return emptyJson()
@@ -85,7 +85,7 @@ async function fetchWithRetry(url: string, maxRetries = 2): Promise<Response> {
 
       if (isRateLimitText(bodyText) || (bodyText.includes("Too Many R") && bodyText.includes("SyntaxError"))) {
         if (attempt < maxRetries) {
-          await new Promise((r) => setTimeout(r, Math.pow(2, attempt + 1) * 2000))
+          await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 500 + Math.random() * 200))
           continue
         }
         return emptyJson()
