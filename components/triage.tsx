@@ -905,129 +905,107 @@ export function Triage({
       </Card>
 
       <Dialog open={showAgreementDialog} onOpenChange={setShowAgreementDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-primary" />
-              {selectedAgreement === "client-contract" ? "Client Engagement Agreement" : "Confidentiality Agreement"}
-            </DialogTitle>
-            <DialogDescription>Please read the agreement carefully before signing</DialogDescription>
-          </DialogHeader>
+        <DialogContent className="max-w-2xl p-0">
+          <div className="p-6 pb-3">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-primary" />
+                {selectedAgreement === "client-contract" ? "Client Engagement Agreement" : "Confidentiality Agreement"}
+              </DialogTitle>
+              <DialogDescription>Please read the agreement carefully before signing</DialogDescription>
+            </DialogHeader>
+          </div>
 
           {agreementContent && (
-            <div className="flex-1 overflow-hidden flex flex-col">
-              {/* Agreement Document */}
-              <ScrollArea className="flex-1 border rounded-lg bg-white p-6 my-4">
-                <div className="max-w-xl mx-auto">
-                  {/* Header */}
-                  <div className="text-center mb-6">
-                    <div className="flex justify-center mb-4">
-                      <Building2 className="h-10 w-10 text-primary" />
-                    </div>
-                    {agreementContent.title.split("\n").map((line, i) => (
-                      <p key={i} className={`font-bold ${i === 0 ? "text-lg" : "text-base"}`}>
-                        {line}
-                      </p>
-                    ))}
-                  </div>
-
-                  <Separator className="my-4" />
-
-                  {/* Agreement Content */}
-                  <div className="space-y-4 text-sm leading-relaxed">
-                    {agreementContent.sections.map((section, i) => (
-                      <div key={i}>
-                        {section.heading && <p className="font-semibold underline mb-2">{section.heading}</p>}
-                        {section.text && <p className={section.isItalic ? "italic" : ""}>{section.text}</p>}
-                      </div>
-                    ))}
-                  </div>
-
-                  <Separator className="my-6" />
-
-                  {/* Signature Section */}
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name" className="font-semibold italic">
-                        Name ({userType === "client" ? "Authorized Representative" : "Student/Faculty"}):
-                      </Label>
-                      <Input
-                        id="name"
-                        value={signature}
-                        onChange={(e) => setSignature(e.target.value)}
-                        placeholder="Type your full legal name"
-                        className="border-b-2 border-t-0 border-x-0 rounded-none focus:ring-0 bg-transparent"
-                      />
-                    </div>
-
-                    {(selectedAgreement === "student-confidentiality" ||
-                      selectedAgreement === "director-confidentiality") && (
-                      <div className="space-y-2">
-                        <Label htmlFor="clinic" className="font-semibold italic">
-                          Program Name (Clinic):
-                        </Label>
-                        <Input
-                          id="clinic"
-                          value={clinicName}
-                          onChange={(e) => setClinicName(e.target.value)}
-                          placeholder="e.g., Accounting Clinic, Marketing Clinic"
-                          className="border-b-2 border-t-0 border-x-0 rounded-none focus:ring-0 bg-transparent"
-                        />
-                      </div>
-                    )}
-
-                    {selectedAgreement === "client-contract" && (
-                      <div className="space-y-2">
-                        <Label htmlFor="org" className="font-semibold italic">
-                          Organization Name:
-                        </Label>
-                        <Input
-                          id="org"
-                          value={clinicName}
-                          onChange={(e) => setClinicName(e.target.value)}
-                          placeholder="Your organization name"
-                          className="border-b-2 border-t-0 border-x-0 rounded-none focus:ring-0 bg-transparent"
-                        />
-                      </div>
-                    )}
-
-                    <div className="space-y-2">
-                      <Label className="font-semibold italic">Signature:</Label>
-                      <div className="h-12 border-b-2 border-gray-400 flex items-end pb-1">
-                        {signature && <span className="text-2xl font-script italic text-gray-700">{signature}</span>}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="font-semibold italic">Date:</Label>
-                      <p className="border-b-2 border-gray-400 pb-1">
-                        {new Date().toLocaleDateString("en-US", {
-                          year: "numeric",
-                          month: "long",
-                          day: "numeric",
-                        })}
-                      </p>
-                    </div>
-                  </div>
+            <>
+              {/* Scrollable agreement text box */}
+              <div
+                className="mx-6 border rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-700"
+                style={{ height: "250px", overflowY: "scroll" }}
+              >
+                {/* Header */}
+                <div className="text-center mb-4">
+                  <Building2 className="h-8 w-8 text-primary mx-auto mb-2" />
+                  {agreementContent.title.split("\n").map((line, i) => (
+                    <p key={i} className={`font-bold text-slate-900 ${i === 0 ? "text-base" : "text-sm"}`}>
+                      {line}
+                    </p>
+                  ))}
                 </div>
-              </ScrollArea>
 
-              {/* Agreement Checkbox */}
-              <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
-                <Checkbox
-                  id="agree"
-                  checked={agreedToTerms}
-                  onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
-                />
-                <Label htmlFor="agree" className="text-sm leading-relaxed cursor-pointer">
-                  I have read and understand the above agreement. I agree to all terms and conditions stated herein. I
-                  understand that this is a legally binding electronic signature.
-                </Label>
+                <Separator className="my-3" />
+
+                {/* Agreement Content */}
+                <div className="space-y-3">
+                  {agreementContent.sections.map((section, i) => (
+                    <div key={i}>
+                      {section.heading && <p className="font-semibold underline mb-1">{section.heading}</p>}
+                      {section.text && <p className={section.isItalic ? "italic" : ""}>{section.text}</p>}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+              <p className="mx-6 text-xs text-slate-400 -mt-1">Scroll to read the full agreement</p>
+
+              {/* Signature fields - always visible */}
+              <div className="px-6 space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="name" className="text-sm font-medium">
+                    Name ({userType === "client" ? "Authorized Representative" : "Student/Faculty"})
+                  </Label>
+                  <Input
+                    id="name"
+                    value={signature}
+                    onChange={(e) => setSignature(e.target.value)}
+                    placeholder="Type your full legal name"
+                  />
+                </div>
+
+                {(selectedAgreement === "student-confidentiality" ||
+                  selectedAgreement === "director-confidentiality") && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="clinic" className="text-sm font-medium">
+                      Program Name (Clinic)
+                    </Label>
+                    <Input
+                      id="clinic"
+                      value={clinicName}
+                      onChange={(e) => setClinicName(e.target.value)}
+                      placeholder="e.g., Accounting Clinic, Marketing Clinic"
+                    />
+                  </div>
+                )}
+
+                {selectedAgreement === "client-contract" && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="org" className="text-sm font-medium">
+                      Organization Name
+                    </Label>
+                    <Input
+                      id="org"
+                      value={clinicName}
+                      onChange={(e) => setClinicName(e.target.value)}
+                      placeholder="Your organization name"
+                    />
+                  </div>
+                )}
+
+                {/* Agreement Checkbox */}
+                <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+                  <Checkbox
+                    id="agree"
+                    checked={agreedToTerms}
+                    onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
+                  />
+                  <Label htmlFor="agree" className="text-sm leading-relaxed cursor-pointer">
+                    I have read and understand the above agreement. I agree to all terms and conditions stated herein.
+                  </Label>
+                </div>
+              </div>
+            </>
           )}
 
-          <DialogFooter className="mt-4">
+          <div className="flex justify-end gap-2 px-6 pb-6 pt-2 border-t">
             <Button variant="outline" onClick={() => setShowAgreementDialog(false)}>
               Cancel
             </Button>
@@ -1045,7 +1023,7 @@ export function Triage({
               <Send className="h-4 w-4 mr-2" />
               Sign Agreement
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </>
