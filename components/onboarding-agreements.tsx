@@ -389,8 +389,8 @@ export function OnboardingAgreements({
                           Review & Sign
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-3xl max-h-[90vh]">
-                        <DialogHeader>
+                      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+                        <DialogHeader className="flex-shrink-0">
                           <DialogTitle className="flex items-center gap-2">
                             <Icon className="h-5 w-5" />
                             {item.agreement.title}
@@ -400,7 +400,7 @@ export function OnboardingAgreements({
                           )}
                         </DialogHeader>
 
-                        <ScrollArea className="h-[50vh] pr-4">
+                        <ScrollArea className="flex-1 min-h-0 pr-4">
                           <div className="space-y-4">
                             {item.agreement.sections.map((section, idx) => (
                               <Collapsible
@@ -423,50 +423,50 @@ export function OnboardingAgreements({
                                 </CollapsibleContent>
                               </Collapsible>
                             ))}
+
+                            <Separator />
+
+                            <div className="space-y-4 pb-2">
+                              <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                                <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                                <div className="text-sm">
+                                  <p className="font-medium text-amber-800">Please read carefully</p>
+                                  <p className="text-amber-700">
+                                    By signing below, you acknowledge that you have read, understood, and agree to the terms
+                                    outlined in this agreement.
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  id="acknowledge"
+                                  checked={acknowledged}
+                                  onCheckedChange={(checked) => setAcknowledged(checked === true)}
+                                />
+                                <Label htmlFor="acknowledge" className="text-sm">
+                                  I have read and understand all sections of this agreement
+                                </Label>
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label htmlFor="signature">Electronic Signature (Type your full name)</Label>
+                                <Input
+                                  id="signature"
+                                  placeholder={userName}
+                                  value={signature}
+                                  onChange={(e) => setSignature(e.target.value)}
+                                  disabled={!acknowledged}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                  Signing as: {userName} ({userEmail})
+                                </p>
+                              </div>
+                            </div>
                           </div>
                         </ScrollArea>
 
-                        <Separator />
-
-                        <div className="space-y-4">
-                          <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                            <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
-                            <div className="text-sm">
-                              <p className="font-medium text-amber-800">Please read carefully</p>
-                              <p className="text-amber-700">
-                                By signing below, you acknowledge that you have read, understood, and agree to the terms
-                                outlined in this agreement.
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <Checkbox
-                              id="acknowledge"
-                              checked={acknowledged}
-                              onCheckedChange={(checked) => setAcknowledged(checked === true)}
-                            />
-                            <Label htmlFor="acknowledge" className="text-sm">
-                              I have read and understand all sections of this agreement
-                            </Label>
-                          </div>
-
-                          <div className="space-y-2">
-                            <Label htmlFor="signature">Electronic Signature (Type your full name)</Label>
-                            <Input
-                              id="signature"
-                              placeholder={userName}
-                              value={signature}
-                              onChange={(e) => setSignature(e.target.value)}
-                              disabled={!acknowledged}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              Signing as: {userName} ({userEmail})
-                            </p>
-                          </div>
-                        </div>
-
-                        <DialogFooter className="flex gap-2">
+                        <DialogFooter className="flex-shrink-0 flex gap-2 border-t pt-4">
                           <Button variant="outline" onClick={() => setAgreementToSign(null)}>
                             Cancel
                           </Button>
