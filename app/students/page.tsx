@@ -1497,8 +1497,7 @@ export default function StudentPortal() {
             currentStudent={currentStudent}
             totalHours={totalHours}
             totalAttendance={totalAttendance}
-            studentsPresent={studentsPresent}
-            totalStudentCount={totalStudentCount}
+            totalClassesInSemester={semesterSchedule.filter((w) => !w.is_break).length}
             currentWeekNumber={currentWeekNumber}
           />
 
@@ -1849,10 +1848,10 @@ export default function StudentPortal() {
                         </div>
                         <div>
                           <p className="text-xs text-slate-500">
-                            {currentWeekNumber !== null ? `Week ${currentWeekNumber} Attendance` : "Class Attendance"}
+                            My Attendance
                           </p>
                           <p className="text-xl font-bold text-slate-900">
-                            {studentsPresent}/{totalStudentCount}
+                            {totalAttendance}/{semesterSchedule.filter((w) => !w.is_break).length}
                           </p>
                         </div>
                       </div>
@@ -1945,10 +1944,10 @@ export default function StudentPortal() {
                     </div>
                     <div className="mt-3 pt-3 border-t border-purple-100 flex justify-between items-center">
                       <span className="text-sm font-medium text-slate-600">
-                        {currentWeekNumber !== null ? `Week ${currentWeekNumber} Attendance` : "Current Attendance"}
+                        My Attendance
                       </span>
                       <span className="text-lg font-bold text-purple-600">
-                        {studentsPresent}/{totalStudentCount}
+                        {totalAttendance}/{semesterSchedule.filter((w) => !w.is_break).length}
                       </span>
                     </div>
                   </div>
@@ -2301,10 +2300,10 @@ export default function StudentPortal() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm text-green-700">
-                            {currentWeekNumber !== null ? `Week ${currentWeekNumber} Attendance` : "Class Attendance"}
+                            My Attendance
                           </p>
                           <p className="text-2xl font-bold text-green-800">
-                            {studentsPresent}/{totalStudentCount}
+                            {totalAttendance}/{semesterSchedule.filter((w) => !w.is_break).length}
                           </p>
                         </div>
                         <UserCheck className="h-8 w-8 text-green-600" />
