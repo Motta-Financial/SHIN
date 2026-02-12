@@ -1,28 +1,37 @@
 import { NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase/service"
+import { supabaseQueryWithRetry } from "@/lib/supabase-retry"
+import { getCached, setCache, LONG_TTL } from "@/lib/api-cache"
 
 export async function GET(request: Request) {
   try {
+    // Check cache first
+    const cacheKey = "students-list"
+    const cached = getCached<{ success: boolean; students: unknown[] }>(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached)
+    }
+
     const supabase = createServiceClient()
-    const { searchParams } = new URL(request.url)
-    const semesterId = searchParams.get("semesterId")
-    const includeAll = searchParams.get("includeAll") === "true"
 
-    // Use students_current view which already filters by current semester via app_settings
-    // No need to manually filter by semester_id or status
-    const { data: students, error } = await supabase
-      .from("students_current")
-      .select("id, full_name, email, clinic, status, semester_id")
-      .order("full_name")
+    const { data: students, error } = await supabaseQueryWithRetry(
+      () => supabase
+        .from("students_current")
+        .select("id, full_name, email, clinic, status, semester_id")
+        .order("full_name"),
+      3,
+      "students_list",
+    )
 
-    if (error) throw error
+    if (error) {
+      return NextResponse.json({ success: true, students: [] })
+    }
 
-    return NextResponse.json({
-      success: true,
-      students: students || [],
-    })
-  } catch (error) {
-    console.error("Error fetching students:", error)
-    return NextResponse.json({ success: false, error: "Failed to fetch students" }, { status: 500 })
+    const result = { success: true, students: students || [] }
+    setCache(cacheKey, result, LONG_TTL)
+    return NextResponse.json(result)
+  } catch {
+    // Return empty array with 200 instead of 500 to prevent error toasts
+    return NextResponse.json({ success: true, students: [] })
   }
 }

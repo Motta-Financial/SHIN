@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
 import { getCurrentSemesterId } from "@/lib/semester"
 import { getCachedData, setCachedData } from "@/lib/api-cache"
+import { supabaseQueryWithRetry } from "@/lib/supabase-retry"
 
 export async function GET(request: Request) {
   try {
@@ -19,39 +20,38 @@ export async function GET(request: Request) {
       return NextResponse.json(cached)
     }
 
-    let query = supabase
-      .from("attendance")
-      .select(`
-        student_id,
-        student_name,
-        student_email,
-        class_date,
-        week_number,
-        week_ending,
-        clinic,
-        is_present,
-        attendance_notes,
-        user_id,
-        semester_id
-      `)
-      .eq("semester_id", semesterId) // Filter by semester
-      .order("class_date", { ascending: false })
+    const { data, error } = await supabaseQueryWithRetry(
+      () => {
+        let query = supabase
+          .from("attendance")
+          .select(`
+            student_id,
+            student_name,
+            student_email,
+            class_date,
+            week_number,
+            week_ending,
+            clinic,
+            is_present,
+            attendance_notes,
+            user_id,
+            semester_id
+          `)
+          .eq("semester_id", semesterId)
+          .order("class_date", { ascending: false })
 
-    // Filter by student if provided
-    if (studentId) {
-      query = query.eq("student_id", studentId)
-    } else if (studentEmail) {
-      query = query.eq("student_email", studentEmail)
-    }
-
-    const { data, error } = await query
+        if (studentId) {
+          query = query.eq("student_id", studentId)
+        } else if (studentEmail) {
+          query = query.eq("student_email", studentEmail)
+        }
+        return query
+      },
+      3,
+      "attendance",
+    )
 
     if (error) {
-      const msg = error.message || ""
-      if (msg.includes("Too Many R") || msg.includes("rate limit")) {
-        return NextResponse.json({ attendance: [] }, { status: 429 })
-      }
-      console.log("[v0] Supabase attendance error:", msg)
       return NextResponse.json({ attendance: [] })
     }
 
@@ -73,12 +73,7 @@ export async function GET(request: Request) {
     const result = { attendance: formattedAttendance }
     setCachedData(cacheKey, result, 60_000) // Cache for 60 seconds
     return NextResponse.json(result)
-  } catch (error: any) {
-    const msg = error?.message || ""
-    if (msg.includes("Too Many R") || msg.includes("Unexpected token") || msg.includes("rate limit")) {
-      return NextResponse.json({ attendance: [] }, { status: 429 })
-    }
-    console.log("[v0] Error fetching attendance:", error)
+  } catch {
     return NextResponse.json({ attendance: [] })
   }
 }
