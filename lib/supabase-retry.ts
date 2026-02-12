@@ -7,16 +7,20 @@ type SupabaseQueryResult<T> = {
 }
 
 function isRateLimitError(msg: string): boolean {
+  const lower = msg.toLowerCase()
   return (
     msg.includes("Too Many R") ||
-    msg.includes("rate limit") ||
-    msg.includes("Unexpected token")
+    lower.includes("rate limit") ||
+    msg.includes("Unexpected token") ||
+    msg.includes("is not valid JSON") ||
+    msg.includes("SyntaxError") ||
+    lower.includes("too many requests")
   )
 }
 
 /**
  * Execute a Supabase query with automatic retry on rate limit errors.
- * Uses short delays (500ms, 1s, 1.5s) to recover fast.
+ * Uses exponential backoff (800ms, 1.6s, 3.2s) to let rate limits clear.
  */
 export async function supabaseQueryWithRetry<T>(
   queryFn: () => PromiseLike<SupabaseQueryResult<T>>,
@@ -28,19 +32,22 @@ export async function supabaseQueryWithRetry<T>(
       const result = await queryFn()
 
       if (result.error && isRateLimitError(result.error.message || "")) {
-        const wait = 500 * (attempt + 1)
-        await new Promise((r) => setTimeout(r, wait))
-        continue
+        if (attempt < maxRetries - 1) {
+          const wait = 800 * Math.pow(2, attempt) + Math.random() * 300
+          await new Promise((r) => setTimeout(r, wait))
+          continue
+        }
       }
 
       return result
     } catch (error: any) {
-      const msg = error?.message || ""
-      if (isRateLimitError(msg)) {
-        const wait = 500 * (attempt + 1)
+      const msg = error?.message || String(error) || ""
+      if (isRateLimitError(msg) && attempt < maxRetries - 1) {
+        const wait = 800 * Math.pow(2, attempt) + Math.random() * 300
         await new Promise((r) => setTimeout(r, wait))
         continue
       }
+      // On final attempt or non-rate-limit error, return gracefully
       return { data: null, error: { message: msg || "Unknown error" } }
     }
   }

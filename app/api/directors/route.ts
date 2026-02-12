@@ -23,14 +23,17 @@ export async function GET(request: Request) {
 
     // If includeAll is true, return all directors without semester filtering
     if (includeAll) {
-      const { data: directors, error } = await supabase
-        .from("directors")
-        .select("id, full_name, email, job_title, role, clinic_id, clinic:clinics(name)")
-        .order("full_name")
+      const { data: directors, error } = await supabaseQueryWithRetry(
+        () => supabase
+          .from("directors")
+          .select("id, full_name, email, job_title, role, clinic_id, clinic:clinics(name)")
+          .order("full_name"),
+        3,
+        "directors_all",
+      )
 
       if (error) {
-        console.error("[v0] Error fetching all directors:", error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json({ directors: [] })
       }
 
       const formattedDirectors = (directors || []).map((d: any) => ({
@@ -51,11 +54,15 @@ export async function GET(request: Request) {
     // Get active semester if not provided
     let activeSemesterId = semesterId
     if (!activeSemesterId) {
-      const { data: activeSemester } = await supabase
-        .from("semester_config")
-        .select("id")
-        .eq("is_active", true)
-        .maybeSingle()
+      const { data: activeSemester } = await supabaseQueryWithRetry(
+        () => supabase
+          .from("semester_config")
+          .select("id")
+          .eq("is_active", true)
+          .maybeSingle(),
+        3,
+        "semester_config_active",
+      )
 
       activeSemesterId = activeSemester?.id
     }
@@ -78,8 +85,7 @@ export async function GET(request: Request) {
       )
 
       if (cdError) {
-        console.error("[v0] Error fetching clinic_directors:", cdError)
-        return NextResponse.json({ error: cdError.message }, { status: 500 })
+        return NextResponse.json({ directors: [] })
       }
 
       // Deduplicate directors (a director may have multiple clinic assignments)
@@ -110,14 +116,17 @@ export async function GET(request: Request) {
     }
 
     // Fallback: return all directors if no active semester found
-    const { data: directors, error } = await supabase
-      .from("directors")
-      .select("id, full_name, email, job_title, role, clinic_id, clinic:clinics(name)")
-      .order("full_name")
+    const { data: directors, error } = await supabaseQueryWithRetry(
+      () => supabase
+        .from("directors")
+        .select("id, full_name, email, job_title, role, clinic_id, clinic:clinics(name)")
+        .order("full_name"),
+      3,
+      "directors_fallback",
+    )
 
     if (error) {
-      console.error("[v0] Error fetching directors:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ directors: [] })
     }
 
     const formattedDirectors = (directors || []).map((d: any) => ({
@@ -135,8 +144,7 @@ export async function GET(request: Request) {
     const response = { directors: formattedDirectors }
     setCache(cacheKey, response)
     return NextResponse.json(response)
-  } catch (error) {
-    console.error("[v0] Error in directors API:", error)
-    return NextResponse.json({ error: "Failed to fetch directors" }, { status: 500 })
+  } catch {
+    return NextResponse.json({ directors: [] })
   }
 }
