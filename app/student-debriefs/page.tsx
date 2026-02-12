@@ -124,8 +124,8 @@ export default function StudentDebriefsPage() {
         const res = await fetch("/api/semester-schedule")
         if (res.ok) {
           const data = await res.json()
-          if (data.schedule) {
-            setSemesterSchedule(data.schedule.filter((w: any) => !w.is_break))
+          if (data.schedules) {
+            setSemesterSchedule(data.schedules.filter((w: any) => !w.is_break))
           }
         }
       } catch {
