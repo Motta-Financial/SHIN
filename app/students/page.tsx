@@ -559,7 +559,6 @@ export default function StudentPortal() {
             }
           }
 } catch (error) {
-  console.error("Error fetching students:", error)
   if (isAuthError(error)) {
     router.push("/sign-in")
   }
@@ -770,9 +769,9 @@ export default function StudentPortal() {
                 }))
               setTeamGrades(grades)
             }
-          } catch (error) {
-            console.error("Error fetching team grades:", error)
-          }
+  } catch {
+        // silently handle
+      }
         }
 
         // After line that sets currentStudent, add:
@@ -784,26 +783,20 @@ export default function StudentPortal() {
               ? `/api/student-notifications?studentId=${student.id}&clinicId=${student.clinicId}`
               : `/api/student-notifications?studentId=${student.id}`
             const res = await fetchWithRetry(url)
-            if (!res.ok) {
-              console.error("Error fetching student notifications: HTTP", res.status)
-              return
-            }
-            const text = await res.text()
-            if (text.startsWith("Too Many R")) {
-              console.error("Error fetching student notifications: Rate limited")
-              return
-            }
+  if (!res.ok) return
+  const text = await res.text()
+  if (text.startsWith("Too Many R")) return
             try {
               const data = JSON.parse(text)
               if (data.notifications) {
                 setStudentNotifications(data.notifications)
               }
-            } catch (parseError) {
-              console.error("Error parsing student notifications:", parseError)
-            }
-          } catch (error) {
-            console.error("Error fetching student notifications:", error)
-          }
+  } catch {
+  // parse error, skip
+  }
+  } catch {
+  // silently handle
+  }
         }
         fetchStudentNotifications()
 
@@ -815,12 +808,11 @@ export default function StudentPortal() {
             if (agreementsData.agreements) {
               setSignedAgreements(agreementsData.agreements.map((a: any) => a.agreement_type))
             }
-          } catch (error) {
-            console.error("Error fetching agreements:", error)
-          }
-        }
-} catch (error) {
-  console.error("Error fetching data:", error)
+  } catch {
+  // silently handle
+  }
+  }
+  } catch (error) {
   // Reset the ref so a retry is possible
   lastFetchedStudentRef.current = null
   if (isAuthError(error)) {
@@ -866,9 +858,8 @@ export default function StudentPortal() {
         } catch {
           // Summary is optional - team data already loaded above
         }
-      } catch (error: any) {
-        console.error("Error fetching team data or summary:", error)
-        setTeamSummaryError(error.message || "Failed to load team information.")
+  } catch (error: any) {
+  setTeamSummaryError(error.message || "Failed to load team information.")
       } finally {
         setLoadingTeamSummary(false)
       }
@@ -930,9 +921,8 @@ export default function StudentPortal() {
       } else {
         alert("Failed to send question. Please try again.")
       }
-    } catch (error) {
-      console.error("Error submitting question:", error)
-      alert("An error occurred. Please try again.")
+  } catch {
+  alert("An error occurred. Please try again.")
     } finally {
       setSubmitting(false)
     }
@@ -987,9 +977,8 @@ export default function StudentPortal() {
       } else {
         alert("Failed to send meeting request. Please try again.")
       }
-    } catch (error) {
-      console.error("Error submitting meeting request:", error)
-      alert("An error occurred. Please try again.")
+  } catch {
+  alert("An error occurred. Please try again.")
     } finally {
       setSubmittingMeeting(false)
     }
@@ -1036,10 +1025,10 @@ export default function StudentPortal() {
         const error = await response.json()
         alert(error.error || "Invalid password or attendance already submitted")
       }
-    } catch (error) {
-      console.error("Error submitting attendance:", error)
-    } finally {
-      setSubmittingAttendance(false)
+  } catch {
+  // silently handle
+  } finally {
+  setSubmittingAttendance(false)
     }
   }
 
@@ -1084,10 +1073,10 @@ export default function StudentPortal() {
       setShowDebriefDialog(false)
       setDebriefForm({ hoursWorked: "", workSummary: "", questions: "" })
       setSelectedWeekForDebrief("")
-    } catch (error) {
-      console.error("Error submitting debrief:", error)
-    } finally {
-      setSubmittingDebrief(false)
+  } catch {
+  // silently handle
+  } finally {
+  setSubmittingDebrief(false)
     }
   }
 
@@ -1139,9 +1128,8 @@ export default function StudentPortal() {
       })
 
       setUploadedFileUrl(newBlob.url)
-    } catch (error: any) {
-      console.error("Upload error:", error)
-      alert(error?.message || "An error occurred while uploading. Please try again.")
+  } catch (error: any) {
+  alert(error?.message || "An error occurred while uploading. Please try again.")
       setSelectedFile(null)
       setUploadedFileUrl("")
     } finally {
@@ -1203,9 +1191,8 @@ export default function StudentPortal() {
       } else {
         alert("Failed to submit document. Please try again.")
       }
-    } catch (error) {
-      console.error("Error submitting document:", error)
-      alert("An error occurred. Please try again.")
+  } catch {
+  alert("An error occurred. Please try again.")
     } finally {
       setSubmittingDocument(false)
     }

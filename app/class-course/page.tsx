@@ -753,10 +753,10 @@ formData.append("category", uploadCategory)
         setPublishSuccess(true)
         setTimeout(() => setPublishSuccess(false), 3000)
       }
-    } catch (error) {
-      console.error("Error publishing agenda:", error)
-    } finally {
-      setPublishing(false)
+  } catch {
+  // silently handle
+  } finally {
+  setPublishing(false)
     }
   }
 
@@ -944,9 +944,8 @@ formData.append("category", uploadCategory)
         const error = await res.json()
         alert(error.error || "Failed to post announcement")
       }
-    } catch (error) {
-      console.error("Error posting announcement:", error)
-      alert("Failed to post announcement")
+  } catch {
+  alert("Failed to post announcement")
     } finally {
       setPostingAnnouncement(false)
     }
@@ -997,9 +996,8 @@ formData.append("category", uploadCategory)
         const error = await res.json()
         alert(error.error || "Failed to submit evaluation")
       }
-    } catch (error) {
-      console.error("Error submitting evaluation:", error)
-      alert("Failed to submit evaluation")
+  } catch {
+  alert("Failed to submit evaluation")
     } finally {
       setSubmittingEvaluation(false)
     }
@@ -1102,13 +1100,16 @@ setLoadingAttendance(true)
       try {
         const res = await fetch("/api/attendance-password")
         if (res.ok) {
-          const data = await res.json()
-          setWeekPasswords(data.passwords || [])
-        } else {
-          console.error("Failed to fetch week passwords")
+          try {
+            const text = await res.text()
+            if (!text.startsWith("Too Many")) {
+              const data = JSON.parse(text)
+              setWeekPasswords(data.passwords || [])
+            }
+          } catch { /* rate limited */ }
         }
-      } catch (error) {
-        console.error("Error fetching week passwords:", error)
+      } catch {
+        // silently handle
       }
     }
     fetchWeekPasswords()
@@ -1201,9 +1202,8 @@ toast({
           variant: "destructive",
         })
       }
-    } catch (error) {
-      console.error("Error setting password:", error)
-      alert("Failed to set password. Please try again.")
+  } catch {
+  alert("Failed to set password. Please try again.")
     } finally {
       setSavingPassword(false)
     }
@@ -1260,9 +1260,8 @@ toast({
           variant: "destructive",
         })
       }
-    } catch (error) {
-      console.error("Error updating password:", error)
-      alert("Failed to update password. Please try again.")
+  } catch {
+  alert("Failed to update password. Please try again.")
     } finally {
       setSavingPassword(false)
     }
@@ -3207,9 +3206,9 @@ toast({
                                                   r.id === record.id ? { ...r, is_present: change.newStatus } : r
                                                 ))
                                               }
-                                            } catch (error) {
-                                              console.error('Failed to update attendance:', error)
-                                            }
+  } catch {
+  // silently handle
+  }
                                           }
                                         }
                                         toast({
@@ -3247,9 +3246,9 @@ toast({
                                               createdByUserId: userEmail,
                                             })
                                           })
-                                        } catch (error) {
-                                          console.error('Failed to send attendance confirmation notification:', error)
-                                        }
+  } catch {
+  // silently handle
+  }
                                       }
                                     }
                                     
