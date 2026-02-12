@@ -40,26 +40,13 @@ export async function GET(request: Request) {
       .eq("client_id", targetClientId)
       .order("week_ending", { ascending: false })
 
-    // Get current semester ID for weekly_summaries filter
-    const { data: semesterConfig } = await supabase
-      .from("app_settings")
-      .select("current_semester_id")
-      .single()
-
-    const currentSemesterId = semesterConfig?.current_semester_id
-
-    let summariesQuery = supabase
-      .from("weekly_summaries")
+    // Use weekly_summaries_current view for current semester data only
+    const { data: summaries, error: summariesError } = await supabase
+      .from("weekly_summaries_current")
       .select("*")
       .eq("client_id", targetClientId)
       .order("week_ending", { ascending: false })
       .limit(12)
-
-    if (currentSemesterId) {
-      summariesQuery = summariesQuery.eq("semester_id", currentSemesterId)
-    }
-
-    const { data: summaries, error: summariesError } = await summariesQuery
 
     // Calculate total hours and activity
     const totalHours = (debriefs || []).reduce((sum, d) => sum + (Number(d.hours_worked) || 0), 0)
