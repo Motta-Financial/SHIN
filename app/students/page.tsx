@@ -684,18 +684,24 @@ export default function StudentPortal() {
 
       setLoading(true)
       try {
-        // Fetch all data in parallel - single batch for fastest load
-        const [studentRes, debriefsRes, scheduleRes, attendanceRes, meetingRes, materialsRes, docsRes, classAttendanceRes, studentListRes] = await Promise.all([
-          fetchWithRetry(`/api/supabase/roster?studentId=${currentStudentId}`),
-          fetchWithRetry(`/api/supabase/debriefs?studentId=${currentStudentId}`),
-          fetchWithRetry("/api/semester-schedule"),
-          fetchWithRetry(`/api/supabase/attendance?studentId=${currentStudentId}`),
-          fetchWithRetry(`/api/meeting-requests?studentId=${currentStudentId}`),
-          fetchWithRetry("/api/course-materials"),
-          fetchWithRetry(`/api/documents?studentId=${currentStudentId}`),
-          fetchWithRetry("/api/supabase/attendance"),
-          fetchWithRetry("/api/students/list"),
-        ])
+  // Fetch data in 3 small batches to avoid rate limits
+  const [studentRes, debriefsRes, scheduleRes] = await Promise.all([
+  fetchWithRetry(`/api/supabase/roster?studentId=${currentStudentId}`),
+  fetchWithRetry(`/api/supabase/debriefs?studentId=${currentStudentId}`),
+  fetchWithRetry("/api/semester-schedule"),
+  ])
+
+  const [attendanceRes, meetingRes, materialsRes] = await Promise.all([
+  fetchWithRetry(`/api/supabase/attendance?studentId=${currentStudentId}`),
+  fetchWithRetry(`/api/meeting-requests?studentId=${currentStudentId}`),
+  fetchWithRetry("/api/course-materials"),
+  ])
+
+  const [docsRes, classAttendanceRes, studentListRes] = await Promise.all([
+  fetchWithRetry(`/api/documents?studentId=${currentStudentId}`),
+  fetchWithRetry("/api/supabase/attendance"),
+  fetchWithRetry("/api/students/list"),
+  ])
 
         // If this effect was cancelled (re-triggered), don't update state
         if (cancelled) return

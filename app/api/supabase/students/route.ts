@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service"
 import { NextResponse } from "next/server"
 import { getCached, setCache, LONG_TTL } from "@/lib/api-cache"
+import { supabaseQueryWithRetry } from "@/lib/supabase-retry"
 
 // API endpoint for fetching students from the students table
 export async function GET() {
@@ -15,27 +16,30 @@ export async function GET() {
 
     const supabase = createServiceClient()
 
-    // Using students_current view for current semester data
-    const { data, error } = await supabase
-      .from("students_current")
-      .select(`
-        id,
-        first_name,
-        last_name,
-        email,
-        status,
-        is_team_leader,
-        clinic_id,
-        clinics:clinic_id (
+    // Using students_current view for current semester data with retry
+    const { data, error } = await supabaseQueryWithRetry(
+      () => supabase
+        .from("students_current")
+        .select(`
           id,
-          name
-        )
-      `)
-      .eq("status", "active")
-      .order("last_name", { ascending: true })
+          first_name,
+          last_name,
+          email,
+          status,
+          is_team_leader,
+          clinic_id,
+          clinics:clinic_id (
+            id,
+            name
+          )
+        `)
+        .eq("status", "active")
+        .order("last_name", { ascending: true }),
+      3,
+      "students_current",
+    )
 
     if (error) {
-      console.error("[v0] Supabase students error:", error.message)
       return NextResponse.json({ students: [] })
     }
 

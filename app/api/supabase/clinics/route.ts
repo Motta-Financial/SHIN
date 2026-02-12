@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase/service"
 import { getCachedData, setCachedData } from "@/lib/api-cache"
+import { supabaseQueryWithRetry } from "@/lib/supabase-retry"
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,22 +15,23 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = createServiceClient()
-    const { data: clinics, error } = await supabase.from("clinics").select("id, name").order("name")
+    const { data: clinics, error } = await supabaseQueryWithRetry(
+      () => supabase.from("clinics").select("id, name").order("name"),
+      3,
+      "clinics",
+    )
 
     if (error) {
-      console.error("Error fetching clinics:", error)
       return NextResponse.json({ success: true, clinics: [] })
     }
 
     const response = { success: true, clinics: clinics || [] }
 
-    // Cache for 30 seconds
     setCachedData(cacheKey, response)
     console.log("[v0] Clinics API - Fetched and cached clinics count:", clinics?.length || 0)
 
     return NextResponse.json(response)
-  } catch (error) {
-    console.error("Error in clinics API:", error)
+  } catch {
     return NextResponse.json({ success: false, clinics: [] })
   }
 }

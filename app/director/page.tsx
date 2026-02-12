@@ -554,11 +554,14 @@ export default function DirectorDashboard() {
           }
         }
 
-        // Fetch in parallel with graceful degradation - each call falls back silently
-        const [attendanceData, scheduleJson, announcementsData, meetingsData, studentsListData] = await Promise.all([
+        // Fetch in 2 small batches with graceful degradation
+        const [attendanceData, scheduleJson, announcementsData] = await Promise.all([
           safeFetch<{ records?: any[]; attendance?: any[] }>("/api/supabase/attendance", { records: [], attendance: [] }),
           safeFetch<{ schedules?: any[] }>("/api/semester-schedule", { schedules: [] }),
           safeFetch<{ announcements?: any[] }>("/api/announcements", { announcements: [] }),
+        ])
+
+        const [meetingsData, studentsListData] = await Promise.all([
           safeFetch<{ meetings?: any[] }>("/api/scheduled-client-meetings", { meetings: [] }),
           safeFetch<{ students?: any[] }>("/api/students/list", { students: [] }),
         ])

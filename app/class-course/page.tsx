@@ -527,52 +527,53 @@ const semesterName = "Spring 2026" // Define semester name
     async function fetchAllInitialData() {
       setLoadingAnnouncements(true)
       try {
-        // Batch 1: critical data (5 calls)
-        const [scheduleRes, directorsRes, clientsRes, studentsRes, clinicsRes] = await Promise.all([
+        // Batch 1: core data (3 calls)
+        const [scheduleRes, directorsRes, clientsRes] = await Promise.all([
           fetch(`/api/semester-schedule?semesterId=${semesterId}`),
           fetch("/api/directors"),
           fetch("/api/supabase/clients"),
-          fetch("/api/supabase/students"),
-          fetch("/api/supabase/clinics"),
         ])
 
-        const [scheduleData, directorsData, clientsData, studentsData, clinicsData] = await Promise.all([
+        const [scheduleData, directorsData, clientsData] = await Promise.all([
           safeJson(scheduleRes),
           safeJson(directorsRes),
           safeJson(clientsRes),
-          safeJson(studentsRes),
-          safeJson(clinicsRes),
         ])
 
         setSemesterSchedule(scheduleData.schedules || [])
         setDirectors(directorsData.directors || [])
+
+        // Batch 2: more data (3 calls)
+        const [studentsRes, clinicsRes, teamRes] = await Promise.all([
+          fetch("/api/supabase/students"),
+          fetch("/api/supabase/clinics"),
+          fetch("/api/supabase/v-complete-mapping"),
+        ])
+
+        const [studentsData, clinicsData, teamData] = await Promise.all([
+          safeJson(studentsRes),
+          safeJson(clinicsRes),
+          safeJson(teamRes),
+        ])
+
         setStudents(studentsData.students || [])
         setClinics(clinicsData.clinics || [])
 
-        // Batch 2: secondary data (4 calls) - slight stagger to avoid rate limit
-        const [evalRes, deliverablesRes, teamRes, announcementsRes] = await Promise.all([
+        // Batch 3: remaining data (3 calls)
+        const [evalRes, deliverablesRes, announcementsRes] = await Promise.all([
           fetch("/api/evaluations"),
           fetch("/api/documents?submissionType=all"),
-          fetch("/api/supabase/v-complete-mapping"),
           fetch("/api/announcements"),
         ])
 
-        const [evalData, deliverablesData, teamData, announcementsData] = await Promise.all([
+        const [evalData, deliverablesData, announcementsData] = await Promise.all([
           safeJson(evalRes),
           safeJson(deliverablesRes),
-          safeJson(teamRes),
           safeJson(announcementsRes),
         ])
 
         setEvaluations(evalData.evaluations || [])
         setAnnouncements(announcementsData.announcements || [])
-
-        setSemesterSchedule(scheduleData.schedules || [])
-        setEvaluations(evalData.evaluations || [])
-        setDirectors(directorsData.directors || [])
-        setAnnouncements(announcementsData.announcements || [])
-        setClinics(clinicsData.clinics || [])
-        setStudents(studentsData.students || [])
 
         // Process deliverables
         const deliverablesByClient: Record<string, { sow: boolean; midterm: boolean; final: boolean }> = {}
