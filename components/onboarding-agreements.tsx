@@ -389,8 +389,8 @@ export function OnboardingAgreements({
                           Review & Sign
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
-                        <DialogHeader className="flex-shrink-0">
+                      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <DialogHeader>
                           <DialogTitle className="flex items-center gap-2">
                             <Icon className="h-5 w-5" />
                             {item.agreement.title}
@@ -400,7 +400,7 @@ export function OnboardingAgreements({
                           )}
                         </DialogHeader>
 
-                        <ScrollArea className="flex-1 min-h-0 pr-4">
+                        <div className="overflow-y-auto max-h-[60vh] pr-2" style={{ overscrollBehavior: "contain" }}>
                           <div className="space-y-4">
                             {item.agreement.sections.map((section, idx) => (
                               <Collapsible
@@ -464,9 +464,9 @@ export function OnboardingAgreements({
                               </div>
                             </div>
                           </div>
-                        </ScrollArea>
+                        </div>
 
-                        <DialogFooter className="flex-shrink-0 flex gap-2 border-t pt-4">
+                        <DialogFooter className="flex gap-2 border-t pt-4">
                           <Button variant="outline" onClick={() => setAgreementToSign(null)}>
                             Cancel
                           </Button>
