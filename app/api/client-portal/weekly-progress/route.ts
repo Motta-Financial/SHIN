@@ -32,19 +32,34 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Client name or ID required" }, { status: 400 })
     }
 
-    const { data: summaries, error: summariesError } = await supabase
+    // Use debriefs_current view to only get current semester data (Spring 2026)
+    // Per data architecture rules: ALL reads for the active semester MUST use *_current views
+    const { data: debriefs, error: debriefsError } = await supabase
+      .from("debriefs_current")
+      .select("*")
+      .eq("client_id", targetClientId)
+      .order("week_ending", { ascending: false })
+
+    // Get current semester ID for weekly_summaries filter
+    const { data: semesterConfig } = await supabase
+      .from("app_settings")
+      .select("current_semester_id")
+      .single()
+
+    const currentSemesterId = semesterConfig?.current_semester_id
+
+    let summariesQuery = supabase
       .from("weekly_summaries")
       .select("*")
       .eq("client_id", targetClientId)
       .order("week_ending", { ascending: false })
       .limit(12)
 
-    const { data: debriefs, error: debriefsError } = await supabase
-      .from("debriefs")
-      .select("*")
-      .eq("client_id", targetClientId)
-      .order("week_ending", { ascending: false })
-      .limit(20)
+    if (currentSemesterId) {
+      summariesQuery = summariesQuery.eq("semester_id", currentSemesterId)
+    }
+
+    const { data: summaries, error: summariesError } = await summariesQuery
 
     // Calculate total hours and activity
     const totalHours = (debriefs || []).reduce((sum, d) => sum + (Number(d.hours_worked) || 0), 0)

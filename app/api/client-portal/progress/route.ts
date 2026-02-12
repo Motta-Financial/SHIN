@@ -22,8 +22,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Client ID or name required" }, { status: 400 })
     }
 
+    // Use debriefs_current view for current semester data only
     const { data: debriefs, error } = await supabase
-      .from("debriefs")
+      .from("debriefs_current")
       .select("*")
       .eq("client_id", targetClientId)
       .order("week_ending", { ascending: false })
