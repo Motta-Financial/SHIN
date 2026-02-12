@@ -1249,9 +1249,9 @@ export default function StudentPortal() {
         ])
       }
     } catch (error) {
-      console.error("Error uploading deliverable:", error)
-    } finally {
-      setUploadingDeliverable(null)
+  // silently handle
+  } finally {
+  setUploadingDeliverable(null)
     }
   }
 
@@ -1347,7 +1347,7 @@ export default function StudentPortal() {
       const data = await safeJsonParse(response, { summary: "" })
       setTeamSummary(data.summary)
     } catch (error: any) {
-      console.error("Error generating team summary:", error)
+      // silently handle
       setTeamSummaryError(error.message || "Failed to generate team summary.")
       setTeamSummary("")
     } finally {

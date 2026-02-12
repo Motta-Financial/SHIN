@@ -147,8 +147,7 @@ export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRem
                   ? reviewsData.reviews?.some((review: any) => review.director_name === currentDirectorName)
                   : false
                 return hasReview ? 0 : 1
-              } catch (err) {
-                console.error("Error fetching reviews:", err)
+              } catch {
                 return 1
               }
             })

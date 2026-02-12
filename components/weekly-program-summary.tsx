@@ -242,8 +242,8 @@ export function WeeklyProgramSummary({
           setClientSummaries(summaryMap)
           setGeneratingSummaries(false)
         }
-      } catch (error) {
-        console.error("Error fetching data:", error)
+      } catch {
+        // silently handle
       }
     }
 
