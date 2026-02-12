@@ -177,10 +177,28 @@ export default function ClientPortalPage() {
         await delay(300)
 
         if (role === "student") {
-          // Students only see their assigned client - set directly from auth
+          // Students only see their assigned client
           if (authClientId) {
             setAvailableClients([{ id: authClientId, name: "My Client" }])
             setSelectedClientId(authClientId)
+          } else if (authStudentId) {
+            // Fallback: look up the student's client via the roster API using their student ID
+            const res = await fetchWithRetry(`/api/supabase/roster?studentId=${encodeURIComponent(authStudentId)}`)
+            if (res.ok) {
+              const data = await res.json()
+              const student = data?.roster?.[0] || data?.student
+              const cId = student?.clientId || student?.client_id
+              if (cId) {
+                setAvailableClients([{ id: cId, name: "My Client" }])
+                setSelectedClientId(cId)
+              } else {
+                setLoading(false)
+              }
+            } else {
+              setLoading(false)
+            }
+          } else {
+            setLoading(false)
           }
         } else if (role === "client" && userEmail && !isDemoMode) {
           // Clients see only their own portal
@@ -217,7 +235,7 @@ export default function ClientPortalPage() {
     if (!roleLoading) {
       fetchAvailableClients()
     }
-  }, [role, userEmail, roleLoading, isDemoMode, authClientId, router])
+  }, [role, userEmail, roleLoading, isDemoMode, authClientId, authStudentId, router])
 
   const fetchClientData = useCallback(async () => {
     if (!selectedClientId) return
@@ -356,7 +374,7 @@ export default function ClientPortalPage() {
   const pendingTasks = tasks.filter((t) => t.status === "pending" || t.status === "in_progress")
   const openQuestions = questions.filter((q) => q.status === "open")
 
-  if (availableClients.length === 0 && loading) {
+  if (availableClients.length === 0 && (loading || roleLoading)) {
     return (
       <div className="min-h-screen bg-slate-50">
         <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
@@ -365,7 +383,26 @@ export default function ClientPortalPage() {
         <div className="pl-52 pt-14">
           <div className="p-4">
             <Card className="p-6 text-center">
-              <p className="text-slate-500">Loading clients...</p>
+              <p className="text-slate-500">Loading client data...</p>
+            </Card>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (availableClients.length === 0 && !loading && !roleLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+          <MainNavigation />
+        </aside>
+        <div className="pl-52 pt-14">
+          <div className="p-4">
+            <Card className="p-6 text-center">
+              <Building2 className="h-8 w-8 mx-auto mb-2 text-slate-400" />
+              <p className="text-slate-600 font-medium">No client assigned</p>
+              <p className="text-sm text-slate-400 mt-1">Contact your director to be assigned to a client.</p>
             </Card>
           </div>
         </div>
