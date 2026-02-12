@@ -94,8 +94,7 @@ async function getAvailableWeeks(): Promise<{ weeks: string[]; schedule: WeekSch
       return { weeks: data.weeks, schedule: data.schedule || [], currentWeek: data.currentWeek || null }
     }
     return { weeks: [], schedule: [], currentWeek: null }
-  } catch (error) {
-    console.error("Error fetching available weeks:", error)
+  } catch {
     return { weeks: [], schedule: [], currentWeek: null }
   }
 }
@@ -485,11 +484,10 @@ export default function DirectorDashboard() {
             byWeek,
           })
         }
-      } catch (error) {
-        console.error("Error fetching debriefs data:", error)
+      } catch {
+        // silently handle
       }
     }
-    // Fetch debriefs data when director selection changes or on initial load if relevant
     fetchDebriefsData()
   }, [selectedDirectorId])
 
@@ -529,8 +527,8 @@ export default function DirectorDashboard() {
             assignments: allAssignments,
           })
         }
-      } catch (error) {
-        console.error("Error fetching schedule data:", error)
+      } catch {
+        // silently handle
       }
     }
     fetchScheduleData()
@@ -730,9 +728,8 @@ export default function DirectorDashboard() {
           weeklyProgress,
           notifications: realNotifications.length > 0 ? realNotifications : [{ type: "info", title: "No new notifications", time: "now" }],
         })
-} catch (error) {
-  console.error("Error fetching overview data:", error)
-  if (isAuthError(error)) {
+      } catch (error) {
+        if (isAuthError(error)) {
     router.push("/sign-in")
   }
   }
@@ -753,12 +750,9 @@ export default function DirectorDashboard() {
             if (!text.startsWith("Too Many")) data = JSON.parse(text)
           } catch { /* rate limited */ }
           setClinics(data.clinics || [])
-        } else {
-          console.error("Failed to fetch clinics:", response.status)
         }
-} catch (error) {
-  console.error("Error fetching clinics:", error)
-  if (isAuthError(error)) {
+      } catch (error) {
+        if (isAuthError(error)) {
     router.push("/sign-in")
   }
   }
@@ -788,8 +782,7 @@ export default function DirectorDashboard() {
         } else {
           setAttendancePassword("Not set")
         }
-      } catch (error) {
-        console.error("[v0] Error fetching attendance password:", error)
+      } catch {
         setAttendancePassword("Error loading")
       }
     }

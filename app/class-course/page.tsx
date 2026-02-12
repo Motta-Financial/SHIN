@@ -600,8 +600,8 @@ const semesterName = "Spring 2026" // Define semester name
             }))
         }
         setClients(clientsWithTeams)
-      } catch (error) {
-        console.error("Error fetching initial data:", error)
+      } catch {
+        // silently handle rate limit errors
       } finally {
         setLoadingAnnouncements(false)
       }
@@ -623,8 +623,8 @@ const semesterName = "Spring 2026" // Define semester name
             }
           } catch { /* rate limited */ }
         }
-      } catch (error) {
-        console.error("Error fetching roster:", error)
+      } catch {
+        // silently handle
       }
     }
 
@@ -665,8 +665,7 @@ const semesterName = "Spring 2026" // Define semester name
       } else {
         setUploadError("Failed to load materials")
       }
-    } catch (error) {
-      console.error("Error fetching materials:", error)
+    } catch {
       setUploadError("Error loading materials")
     } finally {
       setLoadingMaterials(false)
@@ -709,8 +708,7 @@ formData.append("category", uploadCategory)
         const errorData = await res.json()
         setUploadError(errorData.error || "Upload failed")
       }
-    } catch (error) {
-      console.error("Error uploading material:", error)
+    } catch {
       setUploadError("Upload failed. Please try again.")
     } finally {
       setUploading(false)
@@ -730,8 +728,8 @@ formData.append("category", uploadCategory)
       if (res.ok) {
         fetchMaterials()
       }
-    } catch (error) {
-      console.error("Error deleting material:", error)
+    } catch {
+      // silently handle
     }
   }
 
