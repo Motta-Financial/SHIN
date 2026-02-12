@@ -178,25 +178,34 @@ export default function ClientPortalPage() {
 
         if (role === "student") {
           // Students only see their assigned client
-          if (authClientId) {
-            setAvailableClients([{ id: authClientId, name: "My Client" }])
-            setSelectedClientId(authClientId)
-          } else if (authStudentId) {
-            // Fallback: look up the student's client via the roster API using their student ID
+          // Try authClientId first, then fall back to roster API
+          let resolvedClientId = authClientId || null
+
+          if (!resolvedClientId && authStudentId) {
+            // Fallback: look up the student's client via the roster API
             const res = await fetchWithRetry(`/api/supabase/roster?studentId=${encodeURIComponent(authStudentId)}`)
             if (res.ok) {
               const data = await res.json()
-              const student = data?.roster?.[0] || data?.student
-              const cId = student?.clientId || student?.client_id
-              if (cId) {
-                setAvailableClients([{ id: cId, name: "My Client" }])
-                setSelectedClientId(cId)
-              } else {
-                setLoading(false)
-              }
-            } else {
-              setLoading(false)
+              const student = data?.students?.[0]
+              resolvedClientId = student?.clientId || null
             }
+          }
+
+          if (!resolvedClientId && userEmail) {
+            // Second fallback: look up via v_complete_mapping
+            const res = await fetchWithRetry(`/api/supabase/v-complete-mapping`)
+            if (res.ok) {
+              const data = await res.json()
+              const mapping = (data?.mappings || []).find(
+                (m: any) => m.student_email?.toLowerCase() === userEmail.toLowerCase()
+              )
+              resolvedClientId = mapping?.client_id || null
+            }
+          }
+
+          if (resolvedClientId) {
+            setAvailableClients([{ id: resolvedClientId, name: "My Client" }])
+            setSelectedClientId(resolvedClientId)
           } else {
             setLoading(false)
           }
