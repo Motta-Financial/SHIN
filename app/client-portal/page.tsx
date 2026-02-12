@@ -168,68 +168,56 @@ export default function ClientPortalPage() {
     }
   }, [role, roleLoading, isAuthenticated, isDemoMode, router])
 
-  const canSwitchClients = isDemoMode || role === "admin" || role === "director" || role === "student"
+  // Only directors/admins can switch between clients; students see only their assigned client
+  const canSwitchClients = isDemoMode || role === "admin" || role === "director"
 
   useEffect(() => {
     const fetchAvailableClients = async () => {
       try {
-        // Add small delay to avoid rate limiting from navigation
         await delay(300)
 
-        if (role === "client" && userEmail && !isDemoMode) {
-          // Fetch client by email
-          const res = await fetchWithRetry(`/api/clients?email=${encodeURIComponent(userEmail)}`)
-          if (!res.ok) {
-            console.error("Error fetching client by email:", res.status)
-            return
+        if (role === "student") {
+          // Students only see their assigned client - set directly from auth
+          if (authClientId) {
+            setAvailableClients([{ id: authClientId, name: "My Client" }])
+            setSelectedClientId(authClientId)
           }
-          const data = await res.json()
-          if (data.clients && data.clients.length > 0) {
-            setAvailableClients([{ id: data.clients[0].id, name: data.clients[0].name }])
-            setSelectedClientId(data.clients[0].id)
+        } else if (role === "client" && userEmail && !isDemoMode) {
+          // Clients see only their own portal
+          const res = await fetchWithRetry(`/api/clients?email=${encodeURIComponent(userEmail)}`)
+          if (res.ok) {
+            const data = await res.json()
+            if (data.clients && data.clients.length > 0) {
+              setAvailableClients([{ id: data.clients[0].id, name: data.clients[0].name }])
+              setSelectedClientId(data.clients[0].id)
+            }
           }
         } else {
-          // Directors/Admins/Students can see all clients
+          // Directors/Admins can see and switch between all clients
           const res = await fetchWithRetry("/api/clients")
-          if (!res.ok) {
-            console.error("Error fetching all clients:", res.status)
-            return
-          }
-          const data = await res.json()
-          if (data.clients && data.clients.length > 0) {
-            const clientList = data.clients.map((c: any) => ({
-              id: c.id,
-              name: c.name,
-            }))
-
-            // For students, pre-select their assigned client if available
-            if (role === "student" && authClientId) {
-              // Move the student's assigned client to the top of the list
-              const assignedIndex = clientList.findIndex((c: any) => c.id === authClientId)
-              if (assignedIndex > 0) {
-                const [assigned] = clientList.splice(assignedIndex, 1)
-                clientList.unshift(assigned)
-              }
-              setAvailableClients(clientList)
-              setSelectedClientId(authClientId)
-            } else {
+          if (res.ok) {
+            const data = await res.json()
+            if (data.clients && data.clients.length > 0) {
+              const clientList = data.clients.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+              }))
               setAvailableClients(clientList)
               setSelectedClientId(data.clients[0].id)
             }
           }
         }
-} catch (error) {
-  console.error("Error fetching clients:", error)
-  if (isAuthError(error)) {
-    router.push("/sign-in")
-  }
-  }
-  }
+      } catch (error) {
+        if (isAuthError(error)) {
+          router.push("/sign-in")
+        }
+      }
+    }
 
     if (!roleLoading) {
       fetchAvailableClients()
     }
-  }, [role, userEmail, roleLoading, isDemoMode, authClientId])
+  }, [role, userEmail, roleLoading, isDemoMode, authClientId, router])
 
   const fetchClientData = useCallback(async () => {
     if (!selectedClientId) return
@@ -395,16 +383,24 @@ export default function ClientPortalPage() {
         <ClientPortalHeader />
 
         <div className="p-4">
+          {role === "student" && client && (
+            <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <Building2 className="h-4 w-4 text-blue-600 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm text-blue-800 font-medium">Client Portal View</p>
+                <p className="text-xs text-blue-600">
+                  Viewing your assigned client: <span className="font-semibold">{client.name}</span>
+                </p>
+              </div>
+            </div>
+          )}
+
           {canSwitchClients && availableClients.length > 1 && (
             <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
               <Eye className="h-4 w-4 text-blue-600 flex-shrink-0" />
               <div className="flex-1">
-                <p className="text-sm text-blue-800 font-medium">
-                  {role === "student" ? "Client Portal View" : "Viewing as Director/Admin"}
-                </p>
-                <p className="text-xs text-blue-600">
-                  {role === "student" ? "View your assigned client's portal" : "Select a client to view their portal"}
-                </p>
+                <p className="text-sm text-blue-800 font-medium">Viewing as Director/Admin</p>
+                <p className="text-xs text-blue-600">Select a client to view their portal</p>
               </div>
               <Select value={selectedClientId} onValueChange={setSelectedClientId}>
                 <SelectTrigger className="w-[240px] bg-white">
