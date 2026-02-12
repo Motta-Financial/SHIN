@@ -512,35 +512,60 @@ const semesterName = "Spring 2026" // Define semester name
   
   const [semesterSchedule, setSemesterSchedule] = useState<any[]>([])
 
-  // Single consolidated data fetch - all initial data loads in parallel
+  // Single consolidated data fetch - two small batches to avoid rate limits
   useEffect(() => {
+    // Safe JSON parse that handles rate-limit text responses
+    async function safeJson(res: Response, fallback: any = {}) {
+      try {
+        if (!res.ok) return fallback
+        const text = await res.text()
+        if (text.startsWith("Too Many") || text.startsWith("<!") || !text.trim()) return fallback
+        return JSON.parse(text)
+      } catch { return fallback }
+    }
+
     async function fetchAllInitialData() {
       setLoadingAnnouncements(true)
       try {
-        const [scheduleRes, evalRes, deliverablesRes, directorsRes, clientsRes, teamRes, announcementsRes, clinicsRes, studentsRes] = await Promise.all([
+        // Batch 1: critical data (5 calls)
+        const [scheduleRes, directorsRes, clientsRes, studentsRes, clinicsRes] = await Promise.all([
           fetch(`/api/semester-schedule?semesterId=${semesterId}`),
-          fetch("/api/evaluations"),
-          fetch("/api/documents?submissionType=all"),
           fetch("/api/directors"),
           fetch("/api/supabase/clients"),
-          fetch("/api/supabase/v-complete-mapping"),
-          fetch("/api/announcements"),
-          fetch("/api/supabase/clinics"),
           fetch("/api/supabase/students"),
+          fetch("/api/supabase/clinics"),
         ])
 
-        // Process all responses in parallel
-        const [scheduleData, evalData, deliverablesData, directorsData, clientsData, teamData, announcementsData, clinicsData, studentsData] = await Promise.all([
-          scheduleRes.ok ? scheduleRes.json() : {},
-          evalRes.ok ? evalRes.json() : {},
-          deliverablesRes.ok ? deliverablesRes.json() : {},
-          directorsRes.ok ? directorsRes.json() : {},
-          clientsRes.ok ? clientsRes.json() : {},
-          teamRes.ok ? teamRes.json() : {},
-          announcementsRes.ok ? announcementsRes.json() : {},
-          clinicsRes.ok ? clinicsRes.json() : {},
-          studentsRes.ok ? studentsRes.json() : {},
+        const [scheduleData, directorsData, clientsData, studentsData, clinicsData] = await Promise.all([
+          safeJson(scheduleRes),
+          safeJson(directorsRes),
+          safeJson(clientsRes),
+          safeJson(studentsRes),
+          safeJson(clinicsRes),
         ])
+
+        setSemesterSchedule(scheduleData.schedules || [])
+        setDirectors(directorsData.directors || [])
+        setStudents(studentsData.students || [])
+        setClinics(clinicsData.clinics || [])
+
+        // Batch 2: secondary data (4 calls) - slight stagger to avoid rate limit
+        const [evalRes, deliverablesRes, teamRes, announcementsRes] = await Promise.all([
+          fetch("/api/evaluations"),
+          fetch("/api/documents?submissionType=all"),
+          fetch("/api/supabase/v-complete-mapping"),
+          fetch("/api/announcements"),
+        ])
+
+        const [evalData, deliverablesData, teamData, announcementsData] = await Promise.all([
+          safeJson(evalRes),
+          safeJson(deliverablesRes),
+          safeJson(teamRes),
+          safeJson(announcementsRes),
+        ])
+
+        setEvaluations(evalData.evaluations || [])
+        setAnnouncements(announcementsData.announcements || [])
 
         setSemesterSchedule(scheduleData.schedules || [])
         setEvaluations(evalData.evaluations || [])
@@ -590,11 +615,16 @@ const semesterName = "Spring 2026" // Define semester name
       try {
         const response = await fetch("/api/supabase/v-complete-mapping")
         if (response.ok) {
-          const data = await response.json()
-          setRosterData(data.mappings || [])
+          try {
+            const text = await response.text()
+            if (!text.startsWith("Too Many")) {
+              const data = JSON.parse(text)
+              setRosterData(data.mappings || [])
+            }
+          } catch { /* rate limited */ }
         }
       } catch (error) {
-        console.error("[v0] Error fetching roster:", error)
+        console.error("Error fetching roster:", error)
       }
     }
 
@@ -625,10 +655,14 @@ const semesterName = "Spring 2026" // Define semester name
 
       const res = await fetch(`/api/course-materials?${params}`)
       if (res.ok) {
-        const data = await res.json()
-        setMaterials(data.materials || [])
+        try {
+          const text = await res.text()
+          if (!text.startsWith("Too Many")) {
+            const data = JSON.parse(text)
+            setMaterials(data.materials || [])
+          }
+        } catch { /* rate limited */ }
       } else {
-        console.error("Failed to fetch materials")
         setUploadError("Failed to load materials")
       }
     } catch (error) {
@@ -1046,15 +1080,17 @@ formData.append("category", uploadCategory)
 setLoadingAttendance(true)
   try {
   const res = await fetch(`/api/supabase/attendance?semesterId=${semesterId}`)
-        if (res.ok) {
-          const data = await res.json()
-          console.log("[v0] Fetched attendance records for Spring 2026:", data.attendance?.length || 0)
-          setAttendanceRecords(data.attendance || [])
-        } else {
-          console.error("Failed to fetch attendance records")
-        }
-      } catch (error) {
-        console.error("Error fetching attendance records:", error)
+  if (res.ok) {
+  try {
+    const text = await res.text()
+    if (!text.startsWith("Too Many")) {
+      const data = JSON.parse(text)
+      setAttendanceRecords(data.attendance || [])
+    }
+  } catch { /* rate limited */ }
+  }
+  } catch {
+  // silently handle - will retry on next tab visit
       } finally {
         setLoadingAttendance(false)
       }

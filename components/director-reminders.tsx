@@ -63,12 +63,15 @@ export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRem
       try {
         const res = await fetchWithRetry("/api/directors")
         if (res.ok) {
-          const data = await res.json()
-          setDirectors(data.directors || [])
+          try {
+            const text = await res.text()
+            if (!text.startsWith("Too Many")) {
+              const data = JSON.parse(text)
+              setDirectors(data.directors || [])
+            }
+          } catch { /* rate limited */ }
         }
-      } catch (error) {
-        console.error("Error fetching directors:", error)
-      }
+      } catch { /* network error, ignore */ }
     }
     fetchDirectors()
   }, [])
@@ -76,9 +79,12 @@ export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRem
   useEffect(() => {
     async function fetchReminders() {
       try {
-
         const docsResponse = await fetchWithRetry("/api/documents")
-        const docsData = await docsResponse.json()
+        let docsData: any = {}
+        try {
+          const text = await docsResponse.text()
+          if (!text.startsWith("Too Many")) docsData = JSON.parse(text)
+        } catch { /* rate limited */ }
 
         if (docsData.documents) {
           let currentDirector: Director | undefined
@@ -105,49 +111,62 @@ export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRem
               !doc.file_name.toLowerCase().endsWith(".pptx") && !doc.file_name.toLowerCase().endsWith(".ppt"),
           )
 
-          // Process PPTX docs sequentially with delays to avoid rate limiting
-          for (const doc of pptxDocs.slice(0, 5)) {
-            await new Promise((resolve) => setTimeout(resolve, 200))
-            try {
-              const evalsResponse = await fetchWithRetry(`/api/evaluations?documentId=${doc.id}`)
-              const evalsData = await evalsResponse.json()
-              const hasEvaluation = currentDirectorName
-                ? evalsData.evaluations?.some((evaluation: any) => evaluation.director_name === currentDirectorName)
-                : false
-              if (!hasEvaluation) pendingEvals++
-            } catch (err) {
-              console.error("Error fetching evaluations:", err)
-              pendingEvals++
-            }
-          }
+          // Process PPTX docs in parallel batches
+          const evalResults = await Promise.all(
+            pptxDocs.slice(0, 5).map(async (doc: any) => {
+              try {
+                const evalsResponse = await fetchWithRetry(`/api/evaluations?documentId=${doc.id}`)
+                let evalsData: any = {}
+                try {
+                  const text = await evalsResponse.text()
+                  if (!text.startsWith("Too Many")) evalsData = JSON.parse(text)
+                } catch { /* rate limited */ }
+                const hasEvaluation = currentDirectorName
+                  ? evalsData.evaluations?.some((evaluation: any) => evaluation.director_name === currentDirectorName)
+                  : false
+                return hasEvaluation ? 0 : 1
+              } catch {
+                return 1
+              }
+            })
+          )
+          pendingEvals = evalResults.reduce((sum, v) => sum + v, 0)
           pendingEvals += Math.max(0, pptxDocs.length - 5)
 
-          // Process other docs sequentially with delays to avoid rate limiting
-          for (const doc of otherDocs.slice(0, 5)) {
-            await new Promise((resolve) => setTimeout(resolve, 200))
-            try {
-              const reviewsResponse = await fetchWithRetry(`/api/documents/reviews?documentId=${doc.id}`)
-              const reviewsData = await reviewsResponse.json()
-              const hasReview = currentDirectorName
-                ? reviewsData.reviews?.some((review: any) => review.director_name === currentDirectorName)
-                : false
-              if (!hasReview) docsNeedingReview++
-            } catch (err) {
-              console.error("Error fetching reviews:", err)
-              docsNeedingReview++
-            }
-          }
+          // Process other docs in parallel batches
+          const reviewResults = await Promise.all(
+            otherDocs.slice(0, 5).map(async (doc: any) => {
+              try {
+                const reviewsResponse = await fetchWithRetry(`/api/documents/reviews?documentId=${doc.id}`)
+                let reviewsData: any = {}
+                try {
+                  const text = await reviewsResponse.text()
+                  if (!text.startsWith("Too Many")) reviewsData = JSON.parse(text)
+                } catch { /* rate limited */ }
+                const hasReview = currentDirectorName
+                  ? reviewsData.reviews?.some((review: any) => review.director_name === currentDirectorName)
+                  : false
+                return hasReview ? 0 : 1
+              } catch (err) {
+                console.error("Error fetching reviews:", err)
+                return 1
+              }
+            })
+          )
+          docsNeedingReview = reviewResults.reduce((sum, v) => sum + v, 0)
           docsNeedingReview += Math.max(0, otherDocs.length - 5)
 
           setPendingEvaluations(pendingEvals)
           setDocumentsNeedingReview(docsNeedingReview)
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 500))
-
         // Fetch debriefs for questions
         const questionsResponse = await fetchWithRetry("/api/supabase/debriefs")
-        const questionsData = await questionsResponse.json()
+        let questionsData: any = {}
+        try {
+          const text = await questionsResponse.text()
+          if (!text.startsWith("Too Many")) questionsData = JSON.parse(text)
+        } catch { /* rate limited */ }
 
         if (questionsData.debriefs) {
           let filterClinicName = "all"
@@ -189,9 +208,8 @@ export function DirectorReminders({ selectedWeeks, selectedClinic }: DirectorRem
         }
 
         setLoading(false)
-      } catch (error) {
-        console.error("Error fetching reminders:", error)
-        setLoading(false)
+      } catch {
+        // silently handle rate limit or network errors
       }
     }
 

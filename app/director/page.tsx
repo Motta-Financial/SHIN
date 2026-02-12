@@ -128,9 +128,17 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
       fetch("/api/supabase/clients"),
     ])
 
-    const allStudentsData = await allStudentsRes.json()
-    const debriefsData = await debriefsRes.json()
-    const clientsData = await clientsRes.json()
+    async function safeJson(res: Response, fallback: any = {}) {
+      try {
+        if (!res.ok) return fallback
+        const text = await res.text()
+        if (text.startsWith("Too Many") || text.startsWith("<!") || !text.trim()) return fallback
+        return JSON.parse(text)
+      } catch { return fallback }
+    }
+    const allStudentsData = await safeJson(allStudentsRes)
+    const debriefsData = await safeJson(debriefsRes)
+    const clientsData = await safeJson(clientsRes)
 
     const students = allStudentsData.students || []
     const totalStudents = students.length
@@ -415,7 +423,11 @@ export default function DirectorDashboard() {
     async function fetchDebriefsData() {
       try {
         const response = await fetch(`/api/supabase/debriefs?semesterId=${semesterId}`)
-        const data = await response.json()
+        let data: any = {}
+        try {
+          const text = await response.text()
+          if (response.ok && !text.startsWith("Too Many")) data = JSON.parse(text)
+        } catch { /* rate limited, use empty */ }
         if (data.debriefs) {
           const debriefs = data.debriefs
 
@@ -485,7 +497,11 @@ export default function DirectorDashboard() {
     async function fetchScheduleData() {
       try {
         const response = await fetch("/api/semester-schedule?semester=Spring%202026")
-        const data = await response.json()
+        let data: any = {}
+        try {
+          const text = await response.text()
+          if (response.ok && !text.startsWith("Too Many")) data = JSON.parse(text)
+        } catch { /* rate limited */ }
         if (data.schedules) {
           const schedules = data.schedules
           const today = new Date()
@@ -731,7 +747,11 @@ export default function DirectorDashboard() {
       try {
         const response = await fetch("/api/clinics")
         if (response.ok) {
-          const data = await response.json()
+          let data: any = {}
+          try {
+            const text = await response.text()
+            if (!text.startsWith("Too Many")) data = JSON.parse(text)
+          } catch { /* rate limited */ }
           setClinics(data.clinics || [])
         } else {
           console.error("Failed to fetch clinics:", response.status)
