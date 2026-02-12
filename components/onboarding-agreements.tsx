@@ -389,7 +389,7 @@ export function OnboardingAgreements({
                           Review & Sign
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+                      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
                         <DialogHeader>
                           <DialogTitle className="flex items-center gap-2">
                             <Icon className="h-5 w-5" />
@@ -400,69 +400,67 @@ export function OnboardingAgreements({
                           )}
                         </DialogHeader>
 
-                        <div className="overflow-y-auto max-h-[60vh] pr-2" style={{ overscrollBehavior: "contain" }}>
-                          <div className="space-y-4">
-                            {item.agreement.sections.map((section, idx) => (
-                              <Collapsible
-                                key={idx}
-                                open={expandedSections[`${item.type}-${idx}`] !== false}
-                                onOpenChange={() => toggleSection(`${item.type}-${idx}`)}
-                              >
-                                <CollapsibleTrigger className="flex items-center gap-2 w-full text-left font-medium hover:text-primary">
-                                  {expandedSections[`${item.type}-${idx}`] === false ? (
-                                    <ChevronRight className="h-4 w-4" />
-                                  ) : (
-                                    <ChevronDown className="h-4 w-4" />
-                                  )}
-                                  {section.title}
-                                </CollapsibleTrigger>
-                                <CollapsibleContent className="mt-2 pl-6">
-                                  <div className="text-sm text-muted-foreground whitespace-pre-line bg-muted/50 p-3 rounded-lg">
-                                    {section.content}
-                                  </div>
-                                </CollapsibleContent>
-                              </Collapsible>
-                            ))}
-
-                            <Separator />
-
-                            <div className="space-y-4 pb-2">
-                              <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                                <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
-                                <div className="text-sm">
-                                  <p className="font-medium text-amber-800">Please read carefully</p>
-                                  <p className="text-amber-700">
-                                    By signing below, you acknowledge that you have read, understood, and agree to the terms
-                                    outlined in this agreement.
-                                  </p>
+                        <div className="space-y-4">
+                          {item.agreement.sections.map((section, idx) => (
+                            <Collapsible
+                              key={idx}
+                              open={expandedSections[`${item.type}-${idx}`] !== false}
+                              onOpenChange={() => toggleSection(`${item.type}-${idx}`)}
+                            >
+                              <CollapsibleTrigger className="flex items-center gap-2 w-full text-left font-medium hover:text-primary">
+                                {expandedSections[`${item.type}-${idx}`] === false ? (
+                                  <ChevronRight className="h-4 w-4" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4" />
+                                )}
+                                {section.title}
+                              </CollapsibleTrigger>
+                              <CollapsibleContent className="mt-2 pl-6">
+                                <div className="text-sm text-muted-foreground whitespace-pre-line bg-muted/50 p-3 rounded-lg">
+                                  {section.content}
                                 </div>
-                              </div>
+                              </CollapsibleContent>
+                            </Collapsible>
+                          ))}
+                        </div>
 
-                              <div className="flex items-center gap-2">
-                                <Checkbox
-                                  id="acknowledge"
-                                  checked={acknowledged}
-                                  onCheckedChange={(checked) => setAcknowledged(checked === true)}
-                                />
-                                <Label htmlFor="acknowledge" className="text-sm">
-                                  I have read and understand all sections of this agreement
-                                </Label>
-                              </div>
+                        <Separator />
 
-                              <div className="space-y-2">
-                                <Label htmlFor="signature">Electronic Signature (Type your full name)</Label>
-                                <Input
-                                  id="signature"
-                                  placeholder={userName}
-                                  value={signature}
-                                  onChange={(e) => setSignature(e.target.value)}
-                                  disabled={!acknowledged}
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                  Signing as: {userName} ({userEmail})
-                                </p>
-                              </div>
+                        <div className="space-y-4">
+                          <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                            <div className="text-sm">
+                              <p className="font-medium text-amber-800">Please read carefully</p>
+                              <p className="text-amber-700">
+                                By signing below, you acknowledge that you have read, understood, and agree to the terms
+                                outlined in this agreement.
+                              </p>
                             </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id="acknowledge"
+                              checked={acknowledged}
+                              onCheckedChange={(checked) => setAcknowledged(checked === true)}
+                            />
+                            <Label htmlFor="acknowledge" className="text-sm">
+                              I have read and understand all sections of this agreement
+                            </Label>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="signature">Electronic Signature (Type your full name)</Label>
+                            <Input
+                              id="signature"
+                              placeholder={userName}
+                              value={signature}
+                              onChange={(e) => setSignature(e.target.value)}
+                              disabled={!acknowledged}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Signing as: {userName} ({userEmail})
+                            </p>
                           </div>
                         </div>
 
