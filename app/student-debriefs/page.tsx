@@ -5,7 +5,13 @@ import { MainNavigation } from "@/components/main-navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { FileText, Calendar, Clock, ChevronDown, ChevronUp, Building2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { FileText, Calendar, Clock, ChevronDown, ChevronUp, Building2, Plus } from "lucide-react"
 import { useUserRole } from "@/hooks/use-user-role"
 import { StudentPortalHeader } from "@/components/student-portal-header"
 
@@ -33,8 +39,24 @@ export default function StudentDebriefsPage() {
     email: string
     clinic: string
     clientName?: string
+    clientId?: string
+    clinicId?: string
     isTeamLeader: boolean
   } | null>(null)
+
+  // Submit dialog state
+  const [showSubmitDialog, setShowSubmitDialog] = useState(false)
+  const [selectedWeek, setSelectedWeek] = useState("")
+  const [debriefForm, setDebriefForm] = useState({ hoursWorked: "", workSummary: "", questions: "" })
+  const [submitting, setSubmitting] = useState(false)
+  const [semesterSchedule, setSemesterSchedule] = useState<Array<{
+    id: string
+    week_number: number
+    week_start: string
+    week_end: string
+    is_break: boolean
+    label?: string
+  }>>([])
 
   const { studentId: authStudentId, isLoading: userLoading, isAuthenticated, role } = useUserRole()
 
@@ -55,6 +77,8 @@ export default function StudentDebriefsPage() {
             email: student.student_email || "",
             clinic: student.student_clinic_name || "Unknown Clinic",
             clientName: student.client_name,
+            clientId: student.client_id || "",
+            clinicId: student.clinic_id || "",
             isTeamLeader: student.student_role === "Team Leader",
           })
         }
@@ -92,6 +116,73 @@ export default function StudentDebriefsPage() {
       fetchDebriefs()
     }
   }, [authStudentId, userLoading])
+
+  // Fetch semester schedule for week selector
+  useEffect(() => {
+    async function fetchSchedule() {
+      try {
+        const res = await fetch("/api/semester-schedule")
+        if (res.ok) {
+          const data = await res.json()
+          if (data.schedule) {
+            setSemesterSchedule(data.schedule.filter((w: any) => !w.is_break))
+          }
+        }
+      } catch {
+        // silently handle
+      }
+    }
+    fetchSchedule()
+  }, [])
+
+  // Submit debrief handler
+  const handleSubmitDebrief = async () => {
+    if (!selectedWeek || !debriefForm.hoursWorked || !debriefForm.workSummary || !studentInfo || !authStudentId) return
+
+    setSubmitting(true)
+    try {
+      const week = semesterSchedule.find((w) => w.id === selectedWeek)
+      if (!week) return
+
+      const response = await fetch("/api/supabase/debriefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: authStudentId,
+          studentName: studentInfo.fullName,
+          studentEmail: studentInfo.email,
+          clientId: studentInfo.clientId || null,
+          clientName: studentInfo.clientName || null,
+          clinic: studentInfo.clinic,
+          clinicId: studentInfo.clinicId || null,
+          weekEnding: week.week_end,
+          weekNumber: week.week_number,
+          hoursWorked: Number.parseFloat(debriefForm.hoursWorked),
+          workSummary: debriefForm.workSummary,
+          questions: debriefForm.questions || null,
+          questionType: debriefForm.questions ? "clinic" : null,
+          status: "pending",
+        }),
+      })
+
+      if (!response.ok) throw new Error("Failed to submit")
+
+      // Refresh debriefs list
+      const debriefRes = await fetch(`/api/supabase/debriefs?studentId=${authStudentId}`)
+      if (debriefRes.ok) {
+        const data = await debriefRes.json()
+        setDebriefs(data.debriefs || [])
+      }
+
+      setShowSubmitDialog(false)
+      setDebriefForm({ hoursWorked: "", workSummary: "", questions: "" })
+      setSelectedWeek("")
+    } catch {
+      // silently handle
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   // Group debriefs by week
   const debriefsbyWeek = useMemo(() => {
@@ -140,9 +231,22 @@ export default function StudentDebriefsPage() {
               <h1 className="text-2xl font-bold text-slate-900">My Debriefs</h1>
               <p className="text-sm text-slate-500">View your submitted weekly debriefs and work summaries</p>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-lg">
-              <Clock className="h-4 w-4 text-blue-600" />
-              <span className="text-sm font-medium text-blue-700">{totalHours.toFixed(1)} total hours logged</span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 rounded-lg">
+                <Clock className="h-4 w-4 text-blue-600" />
+                <span className="text-sm font-medium text-blue-700">{totalHours.toFixed(1)} total hours logged</span>
+              </div>
+              <Button
+                onClick={() => {
+                  setDebriefForm({ hoursWorked: "", workSummary: "", questions: "" })
+                  setSelectedWeek("")
+                  setShowSubmitDialog(true)
+                }}
+                className="bg-[#1B2C5C] hover:bg-[#152347] text-white"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Submit a Debrief
+              </Button>
             </div>
           </div>
 
@@ -164,7 +268,18 @@ export default function StudentDebriefsPage() {
               <CardContent className="py-12 text-center">
                 <FileText className="h-12 w-12 text-slate-300 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-slate-700">No Debriefs Yet</h3>
-                <p className="text-sm text-slate-500 mt-1">Your submitted debriefs will appear here.</p>
+                <p className="text-sm text-slate-500 mt-1 mb-4">Your submitted debriefs will appear here.</p>
+                <Button
+                  onClick={() => {
+                    setDebriefForm({ hoursWorked: "", workSummary: "", questions: "" })
+                    setSelectedWeek("")
+                    setShowSubmitDialog(true)
+                  }}
+                  className="bg-[#1B2C5C] hover:bg-[#152347] text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Submit Your First Debrief
+                </Button>
               </CardContent>
             </Card>
           ) : (
@@ -256,6 +371,93 @@ export default function StudentDebriefsPage() {
           )}
         </main>
       </div>
+
+      {/* Submit Debrief Dialog */}
+      <Dialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-[#1B2C5C]" />
+              Submit a Debrief
+            </DialogTitle>
+            <DialogDescription>
+              Log your hours and summarize your work for the selected week.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Week Selector */}
+            <div className="space-y-2">
+              <Label htmlFor="week-select">Week</Label>
+              <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+                <SelectTrigger id="week-select">
+                  <SelectValue placeholder="Select a week" />
+                </SelectTrigger>
+                <SelectContent>
+                  {semesterSchedule.map((week) => (
+                    <SelectItem key={week.id} value={week.id}>
+                      Week {week.week_number} - ending {new Date(week.week_end + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Hours Worked */}
+            <div className="space-y-2">
+              <Label htmlFor="hours-worked">Hours Worked</Label>
+              <Input
+                id="hours-worked"
+                type="number"
+                min="0"
+                step="0.5"
+                placeholder="e.g. 3.5"
+                value={debriefForm.hoursWorked}
+                onChange={(e) => setDebriefForm((prev) => ({ ...prev, hoursWorked: e.target.value }))}
+              />
+            </div>
+
+            {/* Work Summary */}
+            <div className="space-y-2">
+              <Label htmlFor="work-summary">Work Summary</Label>
+              <Textarea
+                id="work-summary"
+                placeholder="Describe what you worked on this week..."
+                rows={4}
+                value={debriefForm.workSummary}
+                onChange={(e) => setDebriefForm((prev) => ({ ...prev, workSummary: e.target.value }))}
+              />
+            </div>
+
+            {/* Questions (optional) */}
+            <div className="space-y-2">
+              <Label htmlFor="questions">
+                Questions / Notes <span className="text-slate-400 font-normal">(optional)</span>
+              </Label>
+              <Textarea
+                id="questions"
+                placeholder="Any questions or notes for your director..."
+                rows={2}
+                value={debriefForm.questions}
+                onChange={(e) => setDebriefForm((prev) => ({ ...prev, questions: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSubmitDialog(false)} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmitDebrief}
+              disabled={submitting || !selectedWeek || !debriefForm.hoursWorked || !debriefForm.workSummary}
+              className="bg-[#1B2C5C] hover:bg-[#152347] text-white"
+            >
+              {submitting ? "Submitting..." : "Submit Debrief"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
