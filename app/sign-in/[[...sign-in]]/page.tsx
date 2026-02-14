@@ -140,7 +140,7 @@ export default function SignInPage() {
 
         <div className="flex items-center gap-3 my-5 w-full">
           <div className="flex-1 h-px bg-slate-300"></div>
-          <span className="text-slate-500 text-sm">or sign in with email</span>
+          <span className="text-[#1A2332] text-sm font-medium">or</span>
           <div className="flex-1 h-px bg-slate-300"></div>
         </div>
 
@@ -202,7 +202,7 @@ export default function SignInPage() {
                     Signing in...
                   </>
                 ) : (
-                  "Sign In"
+                  "Client Sign In"
                 )}
               </Button>
             </form>
