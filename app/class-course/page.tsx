@@ -1074,26 +1074,32 @@ formData.append("category", uploadCategory)
   // Fetch attendance records
   useEffect(() => {
     const fetchAttendanceRecords = async () => {
-setLoadingAttendance(true)
-  try {
-  const res = await fetch(`/api/supabase/attendance?semesterId=${semesterId}`)
-  if (res.ok) {
-  try {
-    const text = await res.text()
-    if (!text.startsWith("Too Many")) {
-      const data = JSON.parse(text)
-      setAttendanceRecords(data.attendance || [])
-    }
-  } catch { /* rate limited */ }
-  }
-  } catch {
-  // silently handle - will retry on next tab visit
+      setLoadingAttendance(true)
+      try {
+        console.log("[v0] Fetching attendance with semesterId:", semesterId)
+        const res = await fetch(`/api/supabase/attendance?semesterId=${semesterId}`)
+        console.log("[v0] Attendance API response status:", res.status)
+        if (res.ok) {
+          try {
+            const text = await res.text()
+            console.log("[v0] Attendance API response text length:", text.length, "preview:", text.substring(0, 200))
+            if (!text.startsWith("Too Many")) {
+              const data = JSON.parse(text)
+              console.log("[v0] Attendance records count:", data.attendance?.length || 0)
+              setAttendanceRecords(data.attendance || [])
+            }
+          } catch (e) {
+            console.log("[v0] Attendance parse error:", e)
+          }
+        }
+      } catch (e) {
+        console.log("[v0] Attendance fetch error:", e)
       } finally {
         setLoadingAttendance(false)
       }
     }
     fetchAttendanceRecords()
-  }, [])
+  }, [semesterId])
 
   // Fetch week passwords
   useEffect(() => {
