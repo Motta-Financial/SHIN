@@ -1920,10 +1920,15 @@ export default function StudentPortal() {
                                     <Badge variant="outline" className="text-slate-400">
                                       N/A
                                     </Badge>
-                                  ) : hasAttendance ? (
+                                  ) : hasAttendance && weekAttendance?.is_present ? (
                                     <Badge className="bg-purple-100 text-purple-700">
                                       <CheckCircle2 className="h-3 w-3 mr-1" />
                                       Present
+                                    </Badge>
+                                  ) : hasAttendance && !weekAttendance?.is_present ? (
+                                    <Badge variant="outline" className="text-red-500 border-red-300">
+                                      <AlertCircle className="h-3 w-3 mr-1" />
+                                      Absent
                                     </Badge>
                                   ) : isPast ? (
                                     <Badge variant="outline" className="text-red-500 border-red-300">
@@ -2414,14 +2419,20 @@ export default function StudentPortal() {
                                     {!week.is_break && (
                                       <>
                                         {/* Attendance Status/Button */}
-                                        {hasAttendance ? (
-                                          // Already submitted - show status
+                                        {hasAttendance && attendanceRecord?.is_present ? (
+                                          // Present
                                           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-100 border border-green-200">
                                             <CheckCircle2 className="h-4 w-4 text-green-600" />
                                             <span className="text-xs font-medium text-green-700">Present</span>
                                           </div>
+                                        ) : hasAttendance && !attendanceRecord?.is_present ? (
+                                          // Recorded as absent
+                                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-100 border border-red-200">
+                                            <AlertCircle className="h-4 w-4 text-red-500" />
+                                            <span className="text-xs font-medium text-red-700">Absent</span>
+                                          </div>
                                         ) : isPast ? (
-                                          // Past week without attendance - show absent status (locked)
+                                          // Past week with no record at all
                                           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-100 border border-red-200">
                                             <AlertCircle className="h-4 w-4 text-red-500" />
                                             <span className="text-xs font-medium text-red-700">Absent</span>
