@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Eye, EyeOff } from "lucide-react"
+import SuffolkSSOButton from "@/components/SuffolkSSOButton"
 
 export default function SignInPage() {
   const [email, setEmail] = useState("")
@@ -199,6 +200,15 @@ export default function SignInPage() {
             </form>
           </CardContent>
         </Card>
+
+        <div className="mt-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex-1 h-px bg-slate-300"></div>
+            <span className="text-slate-500 text-sm">or</span>
+            <div className="flex-1 h-px bg-slate-300"></div>
+          </div>
+          <SuffolkSSOButton />
+        </div>
       </div>
     </div>
   )
