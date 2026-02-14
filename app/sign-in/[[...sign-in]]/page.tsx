@@ -132,8 +132,16 @@ export default function SignInPage() {
           </div>
         </div>
 
-        <div className="mb-8 text-center">
+        <div className="mb-6 text-center">
           <p className="text-slate-700 text-lg font-medium">Dashboard Sign In</p>
+        </div>
+
+        <SuffolkSSOButton />
+
+        <div className="flex items-center gap-3 my-5 w-full">
+          <div className="flex-1 h-px bg-slate-300"></div>
+          <span className="text-slate-500 text-sm">or sign in with email</span>
+          <div className="flex-1 h-px bg-slate-300"></div>
         </div>
 
         <Card className="shadow-xl border border-slate-200">
@@ -201,14 +209,7 @@ export default function SignInPage() {
           </CardContent>
         </Card>
 
-        <div className="mt-5">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex-1 h-px bg-slate-300"></div>
-            <span className="text-slate-500 text-sm">or</span>
-            <div className="flex-1 h-px bg-slate-300"></div>
-          </div>
-          <SuffolkSSOButton />
-        </div>
+
       </div>
     </div>
   )
