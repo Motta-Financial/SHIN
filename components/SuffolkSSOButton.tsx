@@ -36,8 +36,7 @@ export default function SuffolkSSOButton() {
     <div className="space-y-2">
       <Button
         type="button"
-        variant="outline"
-        className="w-full border-[#1A2332] text-[#1A2332] hover:bg-[#1A2332] hover:text-white"
+        className="w-full bg-[#1A2332] text-white hover:bg-[#152347] border-none"
         onClick={handleSSOLogin}
         disabled={isLoading}
       >
