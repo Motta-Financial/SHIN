@@ -9,11 +9,13 @@ function isValidUUID(str: string): boolean {
 
 export async function GET(request: NextRequest) {
   try {
+    console.log("[v0] Notifications API GET called with params:", request.nextUrl.searchParams.toString())
     // Use service client to bypass RLS for reads
     const serviceSupabase = createServiceClient()
     // Also get the authenticated user so we can scope director queries
     const authSupabase = await createClient()
     const { data: { user } } = await authSupabase.auth.getUser()
+    console.log("[v0] Notifications API - auth user:", user?.id || "NO USER")
 
     const searchParams = request.nextUrl.searchParams
     const clinic = searchParams.get("clinic")
@@ -67,6 +69,7 @@ export async function GET(request: NextRequest) {
     } else if (user?.id) {
       effectiveDirectorId = user.id
     }
+    console.log("[v0] Notifications API - effectiveDirectorId:", effectiveDirectorId, "directorId param:", directorId)
 
     // Build query for director/general views
     const { data: notifications, error } = await queryWithRetry(() => {
@@ -90,12 +93,14 @@ export async function GET(request: NextRequest) {
     })
 
     if (error) {
+      console.log("[v0] Notifications API - query error:", error)
       return NextResponse.json({ notifications: [] })
     }
 
+    console.log("[v0] Notifications API - returning", notifications?.length || 0, "notifications")
     return NextResponse.json({ notifications: notifications || [] })
   } catch (error) {
-    console.error("Error in notifications API:", error)
+    console.error("[v0] Notifications API - caught error:", error)
     return NextResponse.json({ notifications: [] })
   }
 }

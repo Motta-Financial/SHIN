@@ -184,6 +184,7 @@ export function Triage({
 
   // Fetch notifications for directors
   useEffect(() => {
+    console.log("[v0] Triage useEffect - userType:", userType, "selectedClinic:", selectedClinic)
     if (userType === "director") {
       fetchDirectorNotifications()
     } else {
@@ -197,16 +198,19 @@ export function Triage({
       // Add initial delay to avoid collision with other components
       await new Promise((resolve) => setTimeout(resolve, 1000))
 
+      const notifUrl = `/api/notifications?${selectedClinic !== "all" ? `directorId=${selectedClinic}` : ""}`
+      console.log("[v0] Triage - Fetching notifications from:", notifUrl)
+
       // Fetch notifications first with retry
-      const notifResponse = await fetchWithRetry(
-        `/api/notifications?${selectedClinic !== "all" ? `directorId=${selectedClinic}` : ""}`,
-      )
+      const notifResponse = await fetchWithRetry(notifUrl)
+      console.log("[v0] Triage - Notifications response status:", notifResponse.status)
 
       let notifData = { notifications: [] }
       try {
         notifData = await notifResponse.json()
+        console.log("[v0] Triage - Parsed notifications count:", notifData.notifications?.length || 0)
       } catch (e) {
-        console.log("[v0] Triage - Failed to parse notifications response")
+        console.log("[v0] Triage - Failed to parse notifications response", e)
       }
 
       // Add longer delay between requests to avoid rate limiting
