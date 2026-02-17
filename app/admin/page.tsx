@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { useUserRole } from "@/hooks/use-user-role"
+import { useViewAs } from "@/contexts/view-as-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -40,6 +41,7 @@ interface UsersData {
 export default function AdminDashboard() {
   const router = useRouter()
   const { role, isLoading: roleLoading, isAuthenticated } = useUserRole()
+  const { startViewAs } = useViewAs()
   const [usersData, setUsersData] = useState<UsersData | null>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -93,20 +95,16 @@ export default function AdminDashboard() {
   }, [usersData, search, filterRole])
 
   const handleViewAs = (user: UserEntry) => {
-    // Store the impersonation target in sessionStorage
-    sessionStorage.setItem(
-      "shin_view_as",
-      JSON.stringify({
-        userId: user.id,
-        authUserId: user.authUserId,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        clinicId: user.clinicId || null,
-        clientId: user.clientId || null,
-        timestamp: Date.now(),
-      })
-    )
+    // Store impersonation target via context (also persists to sessionStorage)
+    startViewAs({
+      userId: user.id,
+      authUserId: user.authUserId,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      clinicId: user.clinicId || null,
+      clientId: user.clientId || null,
+    })
 
     // Navigate to the appropriate portal
     if (user.role === "director") {
