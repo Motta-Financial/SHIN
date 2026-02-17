@@ -93,6 +93,24 @@ async function fetchUserRoleOnce(
 ): Promise<UserRoleData> {
   const email = user.email || ""
 
+  // Check if user is admin via profiles table
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, full_name, role, is_admin")
+    .eq("id", user.id)
+    .eq("is_admin", true)
+    .maybeSingle()
+
+  if (profile) {
+    return {
+      role: "admin", userId: profile.id, authUserId: user.id,
+      email: user.email || null, fullName: profile.full_name || "SHIN Admin",
+      clinicId: null, clinicName: null,
+      studentId: null, directorId: null, clientId: null,
+      isLoading: false, isAuthenticated: true,
+    }
+  }
+
   const { data: d } = await supabase
     .from("directors_current")
     .select("id, email, role, full_name, clinic_id")

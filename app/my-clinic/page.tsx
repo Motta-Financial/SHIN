@@ -6,12 +6,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MainNavigation } from "@/components/main-navigation"
 import { Building2, Loader2 } from "lucide-react"
 import { useDirectors } from "@/hooks/use-directors"
-import { useUserRole } from "@/hooks/use-user-role"
+import { useEffectiveUser } from "@/hooks/use-effective-user"
 
 export default function MyClinicPage() {
   const [selectedDirectorId, setSelectedDirectorId] = useState<string>("")
   const { directors, isLoading: directorsLoading } = useDirectors()
-  const { userId, email, isLoading: userLoading } = useUserRole()
+  const { userId, email, isLoading: userLoading } = useEffectiveUser()
   const [currentDirectorId, setCurrentDirectorId] = useState<string | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
 

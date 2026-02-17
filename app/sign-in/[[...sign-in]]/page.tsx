@@ -80,7 +80,9 @@ export default function SignInPage() {
         // The sessionStorage cache written above ensures useUserRole resolves
         // synchronously on the target page, so the user sees their dashboard
         // immediately with no loading flash.
-        if (roleData?.role === "director") {
+        if (roleData?.role === "admin") {
+          router.push("/admin")
+        } else if (roleData?.role === "director") {
           router.push("/director")
         } else if (roleData?.role === "student") {
           router.push("/students")

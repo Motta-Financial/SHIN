@@ -5,6 +5,8 @@ import "./globals.css"
 import { GlobalHeader } from "@/components/global-header"
 import { SemesterProvider } from "@/contexts/semester-context"
 import { DemoModeProvider } from "@/contexts/demo-mode-context"
+import { ViewAsProvider } from "@/contexts/view-as-context"
+import { ViewAsBanner } from "@/components/view-as-banner"
 
 const geistSans = Geist({
   subsets: ["latin"],
@@ -39,8 +41,11 @@ export default function RootLayout({
       <body className={`font-sans antialiased`}>
         <DemoModeProvider>
           <SemesterProvider>
-            <GlobalHeader />
-            {children}
+            <ViewAsProvider>
+              <GlobalHeader />
+              <ViewAsBanner />
+              {children}
+            </ViewAsProvider>
           </SemesterProvider>
         </DemoModeProvider>
       </body>

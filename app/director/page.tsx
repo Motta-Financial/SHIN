@@ -36,7 +36,8 @@ import {
 } from "lucide-react"
 import { useDirectors } from "@/hooks/use-directors"
 import { useDemoMode } from "@/contexts/demo-mode-context"
-import { useUserRole, canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
+import { canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
+import { useEffectiveUser } from "@/hooks/use-effective-user"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   getElapsedClassCount,
@@ -244,7 +245,7 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
 export default function DirectorDashboard() {
   const router = useRouter()
   const { isDemoMode } = useDemoMode()
-  const { role, email: userEmail, fullName, isLoading: roleLoading, isAuthenticated } = useUserRole()
+  const { role, email: userEmail, fullName, isLoading: roleLoading, isAuthenticated, isViewingAs } = useEffectiveUser()
   const { directors, isLoading: directorsLoading } = useDirectors()
   const { semesterId } = useCurrentSemester()
   const directorSetRef = useRef(false)

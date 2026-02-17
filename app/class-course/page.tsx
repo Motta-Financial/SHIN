@@ -55,7 +55,7 @@ import { UnifiedWeeklyAgenda } from "@/components/unified-weekly-agenda"
 import { useDemoMode } from "@/contexts/demo-mode-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
-import { useUserRole } from "@/hooks/use-user-role"
+import { useEffectiveUser } from "@/hooks/use-effective-user"
 import { useCurrentSemester } from "@/hooks/use-current-semester"
 import { MeetingsQueue } from "@/components/meetings-queue"
 import { ClinicAgendaTab } from "@/components/clinic-agenda-tab"
@@ -485,7 +485,7 @@ export default function ClassCoursePage() {
   const [postingAnnouncement, setPostingAnnouncement] = useState(false)
   const [clinics, setClinics] = useState<Array<{ id: string; name: string }>>([])
 const { isDemoMode } = useDemoMode()
-  const { fullName: userName, email: userEmail } = useUserRole()
+  const { fullName: userName, email: userEmail } = useEffectiveUser()
   
   // State for student selection in demo mode
   interface Student {

@@ -54,7 +54,8 @@ import { StudentClinicView } from "@/components/student-clinic-view"
 import { Triage } from "@/components/triage"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useDemoStudent, DEMO_STUDENTS } from "@/components/demo-student-selector"
-import { useUserRole, canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
+import { canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
+import { useEffectiveUser } from "@/hooks/use-effective-user"
 
 function isRateLimitText(text: string): boolean {
   if (!text) return false
@@ -489,7 +490,7 @@ interface TeamGrade {
 export default function StudentPortal() {
   const router = useRouter()
   const { isDemoMode } = useDemoMode()
-  const { role, email: userEmail, studentId: authStudentId, isLoading: roleLoading, isAuthenticated } = useUserRole()
+  const { role, email: userEmail, studentId: authStudentId, isLoading: roleLoading, isAuthenticated, isViewingAs } = useEffectiveUser()
   const isAdminOrDirector = role === "admin" || role === "director"
   const allowDemoMode = isDemoMode && isAdminOrDirector
 

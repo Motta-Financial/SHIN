@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { FileText, Calendar, Clock, ChevronDown, ChevronUp, Building2, Plus } from "lucide-react"
-import { useUserRole } from "@/hooks/use-user-role"
+import { useEffectiveUser } from "@/hooks/use-effective-user"
 import { StudentPortalHeader } from "@/components/student-portal-header"
 
 interface Debrief {
@@ -58,7 +58,7 @@ export default function StudentDebriefsPage() {
     label?: string
   }>>([])
 
-  const { studentId: authStudentId, isLoading: userLoading, isAuthenticated, role } = useUserRole()
+  const { studentId: authStudentId, isLoading: userLoading, isAuthenticated, role } = useEffectiveUser()
 
   // Fetch student info using the authenticated student's ID
   useEffect(() => {

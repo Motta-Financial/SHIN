@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Building2, GraduationCap, Briefcase, LogOut, User, LogIn, CalendarDays } from "lucide-react"
+import { Building2, GraduationCap, Briefcase, LogOut, User, LogIn, CalendarDays, Shield } from "lucide-react"
 import { AdvancedSearch } from "@/components/advanced-search"
 import { useUserRole, getAllowedPortals, clearAuthCache } from "@/hooks/use-user-role"
 import { useDemoMode } from "@/contexts/demo-mode-context"
@@ -163,6 +163,14 @@ export function GlobalHeader() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              {role === "admin" && (
+                <DropdownMenuItem asChild>
+                  <Link href="/admin" className="cursor-pointer">
+                    <Shield className="mr-2 h-4 w-4" />
+                    Admin Dashboard
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem asChild>
                 <Link href="/settings/account" className="cursor-pointer">
                   <User className="mr-2 h-4 w-4" />

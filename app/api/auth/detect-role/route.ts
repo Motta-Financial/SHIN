@@ -66,7 +66,34 @@ export async function POST(request: Request) {
       return { data: null, error: "Max retries reached" }
     }
 
-    // Check directors first
+    // Check if the user is an admin first (by looking up auth user + profile)
+    const { data: authUsers } = await queryWithRetry(() =>
+      supabaseAdmin.auth.admin.listUsers()
+    )
+    const authUser = (authUsers as any)?.users?.find(
+      (u: any) => u.email?.toLowerCase() === normalizedEmail
+    )
+    if (authUser) {
+      const { data: profileData } = await queryWithRetry(() =>
+        supabaseAdmin
+          .from("profiles")
+          .select("id, full_name, role, is_admin")
+          .eq("id", authUser.id)
+          .eq("is_admin", true)
+          .maybeSingle()
+      )
+      if (profileData) {
+        return NextResponse.json({
+          role: "admin",
+          userId: profileData.id,
+          userName: profileData.full_name,
+          isAdmin: true,
+          redirect: "/admin",
+        })
+      }
+    }
+
+    // Check directors
     const { data: directorData } = await queryWithRetry(() =>
       supabaseAdmin
         .from("directors_current")

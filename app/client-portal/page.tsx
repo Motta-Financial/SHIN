@@ -25,7 +25,8 @@ import {
 } from "lucide-react"
 import { Triage } from "@/components/triage"
 import { useDemoMode } from "@/contexts/demo-mode-context"
-import { useUserRole, canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
+import { canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
+import { useEffectiveUser } from "@/hooks/use-effective-user"
 
 import { ClientTeamCard } from "@/components/client-portal/client-team-card"
 import { ClientTasksCard } from "@/components/client-portal/client-tasks-card"
@@ -109,7 +110,7 @@ export default function ClientPortalPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { isDemoMode } = useDemoMode()
-  const { role, email: userEmail, isLoading: roleLoading, isAuthenticated, clientId: authClientId, studentId: authStudentId } = useUserRole()
+  const { role, email: userEmail, isLoading: roleLoading, isAuthenticated, clientId: authClientId, studentId: authStudentId, isViewingAs } = useEffectiveUser()
 
   const tabFromUrl = searchParams.get("tab") || "overview"
   const [activeTab, setActiveTab] = useState(tabFromUrl)

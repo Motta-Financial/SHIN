@@ -13,7 +13,7 @@ import { RecentActivity } from "@/components/recent-activity"
 import { useDirectors } from "@/hooks/use-directors"
 import { DemoDirectorSelector, useDemoDirector } from "@/components/demo-director-selector"
 import { useDemoMode } from "@/contexts/demo-mode-context"
-import { useUserRole } from "@/hooks/use-user-role"
+import { useEffectiveUser } from "@/hooks/use-effective-user"
 
 interface WeekSchedule {
   value: string
@@ -67,7 +67,7 @@ export default function DirectorPortalDashboard() {
   const { directors } = useDirectors()
   const { directorId: selectedDirectorId, isReady: directorReady } = useDemoDirector()
   const { isDemoMode } = useDemoMode()
-  const { role, email, fullName, isLoading: roleLoading, isAuthenticated } = useUserRole()
+  const { role, email, fullName, isLoading: roleLoading, isAuthenticated } = useEffectiveUser()
 
   useEffect(() => {
     if (roleLoading) {
