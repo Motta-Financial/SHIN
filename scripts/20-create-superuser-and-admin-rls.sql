@@ -68,13 +68,13 @@ BEGIN
   END IF;
 
   -- Upsert the profile with is_admin = true
-  INSERT INTO profiles (id, email, full_name, role, is_admin, created_at, updated_at)
-  VALUES (v_user_id, 'admin@shin.ai', 'SHIN Admin', 'admin', true, NOW(), NOW())
+  INSERT INTO profiles (id, full_name, name, role, is_admin, created_at)
+  VALUES (v_user_id, 'SHIN Admin', 'SHIN Admin', 'admin', true, NOW())
   ON CONFLICT (id) DO UPDATE SET
     is_admin = true,
     role = 'admin',
     full_name = 'SHIN Admin',
-    updated_at = NOW();
+    name = 'SHIN Admin';
 
 END $$;
 
