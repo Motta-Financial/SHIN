@@ -35,12 +35,10 @@ export default function SignInPage() {
       })
 
       if (authError) {
-        console.log("[v0] Sign-in authError:", authError.message, "status:", authError.status, "code:", authError.code)
         setError(authError.message)
         setIsLoading(false)
         return
       }
-      console.log("[v0] Sign-in success, user:", data.user?.id, "email:", data.user?.email)
 
       if (!data.user || !data.session) {
         setError("Authentication failed. Please try again.")

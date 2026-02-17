@@ -31,21 +31,21 @@ export async function GET() {
     const [directorsRes, studentsRes, clientsRes] = await Promise.all([
       serviceSupabase
         .from("directors_current")
-        .select("id, email, full_name, role, clinic_id, director_id")
+        .select("id, auth_user_id, email, full_name, role, clinic_id")
         .order("full_name"),
       serviceSupabase
         .from("students_current")
-        .select("id, email, full_name, clinic, clinic_id, client_id")
+        .select("id, user_id, email, full_name, clinic, clinic_id, client_id")
         .order("full_name"),
       serviceSupabase
         .from("clients_current")
-        .select("id, name, email")
+        .select("id, auth_user_id, name, email")
         .order("name"),
     ])
 
     const directors = (directorsRes.data || []).map((d) => ({
       id: d.id,
-      authUserId: d.director_id || d.id,
+      authUserId: d.auth_user_id || d.id,
       email: d.email,
       name: d.full_name,
       role: "director" as const,
@@ -55,7 +55,7 @@ export async function GET() {
 
     const students = (studentsRes.data || []).map((s) => ({
       id: s.id,
-      authUserId: s.id,
+      authUserId: s.user_id || s.id,
       email: s.email,
       name: s.full_name,
       role: "student" as const,
@@ -66,7 +66,7 @@ export async function GET() {
 
     const clients = (clientsRes.data || []).map((c) => ({
       id: c.id,
-      authUserId: c.id,
+      authUserId: c.auth_user_id || c.id,
       email: c.email,
       name: c.name,
       role: "client" as const,
