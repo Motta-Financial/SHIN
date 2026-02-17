@@ -798,9 +798,6 @@ export default function StudentPortal() {
   }
   }
   } catch {
-  // parse error, skip
-  }
-  } catch {
   // silently handle
   }
         }
