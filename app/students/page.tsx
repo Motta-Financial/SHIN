@@ -783,21 +783,20 @@ export default function StudentPortal() {
 
         // After line that sets currentStudent, add:
         // Fetch student notifications (announcements from directors)
-        const fetchStudentNotifications = async () => {
-          try {
-            if (!student?.id) return
-            const url = student.clinicId
-              ? `/api/student-notifications?studentId=${student.id}&clinicId=${student.clinicId}`
-              : `/api/student-notifications?studentId=${student.id}`
-            const res = await fetchWithRetry(url)
+  const fetchStudentNotifications = async () => {
+  try {
+  if (!student?.id) return
+  const url = student.clinicId
+  ? `/api/student-notifications?studentId=${student.id}&clinicId=${student.clinicId}`
+  : `/api/student-notifications?studentId=${student.id}`
+  const res = await fetchWithRetry(url)
   if (!res.ok) return
-  const text = await res.text()
-  if (text.startsWith("Too Many R")) return
-            try {
-              const data = JSON.parse(text)
-              if (data.notifications) {
-                setStudentNotifications(data.notifications)
-              }
+  const data = await safeJsonParse(res, { notifications: [] })
+  setStudentNotifications(data.notifications || [])
+  } catch {
+  // silently handle
+  }
+  }
   } catch {
   // parse error, skip
   }
