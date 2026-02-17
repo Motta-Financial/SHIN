@@ -39,18 +39,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ notifications: [] })
     }
 
-    const { data, error } = await query
-
-    if (error) {
-      console.error("Student-notifications API error:", error.message)
+    let data, error
+    try {
+      const result = await query
+      data = result.data
+      error = result.error
+    } catch (queryError) {
+      // Supabase client may throw on rate-limit (non-JSON response)
       return NextResponse.json({ notifications: [] })
     }
 
-    const response = { notifications: data || [] }
+    if (error) {
+      return NextResponse.json({ notifications: [] })
+    }
 
-    return NextResponse.json(response)
+    return NextResponse.json({ notifications: data || [] })
   } catch (error) {
-    console.error("Error in student-notifications GET:", error)
     return NextResponse.json({ notifications: [] })
   }
 }
