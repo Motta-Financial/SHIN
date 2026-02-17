@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useUserRole } from "@/hooks/use-user-role"
 import { useViewAs } from "@/contexts/view-as-context"
+import useSWR from "swr"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -41,40 +42,43 @@ interface UsersData {
 export default function AdminDashboard() {
   const router = useRouter()
   const { role, isLoading: roleLoading, isAuthenticated } = useUserRole()
-  const { startViewAs } = useViewAs()
-  const [usersData, setUsersData] = useState<UsersData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { startViewAs, stopViewAs } = useViewAs()
   const [search, setSearch] = useState("")
   const [filterRole, setFilterRole] = useState<"all" | "director" | "student" | "client">("all")
 
-  // Redirect non-admin users
-  useEffect(() => {
-    if (!roleLoading && isAuthenticated && role !== "admin") {
-      router.push("/")
+  // SWR fetcher with proper error handling
+  const fetcher = async (url: string) => {
+    const res = await fetch(url)
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`Failed to fetch users: ${res.status} ${text}`)
     }
-    if (!roleLoading && !isAuthenticated) {
-      router.push("/sign-in")
-    }
-  }, [role, roleLoading, isAuthenticated, router])
+    return res.json()
+  }
 
-  // Fetch all users
-  useEffect(() => {
-    if (role !== "admin") return
-    const fetchUsers = async () => {
-      try {
-        const res = await fetch("/api/admin/users")
-        if (res.ok) {
-          const data = await res.json()
-          setUsersData(data)
-        }
-      } catch (e) {
-        console.error("Failed to fetch users:", e)
-      } finally {
-        setLoading(false)
-      }
+  // Use SWR so data persists across navigations (cached in memory)
+  const { data: usersData, isLoading: loading } = useSWR<UsersData>(
+    role === "admin" ? "/api/admin/users" : null,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 30000,
     }
-    fetchUsers()
-  }, [role])
+  )
+
+  // Redirect non-admin users
+  if (!roleLoading && isAuthenticated && role !== "admin") {
+    router.push("/")
+  }
+  if (!roleLoading && !isAuthenticated) {
+    router.push("/sign-in")
+  }
+
+  // Clear view-as state when returning to admin
+  useEffect(() => {
+    stopViewAs()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Combined + filtered user list
   const allUsers = useMemo(() => {
