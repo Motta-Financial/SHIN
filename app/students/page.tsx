@@ -797,10 +797,6 @@ export default function StudentPortal() {
   // silently handle
   }
   }
-  } catch {
-  // silently handle
-  }
-        }
         fetchStudentNotifications()
 
         // Fetch agreements using the student email we already have (avoids extra roster call)
