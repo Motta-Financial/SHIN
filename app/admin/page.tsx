@@ -45,6 +45,7 @@ export default function AdminDashboard() {
   const { startViewAs, stopViewAs } = useViewAs()
   const [search, setSearch] = useState("")
   const [filterRole, setFilterRole] = useState<"all" | "director" | "student" | "client">("all")
+  const [displayCount, setDisplayCount] = useState(50)
 
   // SWR fetcher with proper error handling
   const fetcher = async (url: string) => {
@@ -273,7 +274,7 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <div className="divide-y">
-                {allUsers.slice(0, 50).map((user) => (
+                {allUsers.slice(0, displayCount).map((user) => (
                   <div
                     key={`${user.role}-${user.id}`}
                     className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
@@ -303,11 +304,33 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 ))}
-                {allUsers.length > 50 && (
-                  <div className="px-4 py-3 text-center text-sm text-slate-500">
-                    Showing 50 of {allUsers.length} results. Refine your search to see more.
+                {allUsers.length > displayCount ? (
+                  <div className="px-4 py-3 text-center">
+                    <p className="text-xs text-slate-400 mb-2">
+                      Showing {displayCount} of {allUsers.length} users
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDisplayCount(allUsers.length)}
+                    >
+                      Show all {allUsers.length} users
+                    </Button>
                   </div>
-                )}
+                ) : allUsers.length > 50 && displayCount > 50 ? (
+                  <div className="px-4 py-3 text-center">
+                    <p className="text-xs text-slate-400 mb-2">
+                      Showing all {allUsers.length} users
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDisplayCount(50)}
+                    >
+                      Show less
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             )}
           </CardContent>
