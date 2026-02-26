@@ -25,7 +25,8 @@ import {
 } from "lucide-react"
 import { Triage } from "@/components/triage"
 import { useDemoMode } from "@/contexts/demo-mode-context"
-import { useUserRole, canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
+import { canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
+import { useEffectiveUser } from "@/hooks/use-effective-user"
 
 import { ClientTeamCard } from "@/components/client-portal/client-team-card"
 import { ClientTasksCard } from "@/components/client-portal/client-tasks-card"
@@ -109,7 +110,7 @@ export default function ClientPortalPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { isDemoMode } = useDemoMode()
-  const { role, email: userEmail, isLoading: roleLoading, isAuthenticated, clientId: authClientId, studentId: authStudentId } = useUserRole()
+  const { role, email: userEmail, isLoading: roleLoading, isAuthenticated, clientId: authClientId, studentId: authStudentId, isViewingAs } = useEffectiveUser()
 
   const tabFromUrl = searchParams.get("tab") || "overview"
   const [activeTab, setActiveTab] = useState(tabFromUrl)
@@ -168,68 +169,83 @@ export default function ClientPortalPage() {
     }
   }, [role, roleLoading, isAuthenticated, isDemoMode, router])
 
-  const canSwitchClients = isDemoMode || role === "admin" || role === "director" || role === "student"
+  // Only directors/admins can switch between clients; students see only their assigned client
+  const canSwitchClients = isDemoMode || role === "admin" || role === "director"
 
   useEffect(() => {
     const fetchAvailableClients = async () => {
       try {
-        // Add small delay to avoid rate limiting from navigation
         await delay(300)
 
-        if (role === "client" && userEmail && !isDemoMode) {
-          // Fetch client by email
-          const res = await fetchWithRetry(`/api/clients?email=${encodeURIComponent(userEmail)}`)
-          if (!res.ok) {
-            console.error("Error fetching client by email:", res.status)
-            return
+        if (role === "student") {
+          // Students only see their assigned client
+          // Try authClientId first, then fall back to roster API
+          let resolvedClientId = authClientId || null
+
+          if (!resolvedClientId && authStudentId) {
+            // Fallback: look up the student's client via the roster API
+            const res = await fetchWithRetry(`/api/supabase/roster?studentId=${encodeURIComponent(authStudentId)}`)
+            if (res.ok) {
+              const data = await res.json()
+              const student = data?.students?.[0]
+              resolvedClientId = student?.clientId || null
+            }
           }
-          const data = await res.json()
-          if (data.clients && data.clients.length > 0) {
-            setAvailableClients([{ id: data.clients[0].id, name: data.clients[0].name }])
-            setSelectedClientId(data.clients[0].id)
+
+          if (!resolvedClientId && userEmail) {
+            // Second fallback: look up via v_complete_mapping
+            const res = await fetchWithRetry(`/api/supabase/v-complete-mapping`)
+            if (res.ok) {
+              const data = await res.json()
+              const mapping = (data?.mappings || []).find(
+                (m: any) => m.student_email?.toLowerCase() === userEmail.toLowerCase()
+              )
+              resolvedClientId = mapping?.client_id || null
+            }
+          }
+
+          if (resolvedClientId) {
+            setAvailableClients([{ id: resolvedClientId, name: "My Client" }])
+            setSelectedClientId(resolvedClientId)
+          } else {
+            setLoading(false)
+          }
+        } else if (role === "client" && userEmail && !isDemoMode) {
+          // Clients see only their own portal
+          const res = await fetchWithRetry(`/api/clients?email=${encodeURIComponent(userEmail)}`)
+          if (res.ok) {
+            const data = await res.json()
+            if (data.clients && data.clients.length > 0) {
+              setAvailableClients([{ id: data.clients[0].id, name: data.clients[0].name }])
+              setSelectedClientId(data.clients[0].id)
+            }
           }
         } else {
-          // Directors/Admins/Students can see all clients
+          // Directors/Admins can see and switch between all clients
           const res = await fetchWithRetry("/api/clients")
-          if (!res.ok) {
-            console.error("Error fetching all clients:", res.status)
-            return
-          }
-          const data = await res.json()
-          if (data.clients && data.clients.length > 0) {
-            const clientList = data.clients.map((c: any) => ({
-              id: c.id,
-              name: c.name,
-            }))
-
-            // For students, pre-select their assigned client if available
-            if (role === "student" && authClientId) {
-              // Move the student's assigned client to the top of the list
-              const assignedIndex = clientList.findIndex((c: any) => c.id === authClientId)
-              if (assignedIndex > 0) {
-                const [assigned] = clientList.splice(assignedIndex, 1)
-                clientList.unshift(assigned)
-              }
-              setAvailableClients(clientList)
-              setSelectedClientId(authClientId)
-            } else {
+          if (res.ok) {
+            const data = await res.json()
+            if (data.clients && data.clients.length > 0) {
+              const clientList = data.clients.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+              }))
               setAvailableClients(clientList)
               setSelectedClientId(data.clients[0].id)
             }
           }
         }
-} catch (error) {
-  console.error("Error fetching clients:", error)
-  if (isAuthError(error)) {
-    router.push("/sign-in")
-  }
-  }
-  }
+      } catch (error) {
+        if (isAuthError(error)) {
+          router.push("/sign-in")
+        }
+      }
+    }
 
     if (!roleLoading) {
       fetchAvailableClients()
     }
-  }, [role, userEmail, roleLoading, isDemoMode, authClientId])
+  }, [role, userEmail, roleLoading, isDemoMode, authClientId, authStudentId, router])
 
   const fetchClientData = useCallback(async () => {
     if (!selectedClientId) return
@@ -368,7 +384,7 @@ export default function ClientPortalPage() {
   const pendingTasks = tasks.filter((t) => t.status === "pending" || t.status === "in_progress")
   const openQuestions = questions.filter((q) => q.status === "open")
 
-  if (availableClients.length === 0 && loading) {
+  if (availableClients.length === 0 && (loading || roleLoading)) {
     return (
       <div className="min-h-screen bg-slate-50">
         <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
@@ -377,7 +393,26 @@ export default function ClientPortalPage() {
         <div className="pl-52 pt-14">
           <div className="p-4">
             <Card className="p-6 text-center">
-              <p className="text-slate-500">Loading clients...</p>
+              <p className="text-slate-500">Loading client data...</p>
+            </Card>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (availableClients.length === 0 && !loading && !roleLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <aside className="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-52 border-r bg-card z-40">
+          <MainNavigation />
+        </aside>
+        <div className="pl-52 pt-14">
+          <div className="p-4">
+            <Card className="p-6 text-center">
+              <Building2 className="h-8 w-8 mx-auto mb-2 text-slate-400" />
+              <p className="text-slate-600 font-medium">No client assigned</p>
+              <p className="text-sm text-slate-400 mt-1">Contact your director to be assigned to a client.</p>
             </Card>
           </div>
         </div>
@@ -395,16 +430,24 @@ export default function ClientPortalPage() {
         <ClientPortalHeader />
 
         <div className="p-4">
+          {role === "student" && client && (
+            <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <Building2 className="h-4 w-4 text-blue-600 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm text-blue-800 font-medium">Client Portal View</p>
+                <p className="text-xs text-blue-600">
+                  Viewing your assigned client: <span className="font-semibold">{client.name}</span>
+                </p>
+              </div>
+            </div>
+          )}
+
           {canSwitchClients && availableClients.length > 1 && (
             <div className="mb-4 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
               <Eye className="h-4 w-4 text-blue-600 flex-shrink-0" />
               <div className="flex-1">
-                <p className="text-sm text-blue-800 font-medium">
-                  {role === "student" ? "Client Portal View" : "Viewing as Director/Admin"}
-                </p>
-                <p className="text-xs text-blue-600">
-                  {role === "student" ? "View your assigned client's portal" : "Select a client to view their portal"}
-                </p>
+                <p className="text-sm text-blue-800 font-medium">Viewing as Director/Admin</p>
+                <p className="text-xs text-blue-600">Select a client to view their portal</p>
               </div>
               <Select value={selectedClientId} onValueChange={setSelectedClientId}>
                 <SelectTrigger className="w-[240px] bg-white">

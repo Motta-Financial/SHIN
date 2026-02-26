@@ -11,7 +11,6 @@ export async function GET(request: Request) {
     const cacheKey = `agreements:${userEmail || "all"}:${userType || "all"}`
     const cached = getCachedData(cacheKey)
     if (cached) {
-      console.log("[v0] Agreements API - Returning cached response")
       return NextResponse.json(cached)
     }
 
@@ -26,14 +25,20 @@ export async function GET(request: Request) {
       query = query.eq("user_type", userType)
     }
 
-    const { data, error } = await query
+    let data, error
+    try {
+      const result = await query
+      data = result.data
+      error = result.error
+    } catch (queryError) {
+      // Supabase client throws SyntaxError on rate-limit (non-JSON "Too Many Requests" response)
+      return NextResponse.json({ agreements: [], rateLimited: true }, { status: 429 })
+    }
 
     if (error) throw error
 
     const response = { agreements: data }
     setCachedData(cacheKey, response)
-    console.log(`[v0] Agreements API - Fetched and cached agreements count: ${data?.length || 0}`)
-
     return NextResponse.json(response)
   } catch (error: any) {
     const errorMessage = error?.message || String(error)

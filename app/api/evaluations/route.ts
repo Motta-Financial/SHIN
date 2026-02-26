@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { supabaseQueryWithRetry } from "@/lib/supabase-retry"
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,27 +12,21 @@ export async function GET(request: NextRequest) {
     const finalizedOnly = searchParams.get("finalizedOnly") === "true"
     const finalized = searchParams.get("finalized") === "true"
 
-    let query = supabase.from("evaluations").select("*").order("created_at", { ascending: false })
-
-    if (documentId) {
-      query = query.eq("document_id", documentId)
-    } else if (clientId) {
-      query = query.eq("client_id", clientId)
-    }
-
-    if (evaluationType) {
-      query = query.eq("evaluation_type", evaluationType)
-    }
-
-    if (finalizedOnly || finalized) {
-      query = query.not("final_grade", "is", null)
-    }
-
-    const { data, error: queryError } = await query
+    const { data, error: queryError } = await supabaseQueryWithRetry(
+      () => {
+        let query = supabase.from("evaluations").select("*").order("created_at", { ascending: false })
+        if (documentId) query = query.eq("document_id", documentId)
+        else if (clientId) query = query.eq("client_id", clientId)
+        if (evaluationType) query = query.eq("evaluation_type", evaluationType)
+        if (finalizedOnly || finalized) query = query.not("final_grade", "is", null)
+        return query
+      },
+      3,
+      "evaluations",
+    )
 
     if (queryError) {
-      console.error("Error fetching evaluations:", queryError)
-      return NextResponse.json({ error: queryError.message }, { status: 500 })
+      return NextResponse.json({ evaluations: [] })
     }
 
     const evaluationsWithAvg = (data || []).map((e) => {

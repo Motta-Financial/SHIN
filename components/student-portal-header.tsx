@@ -19,6 +19,8 @@ interface StudentPortalHeaderProps {
   } | null
   totalHours: number
   totalAttendance: number
+  totalClassesInSemester?: number
+  currentWeekNumber?: number | null
   onStudentChange?: (studentId: string) => void
 }
 
@@ -27,6 +29,8 @@ export function StudentPortalHeader({
   currentStudent,
   totalHours,
   totalAttendance,
+  totalClassesInSemester = 0,
+  currentWeekNumber,
   onStudentChange,
 }: StudentPortalHeaderProps) {
   const { isDemoMode } = useDemoMode()
@@ -89,7 +93,12 @@ export function StudentPortalHeader({
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 rounded-lg">
             <Calendar className="h-4 w-4 text-purple-600" />
-            <span className="text-sm font-medium text-purple-700">{totalAttendance} classes</span>
+            <span className="text-sm font-medium text-purple-700">
+              {totalAttendance}/{totalClassesInSemester} attended
+              {currentWeekNumber !== null && currentWeekNumber !== undefined && (
+                <span className="text-purple-500 text-xs ml-1">(Wk {currentWeekNumber})</span>
+              )}
+            </span>
           </div>
         </div>
       </div>

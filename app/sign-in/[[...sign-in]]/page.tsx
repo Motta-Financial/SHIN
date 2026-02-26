@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Eye, EyeOff } from "lucide-react"
+import SuffolkSSOButton from "@/components/SuffolkSSOButton"
 
 export default function SignInPage() {
   const [email, setEmail] = useState("")
@@ -79,7 +80,9 @@ export default function SignInPage() {
         // The sessionStorage cache written above ensures useUserRole resolves
         // synchronously on the target page, so the user sees their dashboard
         // immediately with no loading flash.
-        if (roleData?.role === "director") {
+        if (roleData?.role === "admin") {
+          router.push("/admin")
+        } else if (roleData?.role === "director") {
           router.push("/director")
         } else if (roleData?.role === "student") {
           router.push("/students")
@@ -131,8 +134,16 @@ export default function SignInPage() {
           </div>
         </div>
 
-        <div className="mb-8 text-center">
+        <div className="mb-6 text-center">
           <p className="text-slate-700 text-lg font-medium">Dashboard Sign In</p>
+        </div>
+
+        <SuffolkSSOButton />
+
+        <div className="flex items-center gap-3 my-5 w-full">
+          <div className="flex-1 h-px bg-slate-300"></div>
+          <span className="text-[#1A2332] text-sm font-medium">or</span>
+          <div className="flex-1 h-px bg-slate-300"></div>
         </div>
 
         <Card className="shadow-xl border border-slate-200">
@@ -193,12 +204,14 @@ export default function SignInPage() {
                     Signing in...
                   </>
                 ) : (
-                  "Sign In"
+                  "Client / Admin Sign In"
                 )}
               </Button>
             </form>
           </CardContent>
         </Card>
+
+
       </div>
     </div>
   )

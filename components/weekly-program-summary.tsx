@@ -27,24 +27,22 @@ interface WeeklyProgramSummaryProps {
   weekSchedule?: WeekScheduleInfo[]
 }
 
-// Helper functions for sequential fetching with retry
-async function fetchWithRetry(url: string, retries = 3, delay = 2000): Promise<Response> {
+// Helper functions for fetching with retry
+async function fetchWithRetry(url: string, retries = 2, delay = 400): Promise<Response> {
   for (let i = 0; i < retries; i++) {
     const res = await fetch(url)
 
-    // Check if response is "Too Many Requests" by inspecting text
     if (!res.ok && res.status === 429) {
-      await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, i)))
+      await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, i) + Math.random() * 200))
       continue
     }
 
-    // Check for text-based rate limit error
     const contentType = res.headers.get("content-type")
     if (contentType && contentType.includes("text/plain")) {
       const text = await res.clone().text()
       if (text.includes("Too Many R")) {
         if (i < retries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, i)))
+          await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, i) + Math.random() * 200))
           continue
         }
       }
@@ -56,11 +54,10 @@ async function fetchWithRetry(url: string, retries = 3, delay = 2000): Promise<R
 }
 
 async function fetchSequentially(urls: string[]): Promise<Response[]> {
-  // Fetch with small delays between requests to avoid rate limiting
   const results: Response[] = []
   for (const url of urls) {
     if (results.length > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 150))
+      await new Promise((resolve) => setTimeout(resolve, 50))
     }
     const res = await fetchWithRetry(url)
     results.push(res)
@@ -245,8 +242,8 @@ export function WeeklyProgramSummary({
           setClientSummaries(summaryMap)
           setGeneratingSummaries(false)
         }
-      } catch (error) {
-        console.error("Error fetching data:", error)
+      } catch {
+        // silently handle
       }
     }
 

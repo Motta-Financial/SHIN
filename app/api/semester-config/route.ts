@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase/service"
 import { getCached, setCache, LONG_TTL, clearCache } from "@/lib/api-cache"
+import { supabaseQueryWithRetry } from "@/lib/supabase-retry"
 
 export async function GET() {
   try {
@@ -14,27 +15,29 @@ export async function GET() {
 
     const supabase = createServiceClient()
 
-    const { data, error } = await supabase
-      .from("semester_config")
-      .select("id, semester, is_active, start_date, end_date")
-      .order("start_date", { ascending: false })
+    const { data, error } = await supabaseQueryWithRetry(
+      () => supabase
+        .from("semester_config")
+        .select("id, semester, is_active, start_date, end_date")
+        .order("start_date", { ascending: false }),
+      3,
+      "semester_config",
+    )
 
     if (error) {
-      console.error("[v0] Error fetching semester config:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ semesters: [] })
     }
 
     console.log(
       "[v0] Semester config fetched:",
-      data?.map((s) => ({ id: s.id, semester: s.semester, is_active: s.is_active })),
+      data?.map((s: any) => ({ id: s.id, semester: s.semester, is_active: s.is_active })),
     )
 
     const response = { semesters: data || [] }
     setCache(cacheKey, response, LONG_TTL)
     return NextResponse.json(response)
-  } catch (error) {
-    console.error("[v0] Error in semester-config API:", error)
-    return NextResponse.json({ error: "Failed to fetch semester configuration" }, { status: 500 })
+  } catch {
+    return NextResponse.json({ semesters: [] })
   }
 }
 

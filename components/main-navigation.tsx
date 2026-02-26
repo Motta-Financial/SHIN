@@ -16,7 +16,7 @@ import {
   UsersRound,
   Briefcase,
   Building2,
-  HelpCircle,
+
   User,
   MessageSquare,
   MessageSquareText,
@@ -216,15 +216,6 @@ function MainNavigationInner() {
           })}
         </div>
       </nav>
-
-      <div className="border-t border-[#1a2d52] p-4 bg-[#152244]/50">
-        <div className="flex items-center gap-2.5 px-3 py-2.5 text-xs text-[#F5F0E9] bg-[#1a2d52] rounded-xl shadow-sm border border-[#3C507D]">
-          <div className="h-7 w-7 rounded-lg bg-[#3C507D] flex items-center justify-center shadow-inner">
-            <HelpCircle className="h-4 w-4 text-[#E0C58F]" />
-          </div>
-          <span className="font-medium">Need help? Ask SHIN</span>
-        </div>
-      </div>
     </div>
   )
 }

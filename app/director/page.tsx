@@ -36,7 +36,8 @@ import {
 } from "lucide-react"
 import { useDirectors } from "@/hooks/use-directors"
 import { useDemoMode } from "@/contexts/demo-mode-context"
-import { useUserRole, canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
+import { canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
+import { useEffectiveUser } from "@/hooks/use-effective-user"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   getElapsedClassCount,
@@ -57,7 +58,8 @@ interface QuickStats {
   pendingReviews: number
   hoursChange: number
   studentsChange: number
-}
+  studentsList: Array<{ id: string; name: string; clinic: string }>
+  }
 
 interface WeekSchedule {
   value: string
@@ -87,14 +89,13 @@ async function getAvailableWeeks(): Promise<{ weeks: string[]; schedule: WeekSch
     return { weeks: [], schedule: [], currentWeek: null }
   }
   try {
-    const response = await fetchWithRateLimit("/api/supabase/weeks")
+    const response = await fetch("/api/supabase/weeks")
     const data = await response.json()
     if (data.success && data.weeks) {
       return { weeks: data.weeks, schedule: data.schedule || [], currentWeek: data.currentWeek || null }
     }
     return { weeks: [], schedule: [], currentWeek: null }
-  } catch (error) {
-    console.error("Error fetching available weeks:", error)
+  } catch {
     return { weeks: [], schedule: [], currentWeek: null }
   }
 }
@@ -120,16 +121,24 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
       ? `/api/supabase/students?directorId=${selectedDirectorId}`
       : "/api/supabase/students"
 
-    // Fetch in parallel to reduce total request time
+    // Fetch in parallel with plain fetch to avoid semaphore contention
     const [allStudentsRes, debriefsRes, clientsRes] = await Promise.all([
-      fetchWithRateLimit(studentsUrl),
-      fetchWithRateLimit("/api/supabase/debriefs"),
-      fetchWithRateLimit("/api/supabase/clients"),
+      fetch(studentsUrl),
+      fetch("/api/supabase/debriefs"),
+      fetch("/api/supabase/clients"),
     ])
 
-    const allStudentsData = await allStudentsRes.json()
-    const debriefsData = await debriefsRes.json()
-    const clientsData = await clientsRes.json()
+    async function safeJson(res: Response, fallback: any = {}) {
+      try {
+        if (!res.ok) return fallback
+        const text = await res.text()
+        if (text.startsWith("Too Many") || text.startsWith("<!") || !text.trim()) return fallback
+        return JSON.parse(text)
+      } catch { return fallback }
+    }
+    const allStudentsData = await safeJson(allStudentsRes)
+    const debriefsData = await safeJson(debriefsRes)
+    const clientsData = await safeJson(clientsRes)
 
     const students = allStudentsData.students || []
     const totalStudents = students.length
@@ -210,6 +219,11 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
       pendingReviews,
       hoursChange,
       studentsChange,
+      studentsList: students.map((s: any) => ({
+        id: s.id,
+        name: `${s.first_name || ''} ${s.last_name || ''}`.trim() || s.email || 'Student',
+        clinic: s.clinic_name || s.clinic || 'Unknown Clinic',
+      })),
     }
   } catch {
     return {
@@ -223,6 +237,7 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
       pendingReviews: 0,
       hoursChange: 0,
       studentsChange: 0,
+      studentsList: [],
     }
   }
 }
@@ -230,7 +245,7 @@ async function getQuickStats(selectedWeeks: string[], selectedDirectorId: string
 export default function DirectorDashboard() {
   const router = useRouter()
   const { isDemoMode } = useDemoMode()
-  const { role, email: userEmail, fullName, isLoading: roleLoading, isAuthenticated } = useUserRole()
+  const { role, email: userEmail, fullName, isLoading: roleLoading, isAuthenticated, isViewingAs } = useEffectiveUser()
   const { directors, isLoading: directorsLoading } = useDirectors()
   const { semesterId } = useCurrentSemester()
   const directorSetRef = useRef(false)
@@ -295,14 +310,19 @@ export default function DirectorDashboard() {
 
   const [overviewData, setOverviewData] = useState<{
     urgentItems: Array<{ type: string; message: string; count?: number; action?: string }>
-    attendanceSummary: { present: number; absent: number; rate: number }
-    recentClientActivity: Array<{ client: string; activity: string; time: string; type: string }>
-    studentQuestions: Array<{ student: string; question: string; time: string; answered: boolean }>
-    weeklyProgress: { hoursTarget: number; hoursActual: number; debriefsExpected: number; clinicDebriefsExpected: number; debriefsSubmitted: number }
-    notifications: Array<{ type: string; title: string; time: string }> // Added for notifications
+  attendanceSummary: {
+    present: number; absent: number; rate: number;
+    currentWeekNumber?: number | null; totalStudents?: number;
+    presentStudents: Array<{ id: string; name: string; clinic: string }>;
+    absentStudents: Array<{ id: string; name: string; clinic: string }>;
+  }
+  recentClientActivity: Array<{ client: string; activity: string; time: string; type: string }>
+  studentQuestions: Array<{ student: string; question: string; time: string; answered: boolean }>
+  weeklyProgress: { hoursTarget: number; hoursActual: number; debriefsExpected: number; clinicDebriefsExpected: number; debriefsSubmitted: number }
+  notifications: Array<{ type: string; title: string; time: string }>
   }>({
-    urgentItems: [],
-    attendanceSummary: { present: 0, absent: 0, rate: 0 },
+  urgentItems: [],
+  attendanceSummary: { present: 0, absent: 0, rate: 0, currentWeekNumber: null, totalStudents: 0, presentStudents: [], absentStudents: [] },
     recentClientActivity: [],
     studentQuestions: [],
     weeklyProgress: { hoursTarget: 0, hoursActual: 0, debriefsExpected: 0, clinicDebriefsExpected: 0, debriefsSubmitted: 0 },
@@ -402,8 +422,12 @@ export default function DirectorDashboard() {
   useEffect(() => {
     async function fetchDebriefsData() {
       try {
-        const response = await fetchWithRateLimit(`/api/supabase/debriefs?semesterId=${semesterId}`)
-        const data = await response.json()
+        const response = await fetch(`/api/supabase/debriefs?semesterId=${semesterId}`)
+        let data: any = {}
+        try {
+          const text = await response.text()
+          if (response.ok && !text.startsWith("Too Many")) data = JSON.parse(text)
+        } catch { /* rate limited, use empty */ }
         if (data.debriefs) {
           const debriefs = data.debriefs
 
@@ -461,19 +485,22 @@ export default function DirectorDashboard() {
             byWeek,
           })
         }
-      } catch (error) {
-        console.error("Error fetching debriefs data:", error)
+      } catch {
+        // silently handle
       }
     }
-    // Fetch debriefs data when director selection changes or on initial load if relevant
     fetchDebriefsData()
   }, [selectedDirectorId])
 
   useEffect(() => {
     async function fetchScheduleData() {
       try {
-        const response = await fetchWithRateLimit("/api/semester-schedule?semester=Spring%202026")
-        const data = await response.json()
+        const response = await fetch("/api/semester-schedule?semester=Spring%202026")
+        let data: any = {}
+        try {
+          const text = await response.text()
+          if (response.ok && !text.startsWith("Too Many")) data = JSON.parse(text)
+        } catch { /* rate limited */ }
         if (data.schedules) {
           const schedules = data.schedules
           const today = new Date()
@@ -501,8 +528,8 @@ export default function DirectorDashboard() {
             assignments: allAssignments,
           })
         }
-      } catch (error) {
-        console.error("Error fetching schedule data:", error)
+      } catch {
+        // silently handle
       }
     }
     fetchScheduleData()
@@ -528,13 +555,24 @@ export default function DirectorDashboard() {
           }
         }
 
-        // Fetch in parallel with graceful degradation - each call falls back silently
-        const [attendanceData, scheduleJson, announcementsData, meetingsData] = await Promise.all([
+        // Fetch in 2 small batches with graceful degradation
+        const [attendanceData, scheduleJson, announcementsData] = await Promise.all([
           safeFetch<{ records?: any[]; attendance?: any[] }>("/api/supabase/attendance", { records: [], attendance: [] }),
           safeFetch<{ schedules?: any[] }>("/api/semester-schedule", { schedules: [] }),
           safeFetch<{ announcements?: any[] }>("/api/announcements", { announcements: [] }),
-          safeFetch<{ meetings?: any[] }>("/api/scheduled-client-meetings", { meetings: [] }),
         ])
+
+        const [meetingsData, studentsListData] = await Promise.all([
+          safeFetch<{ meetings?: any[] }>("/api/scheduled-client-meetings", { meetings: [] }),
+          safeFetch<{ students?: any[] }>("/api/students/list", { students: [] }),
+        ])
+
+        // Build a local student roster for attendance cross-referencing
+        const studentRoster = (studentsListData.students || []).map((s: any) => ({
+          id: s.id,
+          name: `${s.first_name || ''} ${s.last_name || ''}`.trim() || s.email || 'Student',
+          clinic: s.clinic_name || s.clinic || 'Unknown Clinic',
+        }))
 
         const semesterScheduleData: SemesterWeek[] = scheduleJson.schedules || []
 
@@ -542,22 +580,47 @@ export default function DirectorDashboard() {
         const elapsedClasses = getElapsedClassCount(semesterScheduleData)
         const totalClasses = getTotalClassCount(semesterScheduleData)
 
-        // Filter attendance records by is_present boolean
-        // Note: API returns camelCase fields (studentId, is_present)
-        const presentRecords = allAttendanceRecords.filter((r: any) => r.is_present === true)
-        const absentRecords = allAttendanceRecords.filter((r: any) => r.is_present === false)
+        // Determine the current week number from the semester schedule
+        const now = new Date()
+        const currentWeekEntry = semesterScheduleData.find((w) => {
+          const start = new Date(w.week_start)
+          const end = new Date(w.week_end)
+          return now >= start && now <= end
+        })
+        const currentWeekNum = currentWeekEntry ? Number(currentWeekEntry.week_number) : null
 
-        // Get unique students who were present (API returns studentId in camelCase)
-        const studentsWithAttendance = new Set(presentRecords.map((r: any) => r.studentId || r.student_id))
-        const presentCount = studentsWithAttendance.size // This is the count of unique students present in *any* class
+        // Filter attendance to CURRENT WEEK ONLY for the dashboard summary
+        // This ensures the count matches the attendance portal
+        const currentWeekRecords = currentWeekNum !== null
+          ? allAttendanceRecords.filter((r: any) => Number(r.weekNumber || r.week_number) === currentWeekNum)
+          : allAttendanceRecords
 
-        // Calculate total possible attendances (students × elapsed classes)
-        const totalPossibleAttendances = elapsedClasses * (quickStats.activeStudents || 0)
+        const presentRecords = currentWeekRecords.filter((r: any) => r.is_present === true)
+        const absentRecords = currentWeekRecords.filter((r: any) => r.is_present === false)
 
-        // Calculate rate based on present vs total records
-        const totalRecords = allAttendanceRecords.length
+        // Get unique students who were present THIS WEEK (deduplicate by student ID)
+        const presentStudentMap = new Map<string, { id: string; name: string; clinic: string }>()
+        for (const r of presentRecords) {
+          const sid = r.studentId || r.student_id
+          if (sid && !presentStudentMap.has(sid)) {
+            presentStudentMap.set(sid, {
+              id: sid,
+              name: r.studentName || r.student_name || 'Student',
+              clinic: r.clinic || 'Unknown Clinic',
+            })
+          }
+        }
+        const presentCount = presentStudentMap.size
+        const presentStudentIds = new Set(presentStudentMap.keys())
+
+        // Absent students = all students in the roster who are NOT in the present set
+        const absentStudentsList = studentRoster.filter((s: { id: string }) => !presentStudentIds.has(s.id))
+        const totalStudents = studentRoster.length || quickStats.totalStudents || quickStats.activeStudents || 0
+        const absentCount = absentStudentsList.length
+
+        // Calculate rate based on present students vs total students for current week
         const attendanceRate =
-          totalRecords > 0 ? Math.round((presentRecords.length / totalRecords) * 100) : 0
+          totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0
 
         // Build urgent items
         const urgentItems: Array<{ type: string; message: string; count?: number; action?: string }> = []
@@ -656,42 +719,44 @@ export default function DirectorDashboard() {
         setOverviewData({
           urgentItems,
           attendanceSummary: {
-            present: presentRecords.length,
-            absent: absentRecords.length,
+            present: presentCount,
+            absent: absentCount,
             rate: Math.min(attendanceRate, 100),
+            currentWeekNumber: currentWeekNum,
+            totalStudents,
+            presentStudents: Array.from(presentStudentMap.values()).sort((a, b) => a.clinic.localeCompare(b.clinic) || a.name.localeCompare(b.name)),
+            absentStudents: absentStudentsList.sort((a, b) => a.clinic.localeCompare(b.clinic) || a.name.localeCompare(b.name)),
           },
           recentClientActivity: recentActivity,
           studentQuestions,
           weeklyProgress,
           notifications: realNotifications.length > 0 ? realNotifications : [{ type: "info", title: "No new notifications", time: "now" }],
         })
-} catch (error) {
-  console.error("Error fetching overview data:", error)
-  if (isAuthError(error)) {
+      } catch (error) {
+        if (isAuthError(error)) {
     router.push("/sign-in")
   }
   }
   }
 
-    // Fetch overview data only after initial loading is complete and relevant data (quickStats, debriefsData) is available
-    if (!isLoading && quickStats && debriefsData) {
-      fetchOverviewData()
-    }
-  }, [isLoading, quickStats, debriefsData]) // Depend on isLoading, quickStats, and debriefsData
+    // Fetch overview data immediately - it fetches its own data via safeFetch
+    fetchOverviewData()
+  }, []) // Run once on mount - no waterfall dependency
 
   useEffect(() => {
     async function fetchClinics() {
       try {
-        const response = await fetchWithRateLimit("/api/clinics")
+        const response = await fetch("/api/clinics")
         if (response.ok) {
-          const data = await response.json()
+          let data: any = {}
+          try {
+            const text = await response.text()
+            if (!text.startsWith("Too Many")) data = JSON.parse(text)
+          } catch { /* rate limited */ }
           setClinics(data.clinics || [])
-        } else {
-          console.error("Failed to fetch clinics:", response.status)
         }
-} catch (error) {
-  console.error("Error fetching clinics:", error)
-  if (isAuthError(error)) {
+      } catch (error) {
+        if (isAuthError(error)) {
     router.push("/sign-in")
   }
   }
@@ -721,8 +786,7 @@ export default function DirectorDashboard() {
         } else {
           setAttendancePassword("Not set")
         }
-      } catch (error) {
-        console.error("[v0] Error fetching attendance password:", error)
+      } catch {
         setAttendancePassword("Error loading")
       }
     }
@@ -1103,11 +1167,7 @@ export default function DirectorDashboard() {
                           <div className="flex justify-between">
                             <span className="text-gray-500">Absent</span>
                             <span className="text-red-500 font-medium">
-                              {Math.max(
-                                0,
-                                (quickStats.totalStudents || quickStats.activeStudents || 0) -
-                                  overviewData.attendanceSummary.present,
-                              )}
+                              {overviewData.attendanceSummary.absent}
                             </span>
                           </div>
                         </div>
@@ -1845,9 +1905,9 @@ export default function DirectorDashboard() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-violet-600">
               <Users className="h-5 w-5" />
-              Student Attendance
+              Student Attendance {overviewData.attendanceSummary.currentWeekNumber != null && `- Week ${overviewData.attendanceSummary.currentWeekNumber}`}
             </DialogTitle>
-            <DialogDescription>Attendance breakdown for this week</DialogDescription>
+            <DialogDescription>Attendance breakdown for this week. Students who have not submitted attendance are listed as absent.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {/* Summary Stats */}
@@ -1858,11 +1918,7 @@ export default function DirectorDashboard() {
               </div>
               <div className="p-4 rounded-lg bg-red-50 text-center">
                 <p className="text-3xl font-bold text-red-600">
-                  {Math.max(
-                    0,
-                    (quickStats.totalStudents || quickStats.activeStudents || 0) -
-                      overviewData.attendanceSummary.present,
-                  )}
+                  {overviewData.attendanceSummary.absent}
                 </p>
                 <p className="text-sm text-muted-foreground">Absent</p>
               </div>
@@ -1878,7 +1934,7 @@ export default function DirectorDashboard() {
                 <span className="text-muted-foreground">Attendance Rate</span>
                 <span className="font-medium">
                   {overviewData.attendanceSummary.present} /{" "}
-                  {quickStats.totalStudents || quickStats.activeStudents || 0} students
+                  {overviewData.attendanceSummary.totalStudents || quickStats.totalStudents || 0} students
                 </span>
               </div>
               <Progress value={overviewData.attendanceSummary.rate} className="h-3" />
@@ -1890,33 +1946,27 @@ export default function DirectorDashboard() {
                 <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                 Present Students ({overviewData.attendanceSummary.present})
               </h4>
-              <div className="border rounded-lg divide-y max-h-40 overflow-y-auto">
-                {debriefsData.recentDebriefs.length > 0 ? (
-                  debriefsData.recentDebriefs
-                    .slice(0, overviewData.attendanceSummary.present)
-                    .map((debrief: any, index: number) => (
-                      <div
-                        key={debrief.id || index}
-                        className="flex items-center justify-between p-3 hover:bg-slate-50"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center">
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-sm">
-                              {debrief.studentName || debrief.student_name || "Student"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {debrief.clientName || debrief.client_name || "Client"}
-                            </p>
-                          </div>
+              <div className="border rounded-lg divide-y max-h-64 overflow-y-auto">
+                {overviewData.attendanceSummary.presentStudents.length > 0 ? (
+                  overviewData.attendanceSummary.presentStudents.map((student) => (
+                    <div
+                      key={student.id}
+                      className="flex items-center justify-between p-3 hover:bg-slate-50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                         </div>
-                        <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
-                          Present
-                        </Badge>
+                        <div>
+                          <p className="font-medium text-sm">{student.name}</p>
+                          <p className="text-xs text-muted-foreground">{student.clinic}</p>
+                        </div>
                       </div>
-                    ))
+                      <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+                        Present
+                      </Badge>
+                    </div>
+                  ))
                 ) : (
                   <p className="p-4 text-sm text-muted-foreground text-center">No attendance data available</p>
                 )}
@@ -1924,31 +1974,40 @@ export default function DirectorDashboard() {
             </div>
 
             {/* Absent Students */}
-            {(() => {
-              const total = quickStats.totalStudents || quickStats.activeStudents || 0
-              const absent = Math.max(0, total - overviewData.attendanceSummary.present)
-              if (absent === 0) return null
-              return (
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4 text-red-500" />
-                    Absent Students ({absent})
-                  </h4>
-                  <div className="border border-red-200 rounded-lg bg-red-50/50 p-4">
-                    <p className="text-sm text-red-700">
-                      {absent} student{absent > 1 ? "s were" : " was"} absent this week.
+            {overviewData.attendanceSummary.absentStudents.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-500" />
+                  Absent Students ({overviewData.attendanceSummary.absent})
+                </h4>
+                <div className="border border-red-200 rounded-lg divide-y max-h-64 overflow-y-auto">
+                  <div className="bg-red-50/50 p-3">
+                    <p className="text-xs text-red-600">
+                      Students who did not receive the in-class password are counted as absent.
                     </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-3 text-red-600 border-red-200 hover:bg-red-100 bg-transparent"
-                    >
-                      View Absent Students
-                    </Button>
                   </div>
+                  {overviewData.attendanceSummary.absentStudents.map((student) => (
+                    <div
+                      key={student.id}
+                      className="flex items-center justify-between p-3 hover:bg-red-50/30"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
+                          <AlertCircle className="h-4 w-4 text-red-500" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{student.name}</p>
+                          <p className="text-xs text-muted-foreground">{student.clinic}</p>
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="bg-red-100 text-red-700">
+                        Absent
+                      </Badge>
+                    </div>
+                  ))}
                 </div>
-              )
-            })()}
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

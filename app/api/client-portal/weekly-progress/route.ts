@@ -32,19 +32,21 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Client name or ID required" }, { status: 400 })
     }
 
+    // Use debriefs_current view to only get current semester data (Spring 2026)
+    // Per data architecture rules: ALL reads for the active semester MUST use *_current views
+    const { data: debriefs, error: debriefsError } = await supabase
+      .from("debriefs_current")
+      .select("*")
+      .eq("client_id", targetClientId)
+      .order("week_ending", { ascending: false })
+
+    // Use weekly_summaries_current view for current semester data only
     const { data: summaries, error: summariesError } = await supabase
-      .from("weekly_summaries")
+      .from("weekly_summaries_current")
       .select("*")
       .eq("client_id", targetClientId)
       .order("week_ending", { ascending: false })
       .limit(12)
-
-    const { data: debriefs, error: debriefsError } = await supabase
-      .from("debriefs")
-      .select("*")
-      .eq("client_id", targetClientId)
-      .order("week_ending", { ascending: false })
-      .limit(20)
 
     // Calculate total hours and activity
     const totalHours = (debriefs || []).reduce((sum, d) => sum + (Number(d.hours_worked) || 0), 0)

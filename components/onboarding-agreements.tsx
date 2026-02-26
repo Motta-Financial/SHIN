@@ -389,55 +389,40 @@ export function OnboardingAgreements({
                           Review & Sign
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-3xl max-h-[90vh]">
-                        <DialogHeader>
-                          <DialogTitle className="flex items-center gap-2">
-                            <Icon className="h-5 w-5" />
-                            {item.agreement.title}
-                          </DialogTitle>
-                          {item.agreement.description && (
-                            <DialogDescription>{item.agreement.description}</DialogDescription>
-                          )}
-                        </DialogHeader>
+                      <DialogContent className="max-w-2xl p-0">
+                        <div className="p-6 pb-0">
+                          <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                              <Icon className="h-5 w-5" />
+                              {item.agreement.title}
+                            </DialogTitle>
+                            {item.agreement.description && (
+                              <DialogDescription>{item.agreement.description}</DialogDescription>
+                            )}
+                          </DialogHeader>
+                        </div>
 
-                        <ScrollArea className="h-[50vh] pr-4">
-                          <div className="space-y-4">
-                            {item.agreement.sections.map((section, idx) => (
-                              <Collapsible
-                                key={idx}
-                                open={expandedSections[`${item.type}-${idx}`] !== false}
-                                onOpenChange={() => toggleSection(`${item.type}-${idx}`)}
-                              >
-                                <CollapsibleTrigger className="flex items-center gap-2 w-full text-left font-medium hover:text-primary">
-                                  {expandedSections[`${item.type}-${idx}`] === false ? (
-                                    <ChevronRight className="h-4 w-4" />
-                                  ) : (
-                                    <ChevronDown className="h-4 w-4" />
-                                  )}
-                                  {section.title}
-                                </CollapsibleTrigger>
-                                <CollapsibleContent className="mt-2 pl-6">
-                                  <div className="text-sm text-muted-foreground whitespace-pre-line bg-muted/50 p-3 rounded-lg">
-                                    {section.content}
-                                  </div>
-                                </CollapsibleContent>
-                              </Collapsible>
-                            ))}
-                          </div>
-                        </ScrollArea>
-
-                        <Separator />
-
-                        <div className="space-y-4">
-                          <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                            <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
-                            <div className="text-sm">
-                              <p className="font-medium text-amber-800">Please read carefully</p>
-                              <p className="text-amber-700">
-                                By signing below, you acknowledge that you have read, understood, and agree to the terms
-                                outlined in this agreement.
-                              </p>
+                        {/* Scrollable agreement text box - like a license installer */}
+                        <div
+                          className="mx-6 border rounded-lg bg-slate-50 p-4 text-sm leading-relaxed text-slate-700"
+                          style={{ height: "280px", overflowY: "scroll" }}
+                        >
+                          {item.agreement.sections.map((section, idx) => (
+                            <div key={idx} className="mb-4">
+                              <h4 className="font-semibold text-slate-900 mb-1">{section.title}</h4>
+                              <p className="whitespace-pre-line">{section.content}</p>
                             </div>
+                          ))}
+                        </div>
+                        <p className="mx-6 text-xs text-slate-400 -mt-1">Scroll to read the full agreement</p>
+
+                        {/* Acknowledge + Signature - always visible */}
+                        <div className="px-6 space-y-3">
+                          <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                            <p className="text-sm text-amber-700">
+                              By signing below, you acknowledge that you have read, understood, and agree to the terms above.
+                            </p>
                           </div>
 
                           <div className="flex items-center gap-2">
@@ -451,7 +436,7 @@ export function OnboardingAgreements({
                             </Label>
                           </div>
 
-                          <div className="space-y-2">
+                          <div className="space-y-1.5">
                             <Label htmlFor="signature">Electronic Signature (Type your full name)</Label>
                             <Input
                               id="signature"
@@ -466,7 +451,7 @@ export function OnboardingAgreements({
                           </div>
                         </div>
 
-                        <DialogFooter className="flex gap-2">
+                        <div className="flex justify-end gap-2 px-6 pb-6 pt-2 border-t">
                           <Button variant="outline" onClick={() => setAgreementToSign(null)}>
                             Cancel
                           </Button>
@@ -480,7 +465,7 @@ export function OnboardingAgreements({
                               </>
                             )}
                           </Button>
-                        </DialogFooter>
+                        </div>
                       </DialogContent>
                     </Dialog>
                   )}

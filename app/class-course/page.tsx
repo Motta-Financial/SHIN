@@ -55,7 +55,7 @@ import { UnifiedWeeklyAgenda } from "@/components/unified-weekly-agenda"
 import { useDemoMode } from "@/contexts/demo-mode-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
-import { useUserRole } from "@/hooks/use-user-role"
+import { useEffectiveUser } from "@/hooks/use-effective-user"
 import { useCurrentSemester } from "@/hooks/use-current-semester"
 import { MeetingsQueue } from "@/components/meetings-queue"
 import { ClinicAgendaTab } from "@/components/clinic-agenda-tab"
@@ -485,7 +485,7 @@ export default function ClassCoursePage() {
   const [postingAnnouncement, setPostingAnnouncement] = useState(false)
   const [clinics, setClinics] = useState<Array<{ id: string; name: string }>>([])
 const { isDemoMode } = useDemoMode()
-  const { fullName: userName, email: userEmail } = useUserRole()
+  const { fullName: userName, email: userEmail } = useEffectiveUser()
   
   // State for student selection in demo mode
   interface Student {
@@ -512,174 +512,120 @@ const semesterName = "Spring 2026" // Define semester name
   
   const [semesterSchedule, setSemesterSchedule] = useState<any[]>([])
 
+  // Single consolidated data fetch - two small batches to avoid rate limits
   useEffect(() => {
-const fetchSemesterSchedule = async () => {
-  try {
-  const res = await fetch(`/api/semester-schedule?semesterId=${semesterId}`)
-        if (res.ok) {
-          const data = await res.json()
-          setSemesterSchedule(data.schedules || [])
-        }
-      } catch (error) {
-        console.error("Error fetching semester schedule:", error)
-      }
-    }
-    fetchSemesterSchedule()
-  }, [])
-
-  useEffect(() => {
-    const fetchEvaluations = async () => {
+    // Safe JSON parse that handles rate-limit text responses
+    async function safeJson(res: Response, fallback: any = {}) {
       try {
-        const res = await fetch("/api/evaluations")
-        if (res.ok) {
-          const data = await res.json()
-          setEvaluations(data.evaluations || [])
-        }
-      } catch (error) {
-        console.error("Error fetching evaluations:", error)
-      }
+        if (!res.ok) return fallback
+        const text = await res.text()
+        if (text.startsWith("Too Many") || text.startsWith("<!") || !text.trim()) return fallback
+        return JSON.parse(text)
+      } catch { return fallback }
     }
 
-    const fetchClientDeliverables = async () => {
-      try {
-        const res = await fetch("/api/documents?submissionType=all")
-        if (res.ok) {
-          const data = await res.json()
-          const deliverablesByClient: Record<string, { sow: boolean; midterm: boolean; final: boolean }> = {}
-
-          for (const doc of data.documents || []) {
-            if (!deliverablesByClient[doc.client_id]) {
-              deliverablesByClient[doc.client_id] = { sow: false, midterm: false, final: false }
-            }
-            if (doc.submission_type === "sow") deliverablesByClient[doc.client_id].sow = true
-            if (doc.submission_type === "midterm") deliverablesByClient[doc.client_id].midterm = true
-            if (doc.submission_type === "final") deliverablesByClient[doc.client_id].final = true
-          }
-
-          setClientDeliverables(deliverablesByClient)
-        }
-      } catch (error) {
-        console.error("Error fetching deliverables:", error)
-      }
-    }
-
-    fetchEvaluations()
-    fetchClientDeliverables()
-  }, [])
-
-  // Fetch directors and clients from database
-  useEffect(() => {
-    const fetchDirectors = async () => {
-      try {
-        const res = await fetch("/api/directors")
-        if (res.ok) {
-          const data = await res.json()
-          setDirectors(data.directors || [])
-        }
-      } catch (error) {
-        console.error("Error fetching directors:", error)
-      }
-    }
-    fetchDirectors()
-  }, [])
-
-  useEffect(() => {
-    const fetchClients = async () => {
-      try {
-        const res = await fetch("/api/supabase/clients")
-        if (res.ok) {
-          const data = await res.json()
-          const clientsWithTeams = data.clients || []
-
-          // Fetch team members for each client
-          const teamRes = await fetch("/api/supabase/v-complete-mapping")
-          if (teamRes.ok) {
-            const teamData = await teamRes.json()
-            const mappings = teamData.records || []
-
-            for (const client of clientsWithTeams) {
-              client.teamMembers = mappings
-                .filter((m: any) => m.client_id === client.id)
-                .map((m: any) => ({
-                  student_id: m.student_id,
-                  student_name: m.student_name,
-                  student_role: m.student_role,
-                  student_email: m.student_email,
-                }))
-            }
-          }
-
-          setClients(clientsWithTeams)
-        }
-      } catch (error) {
-        console.error("Error fetching clients:", error)
-      }
-    }
-    fetchClients()
-  }, [])
-
-  useEffect(() => {
-    const fetchAnnouncements = async () => {
+    async function fetchAllInitialData() {
       setLoadingAnnouncements(true)
       try {
-        const res = await fetch("/api/announcements")
-        if (res.ok) {
-          const data = await res.json()
-          setAnnouncements(data.announcements || [])
+        // Batch 1: core data (3 calls)
+        const [scheduleRes, directorsRes, clientsRes] = await Promise.all([
+          fetch(`/api/semester-schedule?semesterId=${semesterId}`),
+          fetch("/api/directors"),
+          fetch("/api/supabase/clients"),
+        ])
+
+        const [scheduleData, directorsData, clientsData] = await Promise.all([
+          safeJson(scheduleRes),
+          safeJson(directorsRes),
+          safeJson(clientsRes),
+        ])
+
+        setSemesterSchedule(scheduleData.schedules || [])
+        setDirectors(directorsData.directors || [])
+
+        // Batch 2: more data (3 calls)
+        const [studentsRes, clinicsRes, teamRes] = await Promise.all([
+          fetch("/api/supabase/students"),
+          fetch("/api/supabase/clinics"),
+          fetch("/api/supabase/v-complete-mapping"),
+        ])
+
+        const [studentsData, clinicsData, teamData] = await Promise.all([
+          safeJson(studentsRes),
+          safeJson(clinicsRes),
+          safeJson(teamRes),
+        ])
+
+        setStudents(studentsData.students || [])
+        setClinics(clinicsData.clinics || [])
+
+        // Batch 3: remaining data (3 calls)
+        const [evalRes, deliverablesRes, announcementsRes] = await Promise.all([
+          fetch("/api/evaluations"),
+          fetch("/api/documents?submissionType=all"),
+          fetch("/api/announcements"),
+        ])
+
+        const [evalData, deliverablesData, announcementsData] = await Promise.all([
+          safeJson(evalRes),
+          safeJson(deliverablesRes),
+          safeJson(announcementsRes),
+        ])
+
+        setEvaluations(evalData.evaluations || [])
+        setAnnouncements(announcementsData.announcements || [])
+
+        // Process deliverables
+        const deliverablesByClient: Record<string, { sow: boolean; midterm: boolean; final: boolean }> = {}
+        for (const doc of deliverablesData.documents || []) {
+          if (!deliverablesByClient[doc.client_id]) {
+            deliverablesByClient[doc.client_id] = { sow: false, midterm: false, final: false }
+          }
+          if (doc.submission_type === "sow") deliverablesByClient[doc.client_id].sow = true
+          if (doc.submission_type === "midterm") deliverablesByClient[doc.client_id].midterm = true
+          if (doc.submission_type === "final") deliverablesByClient[doc.client_id].final = true
         }
-      } catch (error) {
-        console.error("Error fetching announcements:", error)
+        setClientDeliverables(deliverablesByClient)
+
+        // Process clients with team members
+        const clientsWithTeams = clientsData.clients || []
+        const mappings = teamData.records || []
+        for (const client of clientsWithTeams) {
+          client.teamMembers = mappings
+            .filter((m: any) => m.client_id === client.id)
+            .map((m: any) => ({
+              student_id: m.student_id,
+              student_name: m.student_name,
+              student_role: m.student_role,
+              student_email: m.student_email,
+            }))
+        }
+        setClients(clientsWithTeams)
+      } catch {
+        // silently handle rate limit errors
       } finally {
         setLoadingAnnouncements(false)
       }
     }
-
-    const fetchClinics = async () => {
-      try {
-        const res = await fetch("/api/supabase/clinics")
-        if (res.ok) {
-          const data = await res.json()
-          setClinics(data.clinics || [])
-        }
-      } catch (error) {
-        console.error("Error fetching clinics:", error)
-      }
-    }
-
-    fetchAnnouncements()
-    fetchClinics()
-  }, [])
-
-  useEffect(() => {
-    const fetchStudents = async () => {
-      try {
-        const res = await fetch("/api/supabase/students")
-        if (res.ok) {
-          const data = await res.json()
-          setStudents(data.students || [])
-        } else {
-          console.error("Failed to fetch students")
-        }
-      } catch (error) {
-        console.error("Error fetching students:", error)
-      }
-    }
-    fetchStudents()
+    fetchAllInitialData()
   }, [])
 
   // Fetch roster data for absent students
   useEffect(() => {
     const fetchRosterForAbsent = async () => {
       try {
-        console.log("[v0] Fetching roster for absent students calculation...")
         const response = await fetch("/api/supabase/v-complete-mapping")
         if (response.ok) {
-          const data = await response.json()
-          console.log("[v0] Roster data fetched:", data.mappings?.length, "students")
-          setRosterData(data.mappings || [])
+          try {
+            const text = await response.text()
+            if (!text.startsWith("Too Many")) {
+              const data = JSON.parse(text)
+              setRosterData(data.mappings || [])
+            }
+          } catch { /* rate limited */ }
         }
-      } catch (error) {
-        console.error("[v0] Error fetching roster:", error)
+      } catch {
+        // silently handle
       }
     }
 
@@ -710,14 +656,17 @@ const fetchSemesterSchedule = async () => {
 
       const res = await fetch(`/api/course-materials?${params}`)
       if (res.ok) {
-        const data = await res.json()
-        setMaterials(data.materials || [])
+        try {
+          const text = await res.text()
+          if (!text.startsWith("Too Many")) {
+            const data = JSON.parse(text)
+            setMaterials(data.materials || [])
+          }
+        } catch { /* rate limited */ }
       } else {
-        console.error("Failed to fetch materials")
         setUploadError("Failed to load materials")
       }
-    } catch (error) {
-      console.error("Error fetching materials:", error)
+    } catch {
       setUploadError("Error loading materials")
     } finally {
       setLoadingMaterials(false)
@@ -760,8 +709,7 @@ formData.append("category", uploadCategory)
         const errorData = await res.json()
         setUploadError(errorData.error || "Upload failed")
       }
-    } catch (error) {
-      console.error("Error uploading material:", error)
+    } catch {
       setUploadError("Upload failed. Please try again.")
     } finally {
       setUploading(false)
@@ -781,8 +729,8 @@ formData.append("category", uploadCategory)
       if (res.ok) {
         fetchMaterials()
       }
-    } catch (error) {
-      console.error("Error deleting material:", error)
+    } catch {
+      // silently handle
     }
   }
 
@@ -806,10 +754,10 @@ formData.append("category", uploadCategory)
         setPublishSuccess(true)
         setTimeout(() => setPublishSuccess(false), 3000)
       }
-    } catch (error) {
-      console.error("Error publishing agenda:", error)
-    } finally {
-      setPublishing(false)
+  } catch {
+  // silently handle
+  } finally {
+  setPublishing(false)
     }
   }
 
@@ -997,9 +945,8 @@ formData.append("category", uploadCategory)
         const error = await res.json()
         alert(error.error || "Failed to post announcement")
       }
-    } catch (error) {
-      console.error("Error posting announcement:", error)
-      alert("Failed to post announcement")
+  } catch {
+  alert("Failed to post announcement")
     } finally {
       setPostingAnnouncement(false)
     }
@@ -1050,9 +997,8 @@ formData.append("category", uploadCategory)
         const error = await res.json()
         alert(error.error || "Failed to submit evaluation")
       }
-    } catch (error) {
-      console.error("Error submitting evaluation:", error)
-      alert("Failed to submit evaluation")
+  } catch {
+  alert("Failed to submit evaluation")
     } finally {
       setSubmittingEvaluation(false)
     }
@@ -1128,24 +1074,32 @@ formData.append("category", uploadCategory)
   // Fetch attendance records
   useEffect(() => {
     const fetchAttendanceRecords = async () => {
-setLoadingAttendance(true)
-  try {
-  const res = await fetch(`/api/supabase/attendance?semesterId=${semesterId}`)
+      setLoadingAttendance(true)
+      try {
+        console.log("[v0] Fetching attendance with semesterId:", semesterId)
+        const res = await fetch(`/api/supabase/attendance?semesterId=${semesterId}`)
+        console.log("[v0] Attendance API response status:", res.status)
         if (res.ok) {
-          const data = await res.json()
-          console.log("[v0] Fetched attendance records for Spring 2026:", data.attendance?.length || 0)
-          setAttendanceRecords(data.attendance || [])
-        } else {
-          console.error("Failed to fetch attendance records")
+          try {
+            const text = await res.text()
+            console.log("[v0] Attendance API response text length:", text.length, "preview:", text.substring(0, 200))
+            if (!text.startsWith("Too Many")) {
+              const data = JSON.parse(text)
+              console.log("[v0] Attendance records count:", data.attendance?.length || 0)
+              setAttendanceRecords(data.attendance || [])
+            }
+          } catch (e) {
+            console.log("[v0] Attendance parse error:", e)
+          }
         }
-      } catch (error) {
-        console.error("Error fetching attendance records:", error)
+      } catch (e) {
+        console.log("[v0] Attendance fetch error:", e)
       } finally {
         setLoadingAttendance(false)
       }
     }
     fetchAttendanceRecords()
-  }, [])
+  }, [semesterId])
 
   // Fetch week passwords
   useEffect(() => {
@@ -1153,13 +1107,16 @@ setLoadingAttendance(true)
       try {
         const res = await fetch("/api/attendance-password")
         if (res.ok) {
-          const data = await res.json()
-          setWeekPasswords(data.passwords || [])
-        } else {
-          console.error("Failed to fetch week passwords")
+          try {
+            const text = await res.text()
+            if (!text.startsWith("Too Many")) {
+              const data = JSON.parse(text)
+              setWeekPasswords(data.passwords || [])
+            }
+          } catch { /* rate limited */ }
         }
-      } catch (error) {
-        console.error("Error fetching week passwords:", error)
+      } catch {
+        // silently handle
       }
     }
     fetchWeekPasswords()
@@ -1252,9 +1209,8 @@ toast({
           variant: "destructive",
         })
       }
-    } catch (error) {
-      console.error("Error setting password:", error)
-      alert("Failed to set password. Please try again.")
+  } catch {
+  alert("Failed to set password. Please try again.")
     } finally {
       setSavingPassword(false)
     }
@@ -1311,9 +1267,8 @@ toast({
           variant: "destructive",
         })
       }
-    } catch (error) {
-      console.error("Error updating password:", error)
-      alert("Failed to update password. Please try again.")
+  } catch {
+  alert("Failed to update password. Please try again.")
     } finally {
       setSavingPassword(false)
     }
@@ -3046,18 +3001,20 @@ toast({
                         <TabsList className="flex flex-wrap gap-1 h-auto p-1 bg-slate-100/80 mb-4">
                           {Array.from(new Set(attendanceRecords.map((r) => r.weekNumber)))
                             .sort((a, b) => a - b)
-                            .map((weekNum) => {
-                              const weekRecords = attendanceRecords.filter((r) => r.weekNumber === weekNum)
-                              const isCurrentWeek = weekNum === Math.max(...attendanceRecords.map((r) => r.weekNumber))
-                              return (
-                                <TabsTrigger
+  .map((weekNum) => {
+                  const weekRecords = attendanceRecords.filter((r) => r.weekNumber === weekNum)
+                  // Deduplicate: count unique students with is_present=true
+                  const uniquePresent = new Set(weekRecords.filter((r) => r.is_present).map((r) => r.studentId)).size
+                  const isCurrentWeek = weekNum === Math.max(...attendanceRecords.map((r) => r.weekNumber))
+                  return (
+                    <TabsTrigger
                                   key={weekNum}
                                   value={`week-${weekNum}`}
                                   className={`gap-2 ${isCurrentWeek ? "bg-blue-50 border-blue-200" : ""}`}
                                 >
-                                  <Calendar className="h-4 w-4" />
-                                  Week {weekNum}
-                                  <span className="ml-1 text-xs text-slate-500">({weekRecords.length})</span>
+                  <Calendar className="h-4 w-4" />
+                  Week {weekNum}
+                  <span className="ml-1 text-xs text-slate-500">({uniquePresent})</span>
                                 </TabsTrigger>
                               )
                             })}
@@ -3075,10 +3032,37 @@ toast({
 
                             if (weekAttendance.length === 0) return null
 
-                            // Split attendance records by is_present boolean
-                            const presentRecords = weekAttendance.filter((r) => r.is_present)
-                            const absentRecords = weekAttendance.filter((r) => !r.is_present)
+                            // Split attendance records by is_present boolean, deduplicate by studentId
+                            const presentMap = new Map<string, typeof weekAttendance[0]>()
+                            const absentMap = new Map<string, typeof weekAttendance[0]>()
+                            for (const r of weekAttendance) {
+                              if (r.is_present) {
+                                if (!presentMap.has(r.studentId)) presentMap.set(r.studentId, r)
+                              } else {
+                                if (!absentMap.has(r.studentId)) absentMap.set(r.studentId, r)
+                              }
+                            }
+                            const presentRecords = Array.from(presentMap.values())
+                            const explicitAbsentRecords = Array.from(absentMap.values())
                             const classDate = weekAttendance[0]?.classDate || ''
+
+                            // Find students who have NO attendance record for this week (didn't submit = absent)
+                            const studentIdsWithRecords = new Set([...presentMap.keys(), ...absentMap.keys()])
+                            const missingStudents = students.filter((s) => !studentIdsWithRecords.has(s.id))
+
+                            // Combine explicit absent records + missing students into one absent list
+                            const allAbsentStudents = [
+                              ...explicitAbsentRecords.map((r) => ({
+                                student_id: r.studentId,
+                                student_name: r.studentName,
+                                student_clinic_name: r.clinic,
+                              })),
+                              ...missingStudents.map((s) => ({
+                                student_id: s.id,
+                                student_name: `${s.first_name} ${s.last_name}`,
+                                student_clinic_name: s.clinic_name,
+                              })),
+                            ]
 
                             // Group present students by clinic
                             const byClinic = presentRecords.reduce(
@@ -3091,16 +3075,12 @@ toast({
                               {} as Record<string, typeof weekAttendance>,
                             )
 
-                            // Group absent students by clinic (from attendance records with notes="Absent")
-                            const absentByClinic = absentRecords.reduce(
-                              (acc, record) => {
-                                const clinic = record.clinic || "Unknown Clinic"
+                            // Group absent students by clinic
+                            const absentByClinic = allAbsentStudents.reduce(
+                              (acc, student) => {
+                                const clinic = student.student_clinic_name || "Unknown Clinic"
                                 if (!acc[clinic]) acc[clinic] = []
-                                acc[clinic].push({
-                                  student_id: record.studentId,
-                                  student_name: record.studentName,
-                                  student_clinic_name: record.clinic,
-                                })
+                                acc[clinic].push(student)
                                 return acc
                               },
                               {} as Record<string, Array<{ student_id: string; student_name: string; student_clinic_name: string }>>,
@@ -3128,8 +3108,12 @@ toast({
                                       <p className="text-xs text-slate-500">Present</p>
                                     </div>
                                     <div>
-                                      <p className="text-2xl font-bold text-red-600">{absentRecords.length}</p>
+                                      <p className="text-2xl font-bold text-red-600">{allAbsentStudents.length}</p>
                                       <p className="text-xs text-slate-500">Absent</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-2xl font-bold text-slate-600">{students.length}</p>
+                                      <p className="text-xs text-slate-500">Total</p>
                                     </div>
                                   </div>
                                 </div>
@@ -3229,9 +3213,9 @@ toast({
                                                   r.id === record.id ? { ...r, is_present: change.newStatus } : r
                                                 ))
                                               }
-                                            } catch (error) {
-                                              console.error('Failed to update attendance:', error)
-                                            }
+  } catch {
+  // silently handle
+  }
                                           }
                                         }
                                         toast({
@@ -3269,9 +3253,9 @@ toast({
                                               createdByUserId: userEmail,
                                             })
                                           })
-                                        } catch (error) {
-                                          console.error('Failed to send attendance confirmation notification:', error)
-                                        }
+  } catch {
+  // silently handle
+  }
                                       }
                                     }
                                     

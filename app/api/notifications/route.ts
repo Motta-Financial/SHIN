@@ -9,7 +9,12 @@ function isValidUUID(str: string): boolean {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    // Use service client to bypass RLS for reads
+    const serviceSupabase = createServiceClient()
+    // Also get the authenticated user so we can scope director queries
+    const authSupabase = await createClient()
+    const { data: { user } } = await authSupabase.auth.getUser()
+
     const searchParams = request.nextUrl.searchParams
     const clinic = searchParams.get("clinic")
     const directorId = searchParams.get("directorId")
@@ -44,7 +49,7 @@ export async function GET(request: NextRequest) {
     // If fetching for a specific student
     if (studentId && isValidUUID(studentId)) {
       const { data: notifications, error } = await queryWithRetry(() =>
-        supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50)
+        serviceSupabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50)
           .eq("student_id", studentId).eq("target_audience", "students")
       )
       if (error) {
@@ -53,17 +58,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ notifications: notifications || [] })
     }
 
+    // Resolve the effective director ID:
+    // 1. Use explicit directorId param if it's a valid UUID
+    // 2. Otherwise fall back to the authenticated user's ID
+    let effectiveDirectorId: string | null = null
+    if (directorId && directorId !== "all" && directorId !== "undefined" && isValidUUID(directorId)) {
+      effectiveDirectorId = directorId
+    } else if (user?.id) {
+      effectiveDirectorId = user.id
+    }
     // Build query for director/general views
     const { data: notifications, error } = await queryWithRetry(() => {
-      let q = supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50)
+      let q = serviceSupabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(50)
 
-      if (directorId || (!studentId && !targetAudience)) {
+      if (!studentId || targetAudience === "directors") {
         q = q.eq("target_audience", "directors")
       }
 
-      if (directorId && directorId !== "all" && directorId !== "undefined" && isValidUUID(directorId)) {
-        q = q.eq("director_id", directorId)
-      } else if (clinic && clinic !== "all" && clinic !== "undefined" && isValidUUID(clinic)) {
+      // Always scope to the director's own notifications
+      if (effectiveDirectorId) {
+        q = q.eq("director_id", effectiveDirectorId)
+      }
+
+      // Additionally filter by clinic if provided
+      if (clinic && clinic !== "all" && clinic !== "undefined" && isValidUUID(clinic)) {
         q = q.eq("clinic_id", clinic)
       }
 

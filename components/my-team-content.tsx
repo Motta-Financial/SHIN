@@ -31,6 +31,8 @@ import {
   FileUp,
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { createClient } from "@/lib/supabase/client"
 import { useUserRole, canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
@@ -1243,6 +1245,48 @@ export function MyTeamContent() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Add Note Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Team Note</DialogTitle>
+            <DialogDescription>Share information with your team members</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">Category</label>
+              <Select value={noteCategory} onValueChange={setNoteCategory}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="general">General</SelectItem>
+                  <SelectItem value="meeting">Meeting Notes</SelectItem>
+                  <SelectItem value="deliverable">Deliverable</SelectItem>
+                  <SelectItem value="question">Question</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1 block">Note</label>
+              <Textarea
+                placeholder="Type your note here..."
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+                className="min-h-[120px]"
+              />
+            </div>
+            <Button
+              onClick={handleAddNote}
+              disabled={!newNote.trim() || submitting}
+              className="w-full"
+            >
+              {submitting ? "Adding..." : "Add Note"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

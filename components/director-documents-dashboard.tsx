@@ -59,14 +59,16 @@ export function DirectorDocumentsDashboard() {
     try {
       const { fetchWithRateLimit } = await import("@/lib/fetch-with-rate-limit")
       const response = await fetchWithRateLimit("/api/documents", undefined, 4)
-      if (!response.ok) {
-        console.error("Error fetching documents: HTTP", response.status)
-        return
-      }
-      const data = await response.json()
-      setDocuments(data.documents || [])
-    } catch (error) {
-      console.error("Error fetching documents:", error)
+      if (!response.ok) return
+      try {
+        const text = await response.text()
+        if (!text.startsWith("Too Many")) {
+          const data = JSON.parse(text)
+          setDocuments(data.documents || [])
+        }
+      } catch { /* rate limited */ }
+    } catch {
+      // silently handle network errors
     } finally {
       setLoading(false)
     }
@@ -105,11 +107,16 @@ export function DirectorDocumentsDashboard() {
       const { fetchWithRateLimit } = await import("@/lib/fetch-with-rate-limit")
       const response = await fetchWithRateLimit(`/api/documents/reviews?documentId=${doc.id}`)
       if (response.ok) {
-        const data = await response.json()
-        setReviews(data.reviews || [])
+        try {
+          const text = await response.text()
+          if (!text.startsWith("Too Many")) {
+            const data = JSON.parse(text)
+            setReviews(data.reviews || [])
+          }
+        } catch { /* rate limited */ }
       }
-    } catch (error) {
-      console.error("Error fetching reviews:", error)
+    } catch {
+      // silently handle
     }
   }
 
@@ -138,8 +145,7 @@ export function DirectorDocumentsDashboard() {
         setReviewGrade("")
         alert("Review submitted successfully!")
       }
-    } catch (error) {
-      console.error("Error submitting review:", error)
+    } catch {
       alert("Failed to submit review")
     } finally {
       setSubmittingReview(false)

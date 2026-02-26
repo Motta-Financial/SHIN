@@ -48,16 +48,24 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
     async function fetchNotifications() {
       setLoading(true)
       try {
-        // Fetch notifications and meeting requests sequentially to avoid rate limiting
-        const notifResponse = await fetchWithRetry(
-          `/api/notifications?${selectedClinic !== "all" ? `directorId=${selectedClinic}` : ""}`,
-        )
-        const notifData = await notifResponse.json()
-        
-        await new Promise((resolve) => setTimeout(resolve, 200))
-        
-        const meetingResponse = await fetchWithRetry("/api/meeting-requests?status=pending")
-        const meetingData = await meetingResponse.json()
+        // Safe JSON parser for rate-limited responses
+        async function safeJson(res: Response, fallback: any = {}) {
+          try {
+            if (!res.ok) return fallback
+            const text = await res.text()
+            if (text.startsWith("Too Many") || text.startsWith("<!") || !text.trim()) return fallback
+            return JSON.parse(text)
+          } catch { return fallback }
+        }
+
+        // Fetch notifications and meeting requests in parallel
+        const [notifResponse, meetingResponse] = await Promise.all([
+          fetchWithRetry(`/api/notifications?${selectedClinic !== "all" ? `directorId=${selectedClinic}` : ""}`),
+          fetch("/api/meeting-requests?status=pending"),
+        ])
+
+        const notifData = await safeJson(notifResponse, { notifications: [] })
+        const meetingData = await safeJson(meetingResponse, { requests: [] })
 
         // Map meeting requests to notification format
         const meetingNotifs: Notification[] = (meetingData.requests || []).map((m: any) => ({
@@ -80,8 +88,7 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
 
         setNotifications(allNotifications)
         setMeetingRequests(meetingData.requests || [])
-      } catch (error) {
-        console.error("Error fetching notifications:", error)
+      } catch {
         setNotifications([])
       } finally {
         setLoading(false)
@@ -124,8 +131,8 @@ export function DirectorNotifications({ selectedClinic, compact = false }: Direc
       setNotifications((prev) => prev.filter((n) => n.id !== `meeting-${requestId}`))
       setMeetingRequests((prev) => prev.filter((m) => m.id !== requestId))
       setSelectedNotification(null)
-    } catch (error) {
-      console.error("Error updating meeting request:", error)
+    } catch {
+      // silently handle
     }
   }
 

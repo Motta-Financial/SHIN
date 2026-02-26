@@ -1,8 +1,8 @@
 // Global rate-limited fetch utility to prevent Supabase rate limiting
 // Uses a semaphore pattern with exponential backoff
 
-const MAX_CONCURRENT = 6
-const MIN_INTERVAL_MS = 50
+const MAX_CONCURRENT = 10
+const MIN_INTERVAL_MS = 25
 let active = 0
 let lastTime = 0
 const queue: Array<() => void> = []
@@ -74,10 +74,7 @@ export async function fetchWithRateLimit(
         const response = await fetch(url, options)
 
         if (await isRateLimited(response)) {
-          const wait = Math.pow(2, attempt) * 1000 + Math.random() * 500
-          console.log(
-            `[v0] Rate limited on ${url}, retrying in ${Math.round(wait)}ms (${attempt + 1}/${maxRetries})`,
-          )
+          const wait = Math.pow(2, attempt) * 300 + Math.random() * 200
           await new Promise((r) => setTimeout(r, wait))
           continue
         }
@@ -85,7 +82,7 @@ export async function fetchWithRateLimit(
         return response
       } catch (error) {
         if (attempt === maxRetries - 1) throw error
-        await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 500))
+        await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 200))
       }
     }
 
@@ -95,16 +92,12 @@ export async function fetchWithRateLimit(
   }
 }
 
-// Fetch multiple URLs sequentially with rate limiting
+// Fetch multiple URLs in parallel with rate limiting
 export async function fetchAllWithRateLimit(
   urls: string[],
   options?: RequestInit,
 ): Promise<Response[]> {
-  const results: Response[] = []
-  for (const url of urls) {
-    results.push(await fetchWithRateLimit(url, options))
-  }
-  return results
+  return Promise.all(urls.map((url) => fetchWithRateLimit(url, options)))
 }
 
 export const fetchWithRetry = fetchWithRateLimit

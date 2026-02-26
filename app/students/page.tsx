@@ -54,7 +54,8 @@ import { StudentClinicView } from "@/components/student-clinic-view"
 import { Triage } from "@/components/triage"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useDemoStudent, DEMO_STUDENTS } from "@/components/demo-student-selector"
-import { useUserRole, canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
+import { canAccessPortal, getDefaultPortal } from "@/hooks/use-user-role"
+import { useEffectiveUser } from "@/hooks/use-effective-user"
 
 function isRateLimitText(text: string): boolean {
   if (!text) return false
@@ -73,7 +74,7 @@ async function fetchWithRetry(url: string, maxRetries = 2): Promise<Response> {
       // Check for rate limiting via status code
       if (response.status === 429) {
         if (attempt < maxRetries) {
-          await new Promise((r) => setTimeout(r, Math.pow(2, attempt + 1) * 2000))
+          await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 500 + Math.random() * 200))
           continue
         }
         return emptyJson()
@@ -85,7 +86,7 @@ async function fetchWithRetry(url: string, maxRetries = 2): Promise<Response> {
 
       if (isRateLimitText(bodyText) || (bodyText.includes("Too Many R") && bodyText.includes("SyntaxError"))) {
         if (attempt < maxRetries) {
-          await new Promise((r) => setTimeout(r, Math.pow(2, attempt + 1) * 2000))
+          await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 500 + Math.random() * 200))
           continue
         }
         return emptyJson()
@@ -489,7 +490,7 @@ interface TeamGrade {
 export default function StudentPortal() {
   const router = useRouter()
   const { isDemoMode } = useDemoMode()
-  const { role, email: userEmail, studentId: authStudentId, isLoading: roleLoading, isAuthenticated } = useUserRole()
+  const { role, email: userEmail, studentId: authStudentId, isLoading: roleLoading, isAuthenticated, isViewingAs } = useEffectiveUser()
   const isAdminOrDirector = role === "admin" || role === "director"
   const allowDemoMode = isDemoMode && isAdminOrDirector
 
@@ -559,7 +560,6 @@ export default function StudentPortal() {
             }
           }
 } catch (error) {
-  console.error("Error fetching students:", error)
   if (isAuthError(error)) {
     router.push("/sign-in")
   }
@@ -617,6 +617,8 @@ export default function StudentPortal() {
   const [teamGrades, setTeamGrades] = useState<TeamGrade[]>([])
 
   const [semesterSchedule, setSemesterSchedule] = useState<SemesterWeek[]>([])
+  const [classAttendanceRecords, setClassAttendanceRecords] = useState<AttendanceRecord[]>([])
+  const [totalStudentCount, setTotalStudentCount] = useState(0)
   const [attendancePassword, setAttendancePassword] = useState("")
   const [selectedWeekForAttendance, setSelectedWeekForAttendance] = useState<string>("")
   const [submittingAttendance, setSubmittingAttendance] = useState(false)
@@ -683,20 +685,24 @@ export default function StudentPortal() {
 
       setLoading(true)
       try {
-        // Fetch critical data first (roster + debriefs), then secondary data
-        // This avoids Supabase rate limits from 7+ simultaneous queries
-        const [studentRes, debriefsRes, scheduleRes] = await Promise.all([
-          fetchWithRetry(`/api/supabase/roster?studentId=${currentStudentId}`),
-          fetchWithRetry(`/api/supabase/debriefs?studentId=${currentStudentId}`),
-          fetchWithRetry("/api/semester-schedule"),
-        ])
+  // Fetch data in 3 small batches to avoid rate limits
+  const [studentRes, debriefsRes, scheduleRes] = await Promise.all([
+  fetchWithRetry(`/api/supabase/roster?studentId=${currentStudentId}`),
+  fetchWithRetry(`/api/supabase/debriefs?studentId=${currentStudentId}`),
+  fetchWithRetry("/api/semester-schedule"),
+  ])
 
-        const [attendanceRes, meetingRes, materialsRes, docsRes] = await Promise.all([
-          fetchWithRetry(`/api/supabase/attendance?studentId=${currentStudentId}`),
-          fetchWithRetry(`/api/meeting-requests?studentId=${currentStudentId}`),
-          fetchWithRetry("/api/course-materials"),
-          fetchWithRetry(`/api/documents?studentId=${currentStudentId}`),
-        ])
+  const [attendanceRes, meetingRes, materialsRes] = await Promise.all([
+  fetchWithRetry(`/api/supabase/attendance?studentId=${currentStudentId}`),
+  fetchWithRetry(`/api/meeting-requests?studentId=${currentStudentId}`),
+  fetchWithRetry("/api/course-materials"),
+  ])
+
+  const [docsRes, classAttendanceRes, studentListRes] = await Promise.all([
+  fetchWithRetry(`/api/documents?studentId=${currentStudentId}`),
+  fetchWithRetry("/api/supabase/attendance"),
+  fetchWithRetry("/api/students/list"),
+  ])
 
         // If this effect was cancelled (re-triggered), don't update state
         if (cancelled) return
@@ -723,6 +729,13 @@ export default function StudentPortal() {
         setDebriefs(debriefsData.debriefs || [])
         setAttendanceRecords(attendanceData.attendance || [])
         setMeetingRequests(meetingData.requests || []) // Set meeting requests
+
+        // Class-wide attendance data
+        const classAttData = await safeJsonParse(classAttendanceRes, { attendance: [] })
+        setClassAttendanceRecords(classAttData.attendance || [])
+        const studentListData = await safeJsonParse(studentListRes, { students: [] })
+        setTotalStudentCount((studentListData.students || []).length)
+
         // Get materials from last 7 days for "new" materials
         const weekAgo = new Date()
         weekAgo.setDate(weekAgo.getDate() - 7)
@@ -763,41 +776,27 @@ export default function StudentPortal() {
                 }))
               setTeamGrades(grades)
             }
-          } catch (error) {
-            console.error("Error fetching team grades:", error)
-          }
+  } catch {
+        // silently handle
+      }
         }
 
         // After line that sets currentStudent, add:
         // Fetch student notifications (announcements from directors)
-        const fetchStudentNotifications = async () => {
-          try {
-            if (!student?.id) return
-            const url = student.clinicId
-              ? `/api/student-notifications?studentId=${student.id}&clinicId=${student.clinicId}`
-              : `/api/student-notifications?studentId=${student.id}`
-            const res = await fetchWithRetry(url)
-            if (!res.ok) {
-              console.error("Error fetching student notifications: HTTP", res.status)
-              return
-            }
-            const text = await res.text()
-            if (text.startsWith("Too Many R")) {
-              console.error("Error fetching student notifications: Rate limited")
-              return
-            }
-            try {
-              const data = JSON.parse(text)
-              if (data.notifications) {
-                setStudentNotifications(data.notifications)
-              }
-            } catch (parseError) {
-              console.error("Error parsing student notifications:", parseError)
-            }
-          } catch (error) {
-            console.error("Error fetching student notifications:", error)
-          }
-        }
+  const fetchStudentNotifications = async () => {
+  try {
+  if (!student?.id) return
+  const url = student.clinicId
+  ? `/api/student-notifications?studentId=${student.id}&clinicId=${student.clinicId}`
+  : `/api/student-notifications?studentId=${student.id}`
+  const res = await fetchWithRetry(url)
+  if (!res.ok) return
+  const data = await safeJsonParse(res, { notifications: [] })
+  setStudentNotifications(data.notifications || [])
+  } catch {
+  // silently handle
+  }
+  }
         fetchStudentNotifications()
 
         // Fetch agreements using the student email we already have (avoids extra roster call)
@@ -808,12 +807,11 @@ export default function StudentPortal() {
             if (agreementsData.agreements) {
               setSignedAgreements(agreementsData.agreements.map((a: any) => a.agreement_type))
             }
-          } catch (error) {
-            console.error("Error fetching agreements:", error)
-          }
-        }
-} catch (error) {
-  console.error("Error fetching data:", error)
+  } catch {
+  // silently handle
+  }
+  }
+  } catch (error) {
   // Reset the ref so a retry is possible
   lastFetchedStudentRef.current = null
   if (isAuthError(error)) {
@@ -859,9 +857,8 @@ export default function StudentPortal() {
         } catch {
           // Summary is optional - team data already loaded above
         }
-      } catch (error: any) {
-        console.error("Error fetching team data or summary:", error)
-        setTeamSummaryError(error.message || "Failed to load team information.")
+  } catch (error: any) {
+  setTeamSummaryError(error.message || "Failed to load team information.")
       } finally {
         setLoadingTeamSummary(false)
       }
@@ -923,9 +920,8 @@ export default function StudentPortal() {
       } else {
         alert("Failed to send question. Please try again.")
       }
-    } catch (error) {
-      console.error("Error submitting question:", error)
-      alert("An error occurred. Please try again.")
+  } catch {
+  alert("An error occurred. Please try again.")
     } finally {
       setSubmitting(false)
     }
@@ -980,9 +976,8 @@ export default function StudentPortal() {
       } else {
         alert("Failed to send meeting request. Please try again.")
       }
-    } catch (error) {
-      console.error("Error submitting meeting request:", error)
-      alert("An error occurred. Please try again.")
+  } catch {
+  alert("An error occurred. Please try again.")
     } finally {
       setSubmittingMeeting(false)
     }
@@ -1029,10 +1024,10 @@ export default function StudentPortal() {
         const error = await response.json()
         alert(error.error || "Invalid password or attendance already submitted")
       }
-    } catch (error) {
-      console.error("Error submitting attendance:", error)
-    } finally {
-      setSubmittingAttendance(false)
+  } catch {
+  // silently handle
+  } finally {
+  setSubmittingAttendance(false)
     }
   }
 
@@ -1077,10 +1072,10 @@ export default function StudentPortal() {
       setShowDebriefDialog(false)
       setDebriefForm({ hoursWorked: "", workSummary: "", questions: "" })
       setSelectedWeekForDebrief("")
-    } catch (error) {
-      console.error("Error submitting debrief:", error)
-    } finally {
-      setSubmittingDebrief(false)
+  } catch {
+  // silently handle
+  } finally {
+  setSubmittingDebrief(false)
     }
   }
 
@@ -1132,9 +1127,8 @@ export default function StudentPortal() {
       })
 
       setUploadedFileUrl(newBlob.url)
-    } catch (error: any) {
-      console.error("Upload error:", error)
-      alert(error?.message || "An error occurred while uploading. Please try again.")
+  } catch (error: any) {
+  alert(error?.message || "An error occurred while uploading. Please try again.")
       setSelectedFile(null)
       setUploadedFileUrl("")
     } finally {
@@ -1196,9 +1190,8 @@ export default function StudentPortal() {
       } else {
         alert("Failed to submit document. Please try again.")
       }
-    } catch (error) {
-      console.error("Error submitting document:", error)
-      alert("An error occurred. Please try again.")
+  } catch {
+  alert("An error occurred. Please try again.")
     } finally {
       setSubmittingDocument(false)
     }
@@ -1255,9 +1248,9 @@ export default function StudentPortal() {
         ])
       }
     } catch (error) {
-      console.error("Error uploading deliverable:", error)
-    } finally {
-      setUploadingDeliverable(null)
+  // silently handle
+  } finally {
+  setUploadingDeliverable(null)
     }
   }
 
@@ -1290,11 +1283,21 @@ export default function StudentPortal() {
   }
 
   const totalHours = debriefs.reduce((sum, d) => sum + d.hoursWorked, 0)
-  // Only count attendance records where is_present is true
+  // Only count attendance records where is_present is true (for individual student)
   const totalAttendance = attendanceRecords.filter((r) => r.is_present).length
   // Count submitted and reviewed debriefs as completed
   const completedDebriefs = debriefs.filter((d) => d.status === "submitted" || d.status === "reviewed").length
   const pendingDebriefs = debriefs.filter((d) => d.status === "pending" || d.status === "draft").length
+
+  // Class-wide attendance: find current week and count present students
+  const currentWeek = semesterSchedule.find((w) => {
+    const now = new Date()
+    return new Date(w.week_start) <= now && new Date(w.week_end) >= now
+  })
+  const currentWeekNumber = currentWeek ? Number(currentWeek.week_number) : null
+  const studentsPresent = currentWeekNumber !== null
+    ? new Set(classAttendanceRecords.filter((r) => Number(r.weekNumber) === currentWeekNumber && r.is_present).map((r) => r.studentId)).size
+    : 0
 
   const getWeekEndingDate = () => {
     const today = new Date()
@@ -1343,7 +1346,7 @@ export default function StudentPortal() {
       const data = await safeJsonParse(response, { summary: "" })
       setTeamSummary(data.summary)
     } catch (error: any) {
-      console.error("Error generating team summary:", error)
+      // silently handle
       setTeamSummaryError(error.message || "Failed to generate team summary.")
       setTeamSummary("")
     } finally {
@@ -1487,6 +1490,8 @@ export default function StudentPortal() {
             currentStudent={currentStudent}
             totalHours={totalHours}
             totalAttendance={totalAttendance}
+            totalClassesInSemester={semesterSchedule.filter((w) => !w.is_break).length}
+            currentWeekNumber={currentWeekNumber}
           />
 
           {/* Quick Stats - Now Expandable with Semester Schedule */}
@@ -1835,8 +1840,12 @@ export default function StudentPortal() {
                           <Calendar className="h-5 w-5 text-purple-600" />
                         </div>
                         <div>
-                          <p className="text-xs text-slate-500">Classes Attended</p>
-                          <p className="text-xl font-bold text-slate-900">{totalAttendance}</p>
+                          <p className="text-xs text-slate-500">
+                            My Attendance
+                          </p>
+                          <p className="text-xl font-bold text-slate-900">
+                            {totalAttendance}/{semesterSchedule.filter((w) => !w.is_break).length}
+                          </p>
                         </div>
                       </div>
                       <ChevronDown
@@ -1904,10 +1913,15 @@ export default function StudentPortal() {
                                     <Badge variant="outline" className="text-slate-400">
                                       N/A
                                     </Badge>
-                                  ) : hasAttendance ? (
+                                  ) : hasAttendance && weekAttendance?.is_present ? (
                                     <Badge className="bg-purple-100 text-purple-700">
                                       <CheckCircle2 className="h-3 w-3 mr-1" />
                                       Present
+                                    </Badge>
+                                  ) : hasAttendance && !weekAttendance?.is_present ? (
+                                    <Badge variant="outline" className="text-red-500 border-red-300">
+                                      <AlertCircle className="h-3 w-3 mr-1" />
+                                      Absent
                                     </Badge>
                                   ) : isPast ? (
                                     <Badge variant="outline" className="text-red-500 border-red-300">
@@ -1927,12 +1941,11 @@ export default function StudentPortal() {
                       )}
                     </div>
                     <div className="mt-3 pt-3 border-t border-purple-100 flex justify-between items-center">
-                      <span className="text-sm font-medium text-slate-600">Attendance Rate</span>
+                      <span className="text-sm font-medium text-slate-600">
+                        My Attendance
+                      </span>
                       <span className="text-lg font-bold text-purple-600">
-                        {totalAttendance}/
-                        {totalAttendance > 0
-                          ? semesterSchedule.filter((w) => !w.is_break && new Date(w.week_end) < new Date()).length
-                          : 0}
+                        {totalAttendance}/{semesterSchedule.filter((w) => !w.is_break).length}
                       </span>
                     </div>
                   </div>
@@ -2284,12 +2297,14 @@ export default function StudentPortal() {
                     <CardContent className="pt-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm text-green-700">Classes Attended</p>
+                          <p className="text-sm text-green-700">
+                            My Attendance
+                          </p>
                           <p className="text-2xl font-bold text-green-800">
-                            {attendanceRecords.filter((r) => r.is_present).length}/{semesterSchedule.filter((w) => !w.is_break).length}
+                            {totalAttendance}/{semesterSchedule.filter((w) => !w.is_break).length}
                           </p>
                         </div>
-                        <CheckCircle2 className="h-8 w-8 text-green-600" />
+                        <UserCheck className="h-8 w-8 text-green-600" />
                       </div>
                     </CardContent>
                   </Card>
@@ -2397,14 +2412,20 @@ export default function StudentPortal() {
                                     {!week.is_break && (
                                       <>
                                         {/* Attendance Status/Button */}
-                                        {hasAttendance ? (
-                                          // Already submitted - show status
+                                        {hasAttendance && attendanceRecord?.is_present ? (
+                                          // Present
                                           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-100 border border-green-200">
                                             <CheckCircle2 className="h-4 w-4 text-green-600" />
                                             <span className="text-xs font-medium text-green-700">Present</span>
                                           </div>
+                                        ) : hasAttendance && !attendanceRecord?.is_present ? (
+                                          // Recorded as absent
+                                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-100 border border-red-200">
+                                            <AlertCircle className="h-4 w-4 text-red-500" />
+                                            <span className="text-xs font-medium text-red-700">Absent</span>
+                                          </div>
                                         ) : isPast ? (
-                                          // Past week without attendance - show absent status (locked)
+                                          // Past week with no record at all
                                           <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-100 border border-red-200">
                                             <AlertCircle className="h-4 w-4 text-red-500" />
                                             <span className="text-xs font-medium text-red-700">Absent</span>
