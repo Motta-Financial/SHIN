@@ -1,9 +1,14 @@
+// middleware.ts
 import { type NextRequest, NextResponse } from "next/server"
 import { updateSession } from "@/utils/supabase/middleware"
 
 export async function middleware(request: NextRequest) {
-  let response: NextResponse
+  // ✅ Skip the SAML callback so Supabase can finish exchangeCodeForSession
+  if (request.nextUrl.pathname === "/auth/callback") {
+    return NextResponse.next()
+  }
 
+  let response: NextResponse
   try {
     response = await updateSession(request)
   } catch {
@@ -24,6 +29,9 @@ export async function middleware(request: NextRequest) {
   return response
 }
 
+// ✅ Exclude /auth/callback from the matcher
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|auth/callback).*)",
+  ],
 }
