@@ -204,7 +204,7 @@ export default function SignInPage() {
                     Signing in...
                   </>
                 ) : (
-                  "Client / Admin Sign In"
+                  "Director / Student Sign In"
                 )}
               </Button>
             </form>
