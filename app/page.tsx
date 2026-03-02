@@ -69,6 +69,16 @@ export default function DirectorPortalDashboard() {
   const { isDemoMode } = useDemoMode()
   const { role, email, fullName, isLoading: roleLoading, isAuthenticated } = useEffectiveUser()
 
+  // Handle SAML/SSO error redirects (e.g. "SAML Assertion is not valid")
+  // When this happens the user may already be authenticated -- check and redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("error") || params.get("error_code")) {
+      // Clear the error params from URL
+      window.history.replaceState({}, "", window.location.pathname)
+    }
+  }, [])
+
   useEffect(() => {
     if (roleLoading) {
       return
@@ -84,7 +94,9 @@ export default function DirectorPortalDashboard() {
       return
     }
 
-    if (role === "admin" || role === "director") {
+    if (role === "admin") {
+      router.push("/admin")
+    } else if (role === "director") {
       router.push("/director")
     } else if (role === "student") {
       router.push("/students")
