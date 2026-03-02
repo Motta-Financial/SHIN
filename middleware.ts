@@ -10,8 +10,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // already skipping callback (good)
-  if (pathname === "/auth/callback") {
+  // Skip auth routes -- callback and loading handle their own auth
+  if (pathname.startsWith("/auth/")) {
     return NextResponse.next()
   }
 
@@ -36,6 +36,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|auth/callback).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$|auth/).*)",
   ],
 }

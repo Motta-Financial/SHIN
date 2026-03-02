@@ -70,14 +70,18 @@ export default function DirectorPortalDashboard() {
   const { role, email, fullName, isLoading: roleLoading, isAuthenticated } = useEffectiveUser()
 
   // Handle SAML/SSO error redirects (e.g. "SAML Assertion is not valid")
-  // When this happens the user may already be authenticated -- check and redirect
+  // If user lands here with an error, send them to sign-in with a clear message
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
+    const errorDesc = params.get("error_description")
     if (params.get("error") || params.get("error_code")) {
-      // Clear the error params from URL
-      window.history.replaceState({}, "", window.location.pathname)
+      // Redirect to sign-in with a user-friendly error
+      const msg = errorDesc
+        ? decodeURIComponent(errorDesc.replace(/\+/g, " "))
+        : "Your session expired. Please sign in again."
+      router.replace(`/sign-in?error=${encodeURIComponent(msg)}`)
     }
-  }, [])
+  }, [router])
 
   useEffect(() => {
     if (roleLoading) {
