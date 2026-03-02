@@ -60,20 +60,25 @@ function SignInPageContent() {
 
         // Try getSession first (reads from local storage, fast)
         const { data: { session } } = await supabase.auth.getSession()
+        console.log("[v0] sign-in getSession:", session?.user?.email || "NO SESSION")
         if (session?.user?.email) {
           const redirected = await redirectIfAuthenticated(session.user.email)
+          console.log("[v0] sign-in redirect from getSession:", redirected)
           if (redirected) return
         }
 
         // Fallback: getUser() does a server call to validate the token
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { user }, error: userErr } = await supabase.auth.getUser()
+        console.log("[v0] sign-in getUser:", user?.email || "NO USER", "error:", userErr?.message)
         if (user?.email) {
           const redirected = await redirectIfAuthenticated(user.email)
+          console.log("[v0] sign-in redirect from getUser:", redirected)
           if (redirected) return
         }
-      } catch {
-        // Session check failed, show sign-in form
+      } catch (e) {
+        console.log("[v0] sign-in session check error:", e)
       }
+      console.log("[v0] sign-in: no session found, showing form")
       setCheckingSession(false)
     }
 
