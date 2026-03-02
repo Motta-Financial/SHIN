@@ -29,23 +29,38 @@ export default function SignInPage() {
     if (sessionChecked.current) return
     sessionChecked.current = true
 
+    const redirectIfAuthenticated = async (userEmail: string) => {
+      try {
+        const res = await fetch("/api/auth/detect-role", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: userEmail }),
+        })
+        const data = await res.json().catch(() => null)
+        if (data?.redirect) {
+          router.replace(data.redirect)
+          return true
+        }
+      } catch {}
+      return false
+    }
+
     const checkExistingSession = async () => {
       try {
         const supabase = createClient()
-        const { data: { session } } = await supabase.auth.getSession()
 
+        // Try getSession first (reads from local storage, fast)
+        const { data: { session } } = await supabase.auth.getSession()
         if (session?.user?.email) {
-          // User is already logged in -- detect their role and redirect
-          const res = await fetch("/api/auth/detect-role", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: session.user.email }),
-          })
-          const data = await res.json().catch(() => null)
-          if (data?.redirect) {
-            router.replace(data.redirect)
-            return
-          }
+          const redirected = await redirectIfAuthenticated(session.user.email)
+          if (redirected) return
+        }
+
+        // Fallback: getUser() does a server call to validate the token
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user?.email) {
+          const redirected = await redirectIfAuthenticated(user.email)
+          if (redirected) return
         }
       } catch {
         // Session check failed, show sign-in form
@@ -54,6 +69,20 @@ export default function SignInPage() {
     }
 
     checkExistingSession()
+
+    // Also listen for auth state changes (SSO redirect may set session via URL hash)
+    const supabase = createClient()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === "SIGNED_IN" && session?.user?.email) {
+          await redirectIfAuthenticated(session.user.email)
+        }
+      }
+    )
+
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [router])
 
   if (checkingSession) {

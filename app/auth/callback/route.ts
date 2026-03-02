@@ -11,11 +11,6 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code")
   const origin = url.origin
 
-  if (!code) {
-    // No code from IdP -> back to sign-in
-    return NextResponse.redirect(`${origin}/sign-in`)
-  }
-
   const cookieStore = cookies()
 
   // Create a Supabase *server* client that can set auth cookies
@@ -37,12 +32,25 @@ export async function GET(request: Request) {
     }
   )
 
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+  let data: any = null
 
-  if (error) {
-    return NextResponse.redirect(
-      `${origin}/sign-in?error=${encodeURIComponent(error.message)}`
-    )
+  if (code) {
+    // Fresh SSO login -- exchange the code for a session
+    const result = await supabase.auth.exchangeCodeForSession(code)
+    if (result.error) {
+      return NextResponse.redirect(
+        `${origin}/sign-in?error=${encodeURIComponent(result.error.message)}`
+      )
+    }
+    data = result.data
+  } else {
+    // No code -- user may already be authenticated (Duo remembered them).
+    // Check for an existing session before bouncing to sign-in.
+    const { data: userData } = await supabase.auth.getUser()
+    if (!userData.user) {
+      return NextResponse.redirect(`${origin}/sign-in`)
+    }
+    data = { session: { user: userData.user } }
   }
 
   // Detect user role server-side and redirect to the correct dashboard
