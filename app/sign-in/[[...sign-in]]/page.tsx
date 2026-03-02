@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { Suspense, useState, useEffect, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Eye, EyeOff } from "lucide-react"
 import SuffolkSSOButton from "@/components/SuffolkSSOButton"
 
-export default function SignInPage() {
+function SignInPageContent() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -294,5 +294,17 @@ export default function SignInPage() {
 
       </div>
     </div>
+  )
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
+        <Loader2 className="h-8 w-8 animate-spin text-[#1A2332]" />
+      </div>
+    }>
+      <SignInPageContent />
+    </Suspense>
   )
 }
