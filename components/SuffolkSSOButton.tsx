@@ -51,16 +51,7 @@ export default function SuffolkSSOButton() {
         return
       }
 
-      // No valid session -- clear ALL stale auth/PKCE state before fresh SSO
-      // This prevents "SAML Assertion is not valid" errors from stale PKCE verifiers
-      try {
-        await supabase.auth.signOut({ scope: "local" })
-      } catch {}
-
-      // Small delay to ensure cookies are cleared
-      await new Promise((r) => setTimeout(r, 100))
-
-      // Initiate fresh SSO flow
+      // No valid session -- initiate fresh SSO flow
       const { error: ssoError } = await supabase.auth.signInWithSSO({
         domain: "suffolk.edu",
         options: {

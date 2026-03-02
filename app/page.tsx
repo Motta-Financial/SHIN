@@ -70,42 +70,15 @@ export default function DirectorPortalDashboard() {
   const { role, email, fullName, isLoading: roleLoading, isAuthenticated } = useEffectiveUser()
 
   // Handle SAML/SSO error redirects (e.g. "SAML Assertion is not valid")
-  // ADFS sometimes returns a stale assertion on the first attempt after Duo "remember me".
-  // Auto-retry SSO once; if it fails again, send to sign-in with an error message.
+  // Clean the URL params -- the role-detection useEffect below will handle
+  // redirecting the user to their dashboard if they have a valid session,
+  // or to sign-in if they don't.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (!params.get("error") && !params.get("error_code")) return
-
-    // Clean the URL immediately
-    window.history.replaceState({}, "", "/")
-
-    const retryCount = Number(sessionStorage.getItem("shin_sso_retry") || "0")
-    if (retryCount < 1) {
-      // First failure -- auto-retry SSO
-      sessionStorage.setItem("shin_sso_retry", "1")
-      const initSSO = async () => {
-        try {
-          const { createClient } = await import("@/lib/supabase/client")
-          const supabase = createClient()
-          try { await supabase.auth.signOut({ scope: "local" }) } catch {}
-          const { error: ssoError } = await supabase.auth.signInWithSSO({
-            domain: "suffolk.edu",
-            options: { redirectTo: `${window.location.origin}/auth/callback` },
-          })
-          if (ssoError) {
-            router.replace("/sign-in?error=" + encodeURIComponent(ssoError.message))
-          }
-        } catch {
-          router.replace("/sign-in")
-        }
-      }
-      initSSO()
-    } else {
-      // Already retried -- go to sign-in with error
-      sessionStorage.removeItem("shin_sso_retry")
-      router.replace("/sign-in?error=" + encodeURIComponent("SSO sign in failed. Please try again."))
+    if (params.get("error") || params.get("error_code")) {
+      window.history.replaceState({}, "", "/")
     }
-  }, [router])
+  }, [])
 
   useEffect(() => {
     if (roleLoading) {
