@@ -70,16 +70,40 @@ export default function DirectorPortalDashboard() {
   const { role, email, fullName, isLoading: roleLoading, isAuthenticated } = useEffectiveUser()
 
   // Handle SAML/SSO error redirects (e.g. "SAML Assertion is not valid")
-  // If user lands here with an error, send them to sign-in with a clear message
+  // ADFS sometimes returns a stale assertion on the first attempt after Duo "remember me".
+  // Auto-retry SSO once; if it fails again, send to sign-in with an error message.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const errorDesc = params.get("error_description")
-    if (params.get("error") || params.get("error_code")) {
-      // Redirect to sign-in with a user-friendly error
-      const msg = errorDesc
-        ? decodeURIComponent(errorDesc.replace(/\+/g, " "))
-        : "Your session expired. Please sign in again."
-      router.replace(`/sign-in?error=${encodeURIComponent(msg)}`)
+    if (!params.get("error") && !params.get("error_code")) return
+
+    // Clean the URL immediately
+    window.history.replaceState({}, "", "/")
+
+    const retryCount = Number(sessionStorage.getItem("shin_sso_retry") || "0")
+    if (retryCount < 1) {
+      // First failure -- auto-retry SSO
+      sessionStorage.setItem("shin_sso_retry", "1")
+      const initSSO = async () => {
+        try {
+          const { createClient } = await import("@/lib/supabase/client")
+          const supabase = createClient()
+          try { await supabase.auth.signOut({ scope: "local" }) } catch {}
+          const { error: ssoError } = await supabase.auth.signInWithSSO({
+            domain: "suffolk.edu",
+            options: { redirectTo: `${window.location.origin}/auth/callback` },
+          })
+          if (ssoError) {
+            router.replace("/sign-in?error=" + encodeURIComponent(ssoError.message))
+          }
+        } catch {
+          router.replace("/sign-in")
+        }
+      }
+      initSSO()
+    } else {
+      // Already retried -- go to sign-in with error
+      sessionStorage.removeItem("shin_sso_retry")
+      router.replace("/sign-in?error=" + encodeURIComponent("SSO sign in failed. Please try again."))
     }
   }, [router])
 
