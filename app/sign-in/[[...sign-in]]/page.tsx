@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -22,7 +22,16 @@ export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const sessionChecked = useRef(false)
+
+  // Pick up error from URL (e.g. SAML validation failure redirect)
+  useEffect(() => {
+    const urlError = searchParams.get("error_description") || searchParams.get("error")
+    if (urlError && !error) {
+      setError(decodeURIComponent(urlError.replace(/\+/g, " ")))
+    }
+  }, [searchParams, error])
 
   // Redirect already-authenticated users to their dashboard
   useEffect(() => {

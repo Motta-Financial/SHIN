@@ -1,7 +1,7 @@
 "use client"
 
 import { Suspense, useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { MainNavigation } from "@/components/main-navigation"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { OverviewCards } from "@/components/overview-cards"
@@ -68,6 +68,19 @@ export default function DirectorPortalDashboard() {
   const { directorId: selectedDirectorId, isReady: directorReady } = useDemoDirector()
   const { isDemoMode } = useDemoMode()
   const { role, email, fullName, isLoading: roleLoading, isAuthenticated } = useEffectiveUser()
+  const searchParams = useSearchParams()
+
+  // Handle SAML/SSO error redirects (e.g. "SAML Assertion is not valid")
+  // When this happens the user may already be authenticated -- check and redirect
+  useEffect(() => {
+    const errorParam = searchParams.get("error")
+    const errorCode = searchParams.get("error_code")
+    if (errorParam || errorCode) {
+      // Clear the error params from URL
+      const cleanUrl = window.location.pathname
+      window.history.replaceState({}, "", cleanUrl)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     if (roleLoading) {
@@ -84,7 +97,9 @@ export default function DirectorPortalDashboard() {
       return
     }
 
-    if (role === "admin" || role === "director") {
+    if (role === "admin") {
+      router.push("/admin")
+    } else if (role === "director") {
       router.push("/director")
     } else if (role === "student") {
       router.push("/students")

@@ -19,21 +19,47 @@ export default function SuffolkSSOButton() {
       const supabase = createClient()
 
       // First check if user already has a valid session (Duo remembered them)
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user?.email) {
+      // Try both getSession (fast, local) and getUser (server-validated)
+      let existingEmail: string | null = null
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.user?.email) {
+          existingEmail = session.user.email
+        }
+      } catch {}
+
+      if (!existingEmail) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user?.email) {
+            existingEmail = user.email
+          }
+        } catch {}
+      }
+
+      if (existingEmail) {
         // Already authenticated -- detect role and redirect directly
+        // Do NOT initiate a new SSO flow (SAML assertion will be rejected)
         try {
           const res = await fetch("/api/auth/detect-role", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: user.email }),
+            body: JSON.stringify({ email: existingEmail }),
           })
-          const data = await res.json().catch(() => null)
-          if (data?.redirect) {
-            router.push(data.redirect)
-            return
+          if (res.ok) {
+            const data = await res.json().catch(() => null)
+            if (data?.redirect) {
+              router.push(data.redirect)
+              return
+            }
           }
         } catch {}
+
+        // If detect-role fails but we know user is authenticated,
+        // send them to auth/loading which handles role detection client-side
+        router.push("/auth/loading")
+        return
       }
 
       // No existing session -- initiate SSO flow
