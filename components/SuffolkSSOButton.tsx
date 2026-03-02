@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
@@ -8,6 +9,7 @@ import { Loader2 } from "lucide-react"
 export default function SuffolkSSOButton() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
 
   const handleSSOLogin = async () => {
     setIsLoading(true)
@@ -15,6 +17,26 @@ export default function SuffolkSSOButton() {
 
     try {
       const supabase = createClient()
+
+      // First check if user already has a valid session (Duo remembered them)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user?.email) {
+        // Already authenticated -- detect role and redirect directly
+        try {
+          const res = await fetch("/api/auth/detect-role", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: user.email }),
+          })
+          const data = await res.json().catch(() => null)
+          if (data?.redirect) {
+            router.push(data.redirect)
+            return
+          }
+        } catch {}
+      }
+
+      // No existing session -- initiate SSO flow
       const { error: ssoError } = await supabase.auth.signInWithSSO({
         domain: "suffolk.edu",
         options: {
