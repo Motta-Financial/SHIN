@@ -22,26 +22,17 @@ export default function SuffolkSSOButton() {
       let existingEmail: string | null = null
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        console.log("[v0] SSO btn getSession result:", session?.user?.email || "NO SESSION", "expires:", session?.expires_at)
         if (session?.user?.email) existingEmail = session.user.email
-      } catch (e) {
-        console.log("[v0] SSO btn getSession error:", e)
-      }
+      } catch {}
       if (!existingEmail) {
         try {
-          const { data: { user }, error: userErr } = await supabase.auth.getUser()
-          console.log("[v0] SSO btn getUser result:", user?.email || "NO USER", "error:", userErr?.message)
+          const { data: { user } } = await supabase.auth.getUser()
           if (user?.email) existingEmail = user.email
-        } catch (e) {
-          console.log("[v0] SSO btn getUser error:", e)
-        }
+        } catch {}
       }
-
-      console.log("[v0] SSO btn final existingEmail:", existingEmail)
 
       if (existingEmail) {
         // Already authenticated -- redirect directly, do NOT re-initiate SSO
-        console.log("[v0] SSO btn: user already authenticated, calling detect-role")
         try {
           const res = await fetch("/api/auth/detect-role", {
             method: "POST",
@@ -49,36 +40,28 @@ export default function SuffolkSSOButton() {
             body: JSON.stringify({ email: existingEmail }),
           })
           const data = await res.json().catch(() => null)
-          console.log("[v0] SSO btn detect-role response:", res.status, data)
           if (res.ok && data?.redirect) {
-            console.log("[v0] SSO btn: redirecting to", data.redirect)
             window.location.href = data.redirect
             return
           }
-        } catch (e) {
-          console.log("[v0] SSO btn detect-role error:", e)
-        }
-        console.log("[v0] SSO btn: falling back to /auth/loading")
+        } catch {}
         window.location.href = "/auth/loading"
         return
       }
 
       // No valid session -- initiate fresh SSO flow
-      console.log("[v0] SSO btn: no session, initiating SSO")
-      const { data: ssoData, error: ssoError } = await supabase.auth.signInWithSSO({
+      const { error: ssoError } = await supabase.auth.signInWithSSO({
         domain: "suffolk.edu",
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
         },
       })
-      console.log("[v0] SSO btn signInWithSSO result:", ssoData, "error:", ssoError?.message)
 
       if (ssoError) {
         setError(ssoError.message)
         setIsLoading(false)
       }
-    } catch (e) {
-      console.log("[v0] SSO btn catch error:", e)
+    } catch {
       setError("Failed to initiate SSO login. Please try again.")
       setIsLoading(false)
     }
