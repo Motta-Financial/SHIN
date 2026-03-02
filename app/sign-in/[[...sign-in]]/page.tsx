@@ -25,45 +25,11 @@ function SignInPageContent() {
   const searchParams = useSearchParams()
   const sessionChecked = useRef(false)
 
-  // Handle SAML error from URL -- auto-retry SSO once
-  // ADFS + Duo "remember me" sometimes returns a stale assertion on the first attempt
+  // Pick up error from URL params (e.g. SAML error redirect)
   useEffect(() => {
     const urlError = searchParams.get("error_description") || searchParams.get("error")
-    if (!urlError) return
-
-    const decodedError = decodeURIComponent(urlError.replace(/\+/g, " "))
-    const isSAMLError = decodedError.includes("SAML") || decodedError.includes("saml")
-
-    if (isSAMLError) {
-      const retryCount = Number(sessionStorage.getItem("shin_sso_retry") || "0")
-      if (retryCount < 1) {
-        // Auto-retry SSO once
-        sessionStorage.setItem("shin_sso_retry", "1")
-        const retrySSO = async () => {
-          try {
-            const supabase = createClient()
-            try { await supabase.auth.signOut({ scope: "local" }) } catch {}
-            const { error: ssoError } = await supabase.auth.signInWithSSO({
-              domain: "suffolk.edu",
-              options: { redirectTo: `${window.location.origin}/auth/callback` },
-            })
-            if (ssoError) {
-              sessionStorage.removeItem("shin_sso_retry")
-              setError("SSO sign in failed. Please try again.")
-            }
-          } catch {
-            sessionStorage.removeItem("shin_sso_retry")
-            setError("SSO sign in failed. Please try again.")
-          }
-        }
-        retrySSO()
-        return
-      }
-      // Already retried -- show a friendly error
-      sessionStorage.removeItem("shin_sso_retry")
-      setError("SSO sign in failed. Please try again.")
-    } else if (!error) {
-      setError(decodedError)
+    if (urlError && !error) {
+      setError(decodeURIComponent(urlError.replace(/\+/g, " ")))
     }
   }, [searchParams, error])
 

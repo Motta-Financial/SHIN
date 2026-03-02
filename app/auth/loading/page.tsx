@@ -32,9 +32,8 @@ function AuthLoadingContent() {
             setTimeout(() => router.push(`/sign-in?error=${encodeURIComponent(exchangeError.message)}`), 2000)
             return
           }
-          // Clean the URL and clear SSO retry counter on success
+          // Clean the URL (remove code param)
           window.history.replaceState({}, "", "/auth/loading")
-          sessionStorage.removeItem("shin_sso_retry")
         }
 
         // Step 2: Check sessionStorage cache (fastest path)
