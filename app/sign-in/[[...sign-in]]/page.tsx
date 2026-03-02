@@ -318,7 +318,7 @@ function SignInPageContent() {
                     Signing in...
                   </>
                 ) : (
-                  "Admin Sign In"
+                  "Director / Student Sign In"
                 )}
               </Button>
             </form>
