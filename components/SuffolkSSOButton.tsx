@@ -18,32 +18,21 @@ export default function SuffolkSSOButton() {
     try {
       const supabase = createClient()
 
-      // First check if user already has a valid session (Duo remembered them)
-      // Try both getSession (fast, local) and getUser (server-validated)
+      // Check if user already has a valid session
       let existingEmail: string | null = null
-
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        console.log("[v0] SSO btn getSession:", session?.user?.email || "no session")
-        if (session?.user?.email) {
-          existingEmail = session.user.email
-        }
+        if (session?.user?.email) existingEmail = session.user.email
       } catch {}
-
       if (!existingEmail) {
         try {
           const { data: { user } } = await supabase.auth.getUser()
-          console.log("[v0] SSO btn getUser:", user?.email || "no user")
-          if (user?.email) {
-            existingEmail = user.email
-          }
+          if (user?.email) existingEmail = user.email
         } catch {}
       }
 
-      console.log("[v0] SSO btn existingEmail:", existingEmail)
       if (existingEmail) {
-        // Already authenticated -- detect role and redirect directly
-        // Do NOT initiate a new SSO flow (SAML assertion will be rejected)
+        // Already authenticated -- redirect directly, do NOT re-initiate SSO
         try {
           const res = await fetch("/api/auth/detect-role", {
             method: "POST",
@@ -58,14 +47,20 @@ export default function SuffolkSSOButton() {
             }
           }
         } catch {}
-
-        // If detect-role fails but we know user is authenticated,
-        // send them to auth/loading which handles role detection client-side
         router.push("/auth/loading")
         return
       }
 
-      // No existing session -- initiate SSO flow
+      // No valid session -- clear ALL stale auth/PKCE state before fresh SSO
+      // This prevents "SAML Assertion is not valid" errors from stale PKCE verifiers
+      try {
+        await supabase.auth.signOut({ scope: "local" })
+      } catch {}
+
+      // Small delay to ensure cookies are cleared
+      await new Promise((r) => setTimeout(r, 100))
+
+      // Initiate fresh SSO flow
       const { error: ssoError } = await supabase.auth.signInWithSSO({
         domain: "suffolk.edu",
         options: {
