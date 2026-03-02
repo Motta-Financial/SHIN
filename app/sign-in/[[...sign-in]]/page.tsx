@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
@@ -20,7 +20,49 @@ export default function SignInPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [checkingSession, setCheckingSession] = useState(true)
   const router = useRouter()
+  const sessionChecked = useRef(false)
+
+  // Redirect already-authenticated users to their dashboard
+  useEffect(() => {
+    if (sessionChecked.current) return
+    sessionChecked.current = true
+
+    const checkExistingSession = async () => {
+      try {
+        const supabase = createClient()
+        const { data: { session } } = await supabase.auth.getSession()
+
+        if (session?.user?.email) {
+          // User is already logged in -- detect their role and redirect
+          const res = await fetch("/api/auth/detect-role", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: session.user.email }),
+          })
+          const data = await res.json().catch(() => null)
+          if (data?.redirect) {
+            router.replace(data.redirect)
+            return
+          }
+        }
+      } catch {
+        // Session check failed, show sign-in form
+      }
+      setCheckingSession(false)
+    }
+
+    checkExistingSession()
+  }, [router])
+
+  if (checkingSession) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
+        <Loader2 className="h-8 w-8 animate-spin text-[#1A2332]" />
+      </div>
+    )
+  }
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
