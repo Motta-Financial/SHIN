@@ -60,6 +60,7 @@ function SignInPageContent() {
 
         // Try getSession first (reads from local storage, fast)
         const { data: { session } } = await supabase.auth.getSession()
+        console.log("[v0] sign-in getSession:", session?.user?.email || "no session")
         if (session?.user?.email) {
           const redirected = await redirectIfAuthenticated(session.user.email)
           if (redirected) return
@@ -67,13 +68,15 @@ function SignInPageContent() {
 
         // Fallback: getUser() does a server call to validate the token
         const { data: { user } } = await supabase.auth.getUser()
+        console.log("[v0] sign-in getUser:", user?.email || "no user")
         if (user?.email) {
           const redirected = await redirectIfAuthenticated(user.email)
           if (redirected) return
         }
-      } catch {
-        // Session check failed, show sign-in form
+      } catch (e) {
+        console.log("[v0] sign-in session check error:", e)
       }
+      console.log("[v0] sign-in showing form (no valid session found)")
       setCheckingSession(false)
     }
 
@@ -83,6 +86,7 @@ function SignInPageContent() {
     const supabase = createClient()
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log("[v0] sign-in onAuthStateChange:", event, session?.user?.email)
         if (event === "SIGNED_IN" && session?.user?.email) {
           await redirectIfAuthenticated(session.user.email)
         }
