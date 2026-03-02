@@ -24,6 +24,7 @@ export default function SuffolkSSOButton() {
 
       try {
         const { data: { session } } = await supabase.auth.getSession()
+        console.log("[v0] SSO btn getSession:", session?.user?.email || "no session")
         if (session?.user?.email) {
           existingEmail = session.user.email
         }
@@ -32,12 +33,14 @@ export default function SuffolkSSOButton() {
       if (!existingEmail) {
         try {
           const { data: { user } } = await supabase.auth.getUser()
+          console.log("[v0] SSO btn getUser:", user?.email || "no user")
           if (user?.email) {
             existingEmail = user.email
           }
         } catch {}
       }
 
+      console.log("[v0] SSO btn existingEmail:", existingEmail)
       if (existingEmail) {
         // Already authenticated -- detect role and redirect directly
         // Do NOT initiate a new SSO flow (SAML assertion will be rejected)
