@@ -39,15 +39,13 @@ export default function SuffolkSSOButton() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email: existingEmail }),
           })
-          if (res.ok) {
-            const data = await res.json().catch(() => null)
-            if (data?.redirect) {
-              router.push(data.redirect)
-              return
-            }
+          const data = await res.json().catch(() => null)
+          if (res.ok && data?.redirect) {
+            window.location.href = data.redirect
+            return
           }
         } catch {}
-        router.push("/auth/loading")
+        window.location.href = "/auth/loading"
         return
       }
 
