@@ -46,7 +46,7 @@ export default function SuffolkSSOButton() {
             Redirecting to Suffolk SSO...
           </>
         ) : (
-          "Admin Sign In"
+          "Director / Student Sign In"
         )}
       </Button>
       {error && (
