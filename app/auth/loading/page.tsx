@@ -19,7 +19,73 @@ export default function AuthLoadingPage() {
       const supabase = createClient()
 
       try {
-        // Step 1: Check sessionStorage cache (fastest path)
+        // Step 1: Let createBrowserClient auto-detect ?code= in the URL
+        // and exchange it for a session using the PKCE code_verifier
+        // that's stored in browser cookies. We listen for the auth
+        // state change to know when the exchange completes.
+        // Check for SAML error redirect
+        const urlParams = new URLSearchParams(window.location.search)
+        const authError = urlParams.get("error") || urlParams.get("error_description")
+        if (authError) {
+          window.history.replaceState({}, "", "/auth/loading")
+          setStatus("Sign in failed. Redirecting...")
+          setTimeout(() => router.push(`/sign-in?error=${encodeURIComponent(authError)}`), 1500)
+          return
+        }
+
+        const hasCode = urlParams.has("code")
+
+        if (hasCode) {
+          setStatus("Completing sign in...")
+          // The browser client's detectSessionInUrl: true handles
+          // the code exchange automatically. We wait for it by
+          // listening to the auth state change event.
+          const session = await new Promise<any>((resolve) => {
+            const { data: { subscription } } = supabase.auth.onAuthStateChange(
+              (event, session) => {
+                if (event === "SIGNED_IN" && session) {
+                  subscription.unsubscribe()
+                  resolve(session)
+                }
+                if (event === "TOKEN_REFRESHED" && session) {
+                  subscription.unsubscribe()
+                  resolve(session)
+                }
+              }
+            )
+            // Also try a direct exchange as a fallback
+            const url = new URL(window.location.href)
+            const code = url.searchParams.get("code")
+            if (code) {
+              supabase.auth.exchangeCodeForSession(code).then(({ data, error }) => {
+                if (data?.session) {
+                  subscription.unsubscribe()
+                  resolve(data.session)
+                }
+                if (error) {
+                  subscription.unsubscribe()
+                  resolve(null)
+                }
+              })
+            }
+            // Timeout after 10 seconds
+            setTimeout(() => {
+              subscription.unsubscribe()
+              resolve(null)
+            }, 10000)
+          })
+
+          // Clean the URL
+          window.history.replaceState({}, "", "/auth/loading")
+
+          if (!session) {
+            setStatus("Sign in failed. Redirecting...")
+            setTimeout(() => router.push("/sign-in?error=Code+exchange+failed"), 1500)
+            return
+          }
+        }
+
+        // Step 2: Check sessionStorage cache (fastest path for return visits)
         try {
           const cached = sessionStorage.getItem("shin_role_cache")
           if (cached) {

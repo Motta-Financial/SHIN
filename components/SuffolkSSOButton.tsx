@@ -50,10 +50,13 @@ export default function SuffolkSSOButton() {
       }
 
       // No valid session -- initiate fresh SSO flow
+      // redirectTo points to /auth/loading (client page) so the browser's
+      // createBrowserClient can auto-detect ?code= and exchange it using
+      // the PKCE code_verifier stored in browser cookies
       const { error: ssoError } = await supabase.auth.signInWithSSO({
         domain: "suffolk.edu",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${window.location.origin}/auth/loading`,
         },
       })
 
